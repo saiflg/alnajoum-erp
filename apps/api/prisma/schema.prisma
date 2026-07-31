@@ -1,0 +1,249 @@
+// Alnajoum Travel ERP — Phase 1 data model
+// Identity is the single authentication principal for both customers (public
+// website / customer portal) and staff (internal ERP). It carries credentials,
+// verification state and role assignments. Domain-specific profile data lives
+// in the linked Customer or Staff record, keeping auth concerns separate from
+// business data while still allowing one unified login system.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum IdentityType {
+  CUSTOMER
+  STAFF
+}
+
+enum IdentityStatus {
+  PENDING_VERIFICATION
+  ACTIVE
+  SUSPENDED
+  DEACTIVATED
+}
+
+model Identity {
+  id                String         @id @default(cuid())
+  email             String         @unique
+  phone             String?        @unique
+  passwordHash      String
+  type              IdentityType
+  status            IdentityStatus @default(PENDING_VERIFICATION)
+
+  emailVerifiedAt   DateTime?
+  phoneVerifiedAt   DateTime?
+
+  twoFactorEnabled  Boolean        @default(false)
+  twoFactorSecret   String?
+
+  lastLoginAt       DateTime?
+  failedLoginCount  Int            @default(0)
+  lockedUntil       DateTime?
+
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  customer          Customer?
+  staff             Staff?
+
+  roles             IdentityRole[]
+  refreshTokens     RefreshToken[]
+  auditLogs         AuditLog[]
+
+  @@index([type])
+  @@map("identities")
+}
+
+model Customer {
+  id            String    @id @default(cuid())
+  identityId    String    @unique
+  identity      Identity  @relation(fields: [identityId], references: [id], onDelete: Cascade)
+
+  firstName     String
+  lastName      String
+  dateOfBirth   DateTime?
+  nationality   String?
+  address       String?
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@map("customers")
+}
+
+model Staff {
+  id            String    @id @default(cuid())
+  identityId    String    @unique
+  identity      Identity  @relation(fields: [identityId], references: [id], onDelete: Cascade)
+
+  companyId     String
+  company       Company   @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  branchId      String?
+  branch        Branch?   @relation(fields: [branchId], references: [id], onDelete: SetNull)
+
+  employeeCode  String    @unique
+  firstName     String
+  lastName      String
+  jobTitle      String?
+  department    String?
+  hireDate      DateTime?
+  isActive      Boolean   @default(true)
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([companyId])
+  @@index([branchId])
+  @@map("staff")
+}
+
+model Company {
+  id                 String    @id @default(cuid())
+  name               String
+  legalName          String?
+  registrationNumber String?   @unique
+  email              String?
+  phone              String?
+  address            String?
+  website             String?
+  logoUrl            String?
+  isActive           Boolean   @default(true)
+
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  branches           Branch[]
+  staff              Staff[]
+
+  @@map("companies")
+}
+
+model Branch {
+  id            String    @id @default(cuid())
+  companyId     String
+  company       Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  name          String
+  code          String
+  address       String?
+  city          String?
+  state         String?
+  country       String?
+  phone         String?
+  email         String?
+  isHeadOffice  Boolean   @default(false)
+  isActive      Boolean   @default(true)
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  staff         Staff[]
+
+  @@unique([companyId, code])
+  @@index([companyId])
+  @@map("branches")
+}
+
+model Role {
+  id          String            @id @default(cuid())
+  name        String            @unique
+  description String?
+  isSystem    Boolean           @default(false)
+
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  permissions RolePermission[]
+  identities  IdentityRole[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String            @id @default(cuid())
+  key         String            @unique // e.g. "company:create", "branch:update"
+  module      String            // e.g. "company", "branch", "user"
+  description String?
+
+  createdAt   DateTime          @default(now())
+
+  roles       RolePermission[]
+
+  @@index([module])
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permissionId String
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  assignedAt   DateTime   @default(now())
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model IdentityRole {
+  identityId String
+  identity   Identity @relation(fields: [identityId], references: [id], onDelete: Cascade)
+  roleId     String
+  role       Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  // Optional scope: a role can be granted platform-wide (companyId null) or
+  // limited to a specific company/branch (e.g. Branch Manager at Branch X).
+  companyId  String?
+  branchId   String?
+
+  assignedAt DateTime @default(now())
+
+  @@id([identityId, roleId])
+  @@index([companyId])
+  @@index([branchId])
+  @@map("identity_roles")
+}
+
+model RefreshToken {
+  id           String    @id @default(cuid())
+  identityId   String
+  identity     Identity  @relation(fields: [identityId], references: [id], onDelete: Cascade)
+
+  tokenHash    String    @unique
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  replacedById String?
+
+  createdByIp  String?
+  userAgent    String?
+
+  createdAt    DateTime  @default(now())
+
+  @@index([identityId])
+  @@map("refresh_tokens")
+}
+
+model AuditLog {
+  id         String    @id @default(cuid())
+  identityId String?
+  identity   Identity? @relation(fields: [identityId], references: [id], onDelete: SetNull)
+
+  action     String    // e.g. "auth.login", "company.create"
+  entityType String?
+  entityId   String?
+  metadata   Json?
+
+  ipAddress  String?
+  userAgent  String?
+
+  createdAt  DateTime  @default(now())
+
+  @@index([identityId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
