@@ -56,3 +56,33 @@ export interface StaffMember {
   isActive: boolean;
   identity?: { email: string; status: string };
 }
+
+export type DocumentType = 'PASSPORT' | 'NATIONAL_ID' | 'VISA' | 'OTHER';
+
+export interface CustomerDocument {
+  id: string;
+  customerId: string;
+  type: DocumentType;
+  originalFileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  uploadedAt: string;
+}
+
+export interface CustomerProfile {
+  id: string;
+  identityId: string;
+  firstName: string;
+  lastName: string;
+  dateOfBirth: string | null;
+  nationality: string | null;
+  gender: string | null;
+  address: string | null;
+  city: string | null;
+  country: string | null;
+  passportNumber: string | null;
+  passportExpiryDate: string | null;
+  createdAt: string;
+  identity?: { email: string; phone: string | null; status: string };
+  documents?: CustomerDocument[];
+}

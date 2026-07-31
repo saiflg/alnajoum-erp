@@ -45,6 +45,9 @@ class EnvironmentVariables {
 
   @IsString()
   CORS_ORIGIN: string = 'http://localhost:3000';
+
+  @IsString()
+  UPLOADS_DIR: string = './uploads';
 }
 
 export function validateEnv(config: Record<string, unknown>) {

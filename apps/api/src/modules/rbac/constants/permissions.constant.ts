@@ -22,6 +22,11 @@ export const PERMISSIONS = {
     UPDATE: 'staff:update',
     DELETE: 'staff:delete',
   },
+  CUSTOMER: {
+    READ: 'customer:read',
+    UPDATE: 'customer:update',
+    DELETE: 'customer:delete',
+  },
   ROLE: {
     CREATE: 'role:create',
     READ: 'role:read',

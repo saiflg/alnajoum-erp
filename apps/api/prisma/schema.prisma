@@ -27,74 +27,107 @@ enum IdentityStatus {
 }
 
 model Identity {
-  id                String         @id @default(cuid())
-  email             String         @unique
-  phone             String?        @unique
-  passwordHash      String
-  type              IdentityType
-  status            IdentityStatus @default(PENDING_VERIFICATION)
+  id           String         @id @default(cuid())
+  email        String         @unique
+  phone        String?        @unique
+  passwordHash String
+  type         IdentityType
+  status       IdentityStatus @default(PENDING_VERIFICATION)
 
-  emailVerifiedAt   DateTime?
-  phoneVerifiedAt   DateTime?
+  emailVerifiedAt DateTime?
+  phoneVerifiedAt DateTime?
 
-  twoFactorEnabled  Boolean        @default(false)
-  twoFactorSecret   String?
+  twoFactorEnabled Boolean @default(false)
+  twoFactorSecret  String?
 
-  lastLoginAt       DateTime?
-  failedLoginCount  Int            @default(0)
-  lockedUntil       DateTime?
+  lastLoginAt      DateTime?
+  failedLoginCount Int       @default(0)
+  lockedUntil      DateTime?
 
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  customer          Customer?
-  staff             Staff?
+  customer Customer?
+  staff    Staff?
 
-  roles             IdentityRole[]
-  refreshTokens     RefreshToken[]
-  auditLogs         AuditLog[]
+  roles         IdentityRole[]
+  refreshTokens RefreshToken[]
+  auditLogs     AuditLog[]
 
   @@index([type])
   @@map("identities")
 }
 
 model Customer {
-  id            String    @id @default(cuid())
-  identityId    String    @unique
-  identity      Identity  @relation(fields: [identityId], references: [id], onDelete: Cascade)
+  id         String   @id @default(cuid())
+  identityId String   @unique
+  identity   Identity @relation(fields: [identityId], references: [id], onDelete: Cascade)
 
-  firstName     String
-  lastName      String
-  dateOfBirth   DateTime?
-  nationality   String?
-  address       String?
+  firstName   String
+  lastName    String
+  dateOfBirth DateTime?
+  nationality String?
+  gender      String?
 
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  address String?
+  city    String?
+  country String?
+
+  passportNumber     String?
+  passportExpiryDate DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  documents CustomerDocument[]
 
   @@map("customers")
 }
 
+enum DocumentType {
+  PASSPORT
+  NATIONAL_ID
+  VISA
+  OTHER
+}
+
+model CustomerDocument {
+  id         String   @id @default(cuid())
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  type             DocumentType
+  originalFileName String
+  storedFileName   String       @unique
+  mimeType         String
+  sizeBytes        Int
+
+  uploadedAt DateTime @default(now())
+
+  @@index([customerId])
+  @@map("customer_documents")
+}
+
 model Staff {
-  id            String    @id @default(cuid())
-  identityId    String    @unique
-  identity      Identity  @relation(fields: [identityId], references: [id], onDelete: Cascade)
+  id         String   @id @default(cuid())
+  identityId String   @unique
+  identity   Identity @relation(fields: [identityId], references: [id], onDelete: Cascade)
 
-  companyId     String
-  company       Company   @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  branchId      String?
-  branch        Branch?   @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  branchId  String?
+  branch    Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
 
-  employeeCode  String    @unique
-  firstName     String
-  lastName      String
-  jobTitle      String?
-  department    String?
-  hireDate      DateTime?
-  isActive      Boolean   @default(true)
+  employeeCode String    @unique
+  firstName    String
+  lastName     String
+  jobTitle     String?
+  department   String?
+  hireDate     DateTime?
+  isActive     Boolean   @default(true)
 
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([companyId])
   @@index([branchId])
@@ -102,46 +135,46 @@ model Staff {
 }
 
 model Company {
-  id                 String    @id @default(cuid())
+  id                 String  @id @default(cuid())
   name               String
   legalName          String?
-  registrationNumber String?   @unique
+  registrationNumber String? @unique
   email              String?
   phone              String?
   address            String?
-  website             String?
+  website            String?
   logoUrl            String?
-  isActive           Boolean   @default(true)
+  isActive           Boolean @default(true)
 
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  branches           Branch[]
-  staff              Staff[]
+  branches Branch[]
+  staff    Staff[]
 
   @@map("companies")
 }
 
 model Branch {
-  id            String    @id @default(cuid())
-  companyId     String
-  company       Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
-  name          String
-  code          String
-  address       String?
-  city          String?
-  state         String?
-  country       String?
-  phone         String?
-  email         String?
-  isHeadOffice  Boolean   @default(false)
-  isActive      Boolean   @default(true)
+  name         String
+  code         String
+  address      String?
+  city         String?
+  state        String?
+  country      String?
+  phone        String?
+  email        String?
+  isHeadOffice Boolean @default(false)
+  isActive     Boolean @default(true)
 
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  staff         Staff[]
+  staff Staff[]
 
   @@unique([companyId, code])
   @@index([companyId])
@@ -149,13 +182,13 @@ model Branch {
 }
 
 model Role {
-  id          String            @id @default(cuid())
-  name        String            @unique
+  id          String  @id @default(cuid())
+  name        String  @unique
   description String?
-  isSystem    Boolean           @default(false)
+  isSystem    Boolean @default(false)
 
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   permissions RolePermission[]
   identities  IdentityRole[]
@@ -164,14 +197,14 @@ model Role {
 }
 
 model Permission {
-  id          String            @id @default(cuid())
-  key         String            @unique // e.g. "company:create", "branch:update"
-  module      String            // e.g. "company", "branch", "user"
+  id          String  @id @default(cuid())
+  key         String  @unique // e.g. "company:create", "branch:update"
+  module      String // e.g. "company", "branch", "user"
   description String?
 
-  createdAt   DateTime          @default(now())
+  createdAt DateTime @default(now())
 
-  roles       RolePermission[]
+  roles RolePermission[]
 
   @@index([module])
   @@map("permissions")
@@ -183,7 +216,7 @@ model RolePermission {
   permissionId String
   permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
 
-  assignedAt   DateTime   @default(now())
+  assignedAt DateTime @default(now())
 
   @@id([roleId, permissionId])
   @@map("role_permissions")
@@ -197,8 +230,8 @@ model IdentityRole {
 
   // Optional scope: a role can be granted platform-wide (companyId null) or
   // limited to a specific company/branch (e.g. Branch Manager at Branch X).
-  companyId  String?
-  branchId   String?
+  companyId String?
+  branchId  String?
 
   assignedAt DateTime @default(now())
 
@@ -209,19 +242,19 @@ model IdentityRole {
 }
 
 model RefreshToken {
-  id           String    @id @default(cuid())
-  identityId   String
-  identity     Identity  @relation(fields: [identityId], references: [id], onDelete: Cascade)
+  id         String   @id @default(cuid())
+  identityId String
+  identity   Identity @relation(fields: [identityId], references: [id], onDelete: Cascade)
 
   tokenHash    String    @unique
   expiresAt    DateTime
   revokedAt    DateTime?
   replacedById String?
 
-  createdByIp  String?
-  userAgent    String?
+  createdByIp String?
+  userAgent   String?
 
-  createdAt    DateTime  @default(now())
+  createdAt DateTime @default(now())
 
   @@index([identityId])
   @@map("refresh_tokens")
@@ -232,15 +265,15 @@ model AuditLog {
   identityId String?
   identity   Identity? @relation(fields: [identityId], references: [id], onDelete: SetNull)
 
-  action     String    // e.g. "auth.login", "company.create"
+  action     String // e.g. "auth.login", "company.create"
   entityType String?
   entityId   String?
   metadata   Json?
 
-  ipAddress  String?
-  userAgent  String?
+  ipAddress String?
+  userAgent String?
 
-  createdAt  DateTime  @default(now())
+  createdAt DateTime @default(now())
 
   @@index([identityId])
   @@index([entityType, entityId])

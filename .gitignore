@@ -14,5 +14,7 @@ coverage/
 .DS_Store
 Thumbs.db
 generated/
+uploads/
+uploads-test/
 .vscode/*
 !.vscode/extensions.json

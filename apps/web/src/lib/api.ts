@@ -49,3 +49,40 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     throw error;
   }
 }
+
+async function rawUpload<T>(path: string, file: File): Promise<T> {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'POST',
+    credentials: 'include',
+    body: formData,
+  });
+
+  const payload = await res.json().catch(() => null);
+
+  if (!res.ok) {
+    throw new ApiError(payload?.message ?? res.statusText, res.status);
+  }
+
+  return payload.data as T;
+}
+
+/** Uploads a file as multipart/form-data, with a single refresh-and-retry on 401. */
+export async function apiUpload<T>(path: string, file: File): Promise<T> {
+  try {
+    return await rawUpload<T>(path, file);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) {
+      await rawRequest('/auth/refresh', { method: 'POST' });
+      return rawUpload<T>(path, file);
+    }
+    throw error;
+  }
+}
+
+/** Absolute URL for direct browser navigation (relies on the shared auth cookie). */
+export function apiFileUrl(path: string): string {
+  return `${API_BASE}${path}`;
+}

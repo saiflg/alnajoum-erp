@@ -13,6 +13,7 @@ import { AuditModule } from './modules/audit/audit.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { BranchModule } from './modules/branch/branch.module';
 import { CompanyModule } from './modules/company/company.module';
+import { CustomersModule } from './modules/customers/customers.module';
 import { RbacModule } from './modules/rbac/rbac.module';
 import { UsersModule } from './modules/users/users.module';
 
@@ -30,6 +31,7 @@ import { UsersModule } from './modules/users/users.module';
     CompanyModule,
     BranchModule,
     UsersModule,
+    CustomersModule,
   ],
   controllers: [AppController],
   providers: [
