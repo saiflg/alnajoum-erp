@@ -19,6 +19,7 @@ export class CustomersService {
       include: {
         identity: { select: { email: true, phone: true, status: true } },
         documents: true,
+        familyMembers: { orderBy: { createdAt: 'desc' } },
       },
     });
     if (!customer) {

@@ -2,12 +2,12 @@
 
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { AppShell } from '@/components/AppShell';
+import { CountrySelect } from '@/components/CountrySelect';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { apiFileUrl, apiRequest, apiUpload, ApiError } from '@/lib/api';
+import { DOCUMENT_TYPES, DOCUMENT_TYPE_LABELS } from '@/lib/document-types';
 import { PORTAL_NAV } from '@/lib/portal-nav';
 import { CustomerProfile, DocumentType } from '@/lib/types';
-
-const DOCUMENT_TYPES: DocumentType[] = ['PASSPORT', 'NATIONAL_ID', 'VISA', 'OTHER'];
 
 export default function CustomerProfilePage() {
   const [profile, setProfile] = useState<CustomerProfile | null>(null);
@@ -115,11 +115,7 @@ export default function CustomerProfilePage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700">Nationality</label>
-                <input
-                  value={nationality}
-                  onChange={(e) => setNationality(e.target.value)}
-                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
-                />
+                <CountrySelect value={nationality} onChange={setNationality} className="mt-1 w-full" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700">Passport #</label>
@@ -139,11 +135,7 @@ export default function CustomerProfilePage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700">Country</label>
-                <input
-                  value={country}
-                  onChange={(e) => setCountry(e.target.value)}
-                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
-                />
+                <CountrySelect value={country} onChange={setCountry} className="mt-1 w-full" />
               </div>
 
               <button
@@ -167,7 +159,7 @@ export default function CustomerProfilePage() {
                 >
                   {DOCUMENT_TYPES.map((type) => (
                     <option key={type} value={type}>
-                      {type}
+                      {DOCUMENT_TYPE_LABELS[type]}
                     </option>
                   ))}
                 </select>
@@ -203,7 +195,7 @@ export default function CustomerProfilePage() {
                 <tbody className="divide-y divide-slate-100">
                   {profile.documents?.map((doc) => (
                     <tr key={doc.id}>
-                      <td className="px-4 py-2 text-slate-700">{doc.type}</td>
+                      <td className="px-4 py-2 text-slate-700">{DOCUMENT_TYPE_LABELS[doc.type]}</td>
                       <td className="px-4 py-2 text-slate-600">{doc.originalFileName}</td>
                       <td className="px-4 py-2 text-slate-500">
                         {new Date(doc.uploadedAt).toLocaleDateString()}

@@ -79,7 +79,8 @@ model Customer {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  documents CustomerDocument[]
+  documents     CustomerDocument[]
+  familyMembers FamilyMember[]
 
   @@map("customers")
 }
@@ -88,6 +89,9 @@ enum DocumentType {
   PASSPORT
   NATIONAL_ID
   VISA
+  PHOTO
+  VACCINATION_CERTIFICATE
+  BIRTH_CERTIFICATE
   OTHER
 }
 
@@ -106,6 +110,58 @@ model CustomerDocument {
 
   @@index([customerId])
   @@map("customer_documents")
+}
+
+enum FamilyRelationship {
+  SPOUSE
+  CHILD
+  PARENT
+  SIBLING
+  GUARDIAN
+  OTHER
+}
+
+model FamilyMember {
+  id         String   @id @default(cuid())
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  relationship FamilyRelationship
+  firstName    String
+  lastName     String
+  dateOfBirth  DateTime?
+  nationality  String?
+  gender       String?
+  phone        String?
+  email        String?
+
+  passportNumber     String?
+  passportExpiryDate DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  documents FamilyMemberDocument[]
+
+  @@index([customerId])
+  @@map("family_members")
+}
+
+model FamilyMemberDocument {
+  id             String       @id @default(cuid())
+  familyMemberId String
+  familyMember   FamilyMember @relation(fields: [familyMemberId], references: [id], onDelete: Cascade)
+
+  type             DocumentType
+  originalFileName String
+  storedFileName   String       @unique
+  mimeType         String
+  sizeBytes        Int
+
+  uploadedAt DateTime @default(now())
+
+  @@index([familyMemberId])
+  @@map("family_member_documents")
 }
 
 model Staff {

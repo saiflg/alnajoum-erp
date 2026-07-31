@@ -1,8 +1,10 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { DocumentType } from '@prisma/client';
 import * as fs from 'fs';
+import { documentFilePath } from '../../../common/documents/document-storage.util';
 import { PrismaService } from '../../../infrastructure/prisma/prisma.service';
-import { documentFilePath } from './document-storage.util';
+
+const NAMESPACE = 'customer-documents';
 
 @Injectable()
 export class CustomerDocumentsService {
@@ -49,6 +51,8 @@ export class CustomerDocumentsService {
   async deleteDocument(documentId: string, ownerCustomerId?: string) {
     const document = await this.getDocument(documentId, ownerCustomerId);
     await this.prisma.customerDocument.delete({ where: { id: document.id } });
-    await fs.promises.unlink(documentFilePath(document.storedFileName)).catch(() => undefined);
+    await fs.promises
+      .unlink(documentFilePath(NAMESPACE, document.storedFileName))
+      .catch(() => undefined);
   }
 }

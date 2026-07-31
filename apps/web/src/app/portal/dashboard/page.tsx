@@ -19,12 +19,20 @@ export default function CustomerPortalDashboardPage() {
           Flight/hotel booking, visa applications, Hajj &amp; Umrah
           registration, and wallets ship in later phases.
         </p>
-        <Link
-          href="/portal/profile"
-          className="mt-6 inline-block rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 shadow-sm hover:border-slate-300"
-        >
-          Manage My Profile &amp; Documents
-        </Link>
+        <div className="mt-6 flex gap-3">
+          <Link
+            href="/portal/profile"
+            className="inline-block rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 shadow-sm hover:border-slate-300"
+          >
+            Manage My Profile &amp; Documents
+          </Link>
+          <Link
+            href="/portal/family"
+            className="inline-block rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 shadow-sm hover:border-slate-300"
+          >
+            Manage Family Members
+          </Link>
+        </div>
       </AppShell>
     </ProtectedRoute>
   );

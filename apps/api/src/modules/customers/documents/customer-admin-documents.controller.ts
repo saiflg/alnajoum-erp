@@ -9,9 +9,11 @@ import {
 import type { Response } from 'express';
 import * as fs from 'fs';
 import { RequirePermissions } from '../../../common/decorators/permissions.decorator';
+import { documentFilePath } from '../../../common/documents/document-storage.util';
 import { PERMISSIONS } from '../../rbac/constants/permissions.constant';
-import { documentFilePath } from './document-storage.util';
 import { CustomerDocumentsService } from './customer-documents.service';
+
+const NAMESPACE = 'customer-documents';
 
 @Controller('customers/:customerId/documents')
 export class CustomerAdminDocumentsController {
@@ -35,7 +37,9 @@ export class CustomerAdminDocumentsController {
       'Content-Type': document.mimeType,
       'Content-Disposition': `inline; filename="${document.originalFileName}"`,
     });
-    return new StreamableFile(fs.createReadStream(documentFilePath(document.storedFileName)));
+    return new StreamableFile(
+      fs.createReadStream(documentFilePath(NAMESPACE, document.storedFileName)),
+    );
   }
 
   @Delete(':documentId')

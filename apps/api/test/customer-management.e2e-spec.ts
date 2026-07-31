@@ -1,9 +1,27 @@
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
+import sharp from 'sharp';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { configureApp } from './../src/bootstrap';
+
+async function flatJpeg(): Promise<Buffer> {
+  return sharp({
+    create: { width: 400, height: 400, channels: 3, background: { r: 210, g: 210, b: 210 } },
+  })
+    .jpeg()
+    .toBuffer();
+}
+
+async function noisyJpeg(): Promise<Buffer> {
+  const size = 400;
+  const raw = Buffer.alloc(size * size * 3);
+  for (let i = 0; i < raw.length; i += 1) {
+    raw[i] = (i * 2654435761) % 256;
+  }
+  return sharp(raw, { raw: { width: size, height: size, channels: 3 } }).jpeg().toBuffer();
+}
 
 const BOOTSTRAP_ADMIN_EMAIL = 'admin@alnajoum.travel';
 const BOOTSTRAP_ADMIN_PASSWORD = 'Alnajoum@2026';
@@ -88,12 +106,14 @@ describe('Customer Management (e2e)', () => {
     });
 
     let documentId: string;
+    let passportBytes: Buffer;
 
     it('uploads a passport document', async () => {
+      passportBytes = await noisyJpeg();
       const res = await request(server)
         .post('/api/v1/customers/me/documents?type=PASSPORT')
         .set('Authorization', `Bearer ${customerAccessToken}`)
-        .attach('file', Buffer.from('fake-passport-bytes'), {
+        .attach('file', passportBytes, {
           filename: 'passport.jpg',
           contentType: 'image/jpeg',
         })
@@ -132,7 +152,7 @@ describe('Customer Management (e2e)', () => {
         .expect(200);
 
       expect(res.headers['content-type']).toContain('image/jpeg');
-      expect(res.body.toString()).toBe('fake-passport-bytes');
+      expect(Buffer.compare(res.body, passportBytes)).toBe(0);
     });
 
     it('deletes the uploaded document', async () => {
@@ -208,6 +228,50 @@ describe('Customer Management (e2e)', () => {
         .get('/api/v1/customers')
         .set('Authorization', `Bearer ${tokenB}`)
         .expect(403);
+    });
+  });
+
+  describe('passport image quality validation', () => {
+    const email = `${RUN_ID}.blurtest@example.com`;
+    let token: string;
+
+    it('registers and logs in a customer for the blur-detection checks', async () => {
+      await request(server)
+        .post('/api/v1/auth/register')
+        .send({ email, password: 'Passw0rd1', firstName: 'Blur', lastName: 'Test' })
+        .expect(201);
+
+      token = (
+        await request(server)
+          .post('/api/v1/auth/login')
+          .send({ email, password: 'Passw0rd1' })
+      ).body.data.accessToken;
+    });
+
+    it('rejects a flat/blurry image uploaded as a passport', async () => {
+      const res = await request(server)
+        .post('/api/v1/customers/me/documents?type=PASSPORT')
+        .set('Authorization', `Bearer ${token}`)
+        .attach('file', await flatJpeg(), { filename: 'blurry-passport.jpg', contentType: 'image/jpeg' })
+        .expect(400);
+
+      expect(res.body.message).toMatch(/blurry|unclear/i);
+    });
+
+    it('accepts a sharp/high-detail image uploaded as a passport', async () => {
+      await request(server)
+        .post('/api/v1/customers/me/documents?type=PASSPORT')
+        .set('Authorization', `Bearer ${token}`)
+        .attach('file', await noisyJpeg(), { filename: 'clear-passport.jpg', contentType: 'image/jpeg' })
+        .expect(201);
+    });
+
+    it('does not apply the blur check to non-passport document types', async () => {
+      await request(server)
+        .post('/api/v1/customers/me/documents?type=NATIONAL_ID')
+        .set('Authorization', `Bearer ${token}`)
+        .attach('file', await flatJpeg(), { filename: 'blurry-id.jpg', contentType: 'image/jpeg' })
+        .expect(201);
     });
   });
 

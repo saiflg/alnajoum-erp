@@ -57,7 +57,14 @@ export interface StaffMember {
   identity?: { email: string; status: string };
 }
 
-export type DocumentType = 'PASSPORT' | 'NATIONAL_ID' | 'VISA' | 'OTHER';
+export type DocumentType =
+  | 'PASSPORT'
+  | 'NATIONAL_ID'
+  | 'VISA'
+  | 'PHOTO'
+  | 'VACCINATION_CERTIFICATE'
+  | 'BIRTH_CERTIFICATE'
+  | 'OTHER';
 
 export interface CustomerDocument {
   id: string;
@@ -85,4 +92,40 @@ export interface CustomerProfile {
   createdAt: string;
   identity?: { email: string; phone: string | null; status: string };
   documents?: CustomerDocument[];
+  familyMembers?: FamilyMember[];
+}
+
+export type FamilyRelationship =
+  | 'SPOUSE'
+  | 'CHILD'
+  | 'PARENT'
+  | 'SIBLING'
+  | 'GUARDIAN'
+  | 'OTHER';
+
+export interface FamilyMemberDocument {
+  id: string;
+  familyMemberId: string;
+  type: DocumentType;
+  originalFileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  uploadedAt: string;
+}
+
+export interface FamilyMember {
+  id: string;
+  customerId: string;
+  relationship: FamilyRelationship;
+  firstName: string;
+  lastName: string;
+  dateOfBirth: string | null;
+  nationality: string | null;
+  gender: string | null;
+  phone: string | null;
+  email: string | null;
+  passportNumber: string | null;
+  passportExpiryDate: string | null;
+  createdAt: string;
+  documents?: FamilyMemberDocument[];
 }

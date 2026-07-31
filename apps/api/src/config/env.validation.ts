@@ -48,6 +48,11 @@ class EnvironmentVariables {
 
   @IsString()
   UPLOADS_DIR: string = './uploads';
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  DOCUMENT_BLUR_THRESHOLD?: number;
 }
 
 export function validateEnv(config: Record<string, unknown>) {
