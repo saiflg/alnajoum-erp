@@ -1,10 +1,12 @@
 # Alnajoum Travel ERP Platform
 
-**Phase 1** (auth, RBAC, Company/Branch/Staff management) plus two Phase 2
-modules: **Customer Management** (self-service profiles + document uploads)
-and **Family Management** (dependents per customer, each with their own
-documents). Built to run entirely on localhost during development, with
-Oracle Cloud deployment deferred to a later phase.
+**Phase 1** (auth, RBAC, Company/Branch/Staff management) plus three Phase 2
+modules: **Customer Management** (self-service profiles + document uploads),
+**Family Management** (dependents per customer, each with their own
+documents), and **Flight Booking** (search/book/manage flights, self-service
+or staff-assisted, against a swappable provider — Mock today, Duffel once
+credentials exist). Built to run entirely on localhost during development,
+with Oracle Cloud deployment deferred to a later phase.
 
 ## 1. Project structure
 
@@ -33,6 +35,9 @@ alnajoum-erp/
 │   │   │   │   ├── customers/ # self-service + admin customer profile CRUD
 │   │   │   │   │   ├── documents/       # passport/ID uploads (local disk storage)
 │   │   │   │   │   └── family-members/  # dependents per customer, incl. their own documents
+│   │   │   │   ├── flights/   # search, book, manage flight bookings
+│   │   │   │   │   ├── providers/  # FlightProviderPort + Mock/Duffel(stub) adapters
+│   │   │   │   │   └── dto/
 │   │   │   │   └── audit/     # audit log read + write
 │   │   │   ├── app.module.ts
 │   │   │   ├── bootstrap.ts   # shared app config (used by main.ts AND e2e tests)
@@ -44,12 +49,12 @@ alnajoum-erp/
 │       └── src/
 │           ├── app/
 │           │   ├── login/
-│           │   ├── admin/{dashboard,companies,branches,staff,customers,roles}
+│           │   ├── admin/{dashboard,companies,branches,staff,customers,flights,roles}
 │           │   ├── branch/dashboard, staff/dashboard,
-│           │   │   finance/dashboard, portal/{dashboard,profile,family}
+│           │   │   finance/dashboard, portal/{dashboard,profile,family,flights}
 │           │   └── layout.tsx, page.tsx
-│           ├── components/    # AppShell, ProtectedRoute
-│           └── lib/           # api client, auth context, types
+│           ├── components/    # AppShell, ProtectedRoute, CountrySelect
+│           └── lib/           # api client, auth context, types, format helpers
 └── packages/                  # reserved for future shared libraries
 ```
 
@@ -124,6 +129,29 @@ alnajoum-erp/
   threshold was calibrated against a synthetic document-like test image
   at increasing blur radii (see the "risks" section below for the
   caveat this implies) rather than real passport photos.
+- **`FlightProviderPort` decouples booking logic from any one vendor**:
+  `FlightsService` only ever calls `searchOffers`/`getOffer`/`createOrder`/
+  `cancelOrder` on the interface in `modules/flights/providers/`, injected
+  via the `FLIGHT_PROVIDER` DI token. Today that resolves to
+  `MockFlightProviderService` (deterministic fake offers, no external
+  calls); `DuffelFlightProviderService` exists as a documented stub that
+  throws until implemented. Switching providers in any environment is one
+  env var (`FLIGHT_PROVIDER=duffel`), not a rewrite of the booking flow.
+- **Flight offers are held server-side, not round-tripped by the client**:
+  like a real GDS, `MockFlightProviderService` caches each generated offer
+  in memory (30-minute TTL) and hands back only an opaque id; `getOffer`/
+  `createOrder` resolve against that cache. This is why offers don't
+  survive a server restart and won't work across multiple API instances
+  without a shared cache — acceptable for localhost, a real constraint to
+  fix (e.g. Redis-backed) before any multi-instance deployment.
+- **Booking passengers are snapshotted, not just referenced**: a
+  `FlightBookingPassenger` copies the traveler's name/DOB/passport at
+  booking time from either the `Customer` or a `FamilyMember`, the same
+  snapshot pattern used for documents — so a later profile edit can't
+  silently change what's on an already-booked ticket. Every passenger
+  input identifies who they are by omitting `familyMemberId` (self) or
+  providing one (a family member), and ownership is checked either way —
+  the same shape is reused for self-service and admin/staff bookings.
 
 ## 3. Getting started (localhost)
 
@@ -176,10 +204,13 @@ The seed script creates:
 | `IdentityRole` | Role grants per identity, optionally scoped to a company/branch |
 | `RefreshToken` | Hashed, revocable refresh tokens |
 | `AuditLog` | Append-only action log (auth events today; extensible via `entityType`/`entityId`) |
+| `FlightBooking` | A booking: customer, optional booking staff member, provider + provider order/offer ids, status, route/dates/cabin, total, and a full `itinerary` JSON snapshot of the offer |
+| `FlightBookingPassenger` | One passenger on a booking — references a `Customer` or a `FamilyMember` (exactly one), plus a name/DOB/passport snapshot taken at booking time |
 
 Full definitions: [`apps/api/prisma/schema.prisma`](apps/api/prisma/schema.prisma).
 Migrations: `20260731134308_init`, `20260731172525_customer_management`,
-`20260731191249_family_management`.
+`20260731191249_family_management`, `20260731195715_expand_document_types`,
+`20260801133125_flight_booking`.
 
 ## 5. APIs implemented
 
@@ -232,6 +263,20 @@ additionally allows staff-assisted uploads, since walk-in customers often
 hand over physical documents for their dependents). Same 5MB/JPEG-PNG-PDF
 limits as customer documents.
 
+**Flights** (`/flights`) — `GET search` (query: `origin`, `destination`,
+`departureDate`, `returnDate?`, `adults`, `children?`, `infants?`,
+`cabinClass?`; any authenticated identity), `GET offers/:offerId` (offer
+detail; 404 once expired/unknown).
+
+**Flight bookings** — self-service under `/flights/bookings/me`: `POST`
+(create, `{ offerId, passengers: [{ type, familyMemberId? }] }` — omit
+`familyMemberId` to mean "the customer themself"), `GET` (list own),
+`GET :id` (view own), `POST :id/cancel` (cancel own; 409 if already
+cancelled). Admin/staff equivalent under `/flights/bookings`: `POST`
+(book on behalf of an explicit `customerId`, `flight:book`), `GET`
+(list all, optional `?customerId=&status=`, `flight:read`), `GET :id`
+(view any, `flight:read`), `POST :id/cancel` (cancel any, `flight:cancel`).
+
 **Audit** (`/audit-logs`) — `GET ?entityType=&entityId=`.
 
 **Health** — `GET /health` (public).
@@ -243,7 +288,7 @@ or roles (`RolesGuard` + `@Roles`).
 
 ## 6. Tests written
 
-- **51 unit tests** (`pnpm test` in `apps/api`): `AuthService` (credential
+- **71 unit tests** (`pnpm test` in `apps/api`): `AuthService` (credential
   validation, lockout after repeated failures, registration conflicts,
   refresh token rejection paths, password change), `RbacService`
   (role CRUD guards, permission aggregation), `RolesGuard` /
@@ -256,8 +301,14 @@ or roles (`RolesGuard` + `@Roles`).
   skips non-image mime types, and — a real bug caught during
   development — correctly accepts a *sharp* image that has an alpha
   channel, which `sharp`'s `.convolve()` previously scored as unreadable
-  regardless of actual content).
-- **65 e2e tests** across 4 spec files (`pnpm test:e2e` in `apps/api`, needs
+  regardless of actual content), `MockFlightProviderService` (offer count/
+  sorting, deterministic content for identical searches, return-segment
+  generation, cabin-class pricing, offer expiry via fake timers, order
+  confirmation consuming the cached offer, order rejection once an offer
+  is gone), `FlightsService` (passenger snapshot resolution for self vs.
+  a family member, ownership rejection, provider-rejection → Conflict,
+  booking ownership checks, double-cancel rejection).
+- **86 e2e tests** across 5 spec files (`pnpm test:e2e` in `apps/api`, needs
   Docker running): full journeys against a real, dedicated
   `alnajoum_erp_test` Postgres database —
   - **auth-rbac-flow**: login, `/auth/me`, company/branch/staff creation,
@@ -278,6 +329,15 @@ or roles (`RolesGuard` + `@Roles`).
     a Branch Manager's read-only boundary (403 on create/update/delete),
     and the same passport blur rejection wired through the family-member
     upload path.
+  - **flight-booking**: unauthenticated search rejected, offer search and
+    detail lookup, 404 on an unknown/expired offer, the full self-service
+    lifecycle (book → list → view → cancel → re-cancel returns 409),
+    booking with a family member as a second passenger, cross-customer
+    boundaries on both a booking and a family member reference (403),
+    staff booking on behalf of a customer with `flight:book`, a Branch
+    Manager's read-only boundary (`flight:read` only — 403 on book/cancel),
+    staff lacking `flight:cancel` being blocked from cancelling, and admin
+    cancellation plus filtering the admin list by `status`.
   - Test data uses a per-run random suffix so the suite is safely
     re-runnable without ever needing a destructive database reset.
 - **Frontend**: manually verified in-browser (see below) — no frontend
@@ -364,6 +424,32 @@ document image at a range of blur radii (see `image-quality.util.ts`).
 Re-ran the same sharp/blurred pair afterward: the sharp upload succeeds
 (201) and the blurred one is rejected (400) with a message asking for a
 clearer retake, confirmed via both the API directly and end-to-end tests.
+
+Flight Booking: as a customer, confirmed the new "Book a Flight" and "My
+Bookings" quick-link cards render on `/portal/dashboard`. Searched
+`/portal/flights/search` for a real route and date; the mock provider
+returned several offers with correctly formatted currency, date/time, and
+duration (e.g. "Arik Air · W3498, LOS → ABV, Mon 15 Mar, 09:51, 3h 52m,
+ECONOMY, ₦81,129, 4 seats left"). Selected an offer, landed on
+`/portal/flights/book/[offerId]` with "Myself" pre-checked as ADULT and
+the correct empty-state copy for a customer with no family members yet.
+Submitted the booking and confirmed via the network log that
+`POST /flights/bookings/me` returned 201 and the app redirected to the
+new booking's detail page, which displayed the generated reference
+(`ANJ-XXXXXXXX`), route, dates, cabin, total, `CONFIRMED` status, and
+passenger table correctly. `/portal/flights` ("My Bookings") listed both
+that booking and an earlier cancelled one with the right statuses.
+Logged in as the bootstrap Super Admin and confirmed `/admin/flights`
+lists bookings across customers with a working status filter (verified
+narrowing to `CONFIRMED` correctly hid the cancelled row), and that the
+admin detail page for the same booking renders identically with a
+"Cancel booking" button shown (Super Admin holds `flight:cancel`). The
+in-browser cancel action itself relies on a native `confirm()` dialog
+that the browser automation tool can't drive, so the cancel/re-cancel
+transition, cross-customer/family-member ownership boundaries, staff
+booking-on-behalf, and permission gating (`flight:book`/`flight:cancel`)
+were exercised through the 86 e2e tests instead, which assert against
+the real API and database rather than just mocks.
 
 ## 9. Remaining tasks (explicitly out of scope so far)
 

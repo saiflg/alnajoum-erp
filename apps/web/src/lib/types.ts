@@ -129,3 +129,69 @@ export interface FamilyMember {
   createdAt: string;
   documents?: FamilyMemberDocument[];
 }
+
+export type CabinClass = 'ECONOMY' | 'PREMIUM_ECONOMY' | 'BUSINESS' | 'FIRST';
+export type PassengerType = 'ADULT' | 'CHILD' | 'INFANT';
+export type FlightBookingStatus = 'PENDING' | 'CONFIRMED' | 'CANCELLED' | 'FAILED';
+
+export interface FlightSegment {
+  origin: string;
+  destination: string;
+  departureAt: string;
+  arrivalAt: string;
+  airline: string;
+  airlineCode: string;
+  flightNumber: string;
+  cabinClass: CabinClass;
+  durationMinutes: number;
+}
+
+export interface FlightOffer {
+  id: string;
+  provider: string;
+  origin: string;
+  destination: string;
+  departureAt: string;
+  arrivalAt: string;
+  returnDepartureAt?: string;
+  returnArrivalAt?: string;
+  cabinClass: CabinClass;
+  currency: string;
+  totalAmount: number;
+  seatsAvailable: number;
+  outboundSegments: FlightSegment[];
+  returnSegments?: FlightSegment[];
+  expiresAt: string;
+}
+
+export interface FlightBookingPassengerRecord {
+  id: string;
+  bookingId: string;
+  type: PassengerType;
+  customerId: string | null;
+  familyMemberId: string | null;
+  firstName: string;
+  lastName: string;
+  dateOfBirth: string | null;
+  passportNumber: string | null;
+  ticketNumber: string | null;
+}
+
+export interface FlightBooking {
+  id: string;
+  bookingReference: string;
+  customerId: string;
+  bookedByStaffId: string | null;
+  provider: string;
+  status: FlightBookingStatus;
+  currency: string;
+  totalAmount: number;
+  origin: string;
+  destination: string;
+  departureAt: string;
+  returnAt: string | null;
+  cabinClass: CabinClass;
+  createdAt: string;
+  passengers: FlightBookingPassengerRecord[];
+  customer?: { firstName: string; lastName: string };
+}

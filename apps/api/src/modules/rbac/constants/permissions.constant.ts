@@ -27,6 +27,11 @@ export const PERMISSIONS = {
     UPDATE: 'customer:update',
     DELETE: 'customer:delete',
   },
+  FLIGHT: {
+    BOOK: 'flight:book',
+    READ: 'flight:read',
+    CANCEL: 'flight:cancel',
+  },
   ROLE: {
     CREATE: 'role:create',
     READ: 'role:read',

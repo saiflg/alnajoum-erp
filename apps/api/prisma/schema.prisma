@@ -79,8 +79,10 @@ model Customer {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  documents     CustomerDocument[]
-  familyMembers FamilyMember[]
+  documents              CustomerDocument[]
+  familyMembers          FamilyMember[]
+  flightBookings         FlightBooking[]
+  flightBookingPassenger FlightBookingPassenger[]
 
   @@map("customers")
 }
@@ -141,7 +143,8 @@ model FamilyMember {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  documents FamilyMemberDocument[]
+  documents              FamilyMemberDocument[]
+  flightBookingPassenger FlightBookingPassenger[]
 
   @@index([customerId])
   @@map("family_members")
@@ -184,6 +187,8 @@ model Staff {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  bookedFlightBookings FlightBooking[]
 
   @@index([companyId])
   @@index([branchId])
@@ -335,4 +340,101 @@ model AuditLog {
   @@index([entityType, entityId])
   @@index([createdAt])
   @@map("audit_logs")
+}
+
+enum FlightProviderName {
+  MOCK
+  DUFFEL
+}
+
+enum FlightBookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  FAILED
+}
+
+enum PassengerType {
+  ADULT
+  CHILD
+  INFANT
+}
+
+enum CabinClass {
+  ECONOMY
+  PREMIUM_ECONOMY
+  BUSINESS
+  FIRST
+}
+
+model FlightBooking {
+  id               String @id @default(cuid())
+  bookingReference String @unique
+
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+
+  // Set when a staff member books on the customer's behalf; null for
+  // customer self-service bookings.
+  bookedByStaffId String?
+  bookedByStaff   Staff?  @relation(fields: [bookedByStaffId], references: [id], onDelete: SetNull)
+
+  provider        FlightProviderName
+  providerOfferId String
+  providerOrderId String?
+  status          FlightBookingStatus @default(PENDING)
+
+  currency    String
+  totalAmount Int // whole currency units (e.g. NGN), no minor-unit subdivision
+
+  origin      String
+  destination String
+  departureAt DateTime
+  returnAt    DateTime?
+  cabinClass  CabinClass
+
+  // Full offer snapshot (segments, fare basis, etc.) as returned by the
+  // provider at booking time — provider payloads vary too much in shape to
+  // model relationally, and a snapshot also preserves what was actually
+  // purchased even if the provider's own record later changes.
+  itinerary Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  passengers FlightBookingPassenger[]
+
+  @@index([customerId])
+  @@index([status])
+  @@index([bookedByStaffId])
+  @@map("flight_bookings")
+}
+
+model FlightBookingPassenger {
+  id        String        @id @default(cuid())
+  bookingId String
+  booking   FlightBooking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  type PassengerType
+
+  // Exactly one of these is set, identifying who this passenger is.
+  customerId     String?
+  customer       Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  familyMemberId String?
+  familyMember   FamilyMember? @relation(fields: [familyMemberId], references: [id], onDelete: SetNull)
+
+  // Snapshot of traveler details at booking time, independent of later
+  // profile edits.
+  firstName      String
+  lastName       String
+  dateOfBirth    DateTime?
+  passportNumber String?
+  ticketNumber   String?
+
+  createdAt DateTime @default(now())
+
+  @@index([bookingId])
+  @@index([customerId])
+  @@index([familyMemberId])
+  @@map("flight_booking_passengers")
 }

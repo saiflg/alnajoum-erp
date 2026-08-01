@@ -16,10 +16,22 @@ export default function CustomerPortalDashboardPage() {
           Welcome{user ? `, ${user.email}` : ''}
         </h2>
         <p className="mt-2 max-w-2xl text-sm text-slate-600">
-          Flight/hotel booking, visa applications, Hajj &amp; Umrah
-          registration, and wallets ship in later phases.
+          Hotel booking, visa applications, Hajj &amp; Umrah registration,
+          and wallets ship in later phases.
         </p>
-        <div className="mt-6 flex gap-3">
+        <div className="mt-6 flex flex-wrap gap-3">
+          <Link
+            href="/portal/flights/search"
+            className="inline-block rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 shadow-sm hover:border-slate-300"
+          >
+            Book a Flight
+          </Link>
+          <Link
+            href="/portal/flights"
+            className="inline-block rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 shadow-sm hover:border-slate-300"
+          >
+            My Bookings
+          </Link>
           <Link
             href="/portal/profile"
             className="inline-block rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 shadow-sm hover:border-slate-300"

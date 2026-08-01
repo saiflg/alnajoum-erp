@@ -75,6 +75,15 @@ export class UsersService {
     };
   }
 
+  /** Resolves a Staff record id for the identity of the calling user, or null if none. */
+  async getStaffIdForIdentity(identityId: string): Promise<string | null> {
+    const staff = await this.prisma.staff.findUnique({
+      where: { identityId },
+      select: { id: true },
+    });
+    return staff?.id ?? null;
+  }
+
   async findAll(companyId?: string, branchId?: string) {
     return this.prisma.staff.findMany({
       where: { companyId, branchId },

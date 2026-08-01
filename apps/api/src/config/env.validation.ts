@@ -53,6 +53,10 @@ class EnvironmentVariables {
   @IsInt()
   @Min(1)
   DOCUMENT_BLUR_THRESHOLD?: number;
+
+  @IsOptional()
+  @IsString()
+  FLIGHT_PROVIDER?: string; // 'mock' (default) | 'duffel'
 }
 
 export function validateEnv(config: Record<string, unknown>) {
