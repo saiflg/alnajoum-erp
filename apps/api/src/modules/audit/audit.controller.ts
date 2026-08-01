@@ -9,7 +9,10 @@ export class AuditController {
 
   @Get()
   @RequirePermissions(PERMISSIONS.AUDIT.READ)
-  list(@Query('entityType') entityType: string, @Query('entityId') entityId: string) {
+  list(
+    @Query('entityType') entityType: string,
+    @Query('entityId') entityId: string,
+  ) {
     return this.auditService.listForEntity(entityType, entityId);
   }
 }

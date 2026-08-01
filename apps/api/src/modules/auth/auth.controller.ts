@@ -14,10 +14,7 @@ import type { Request, Response } from 'express';
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthContext } from '../../common/interfaces/auth-context.interface';
-import {
-  ACCESS_TOKEN_COOKIE,
-  REFRESH_TOKEN_COOKIE,
-} from './auth.constants';
+import { ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE } from './auth.constants';
 import { AuthService, RequestMeta, TokenPair } from './auth.service';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { LoginDto } from './dto/login.dto';
@@ -94,7 +91,9 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
     @Ip() ip: string,
   ) {
-    const refreshToken = dto.refreshToken ?? req.cookies?.[REFRESH_TOKEN_COOKIE];
+    const cookieToken = req.cookies?.[REFRESH_TOKEN_COOKIE] as
+      string | undefined;
+    const refreshToken = dto.refreshToken ?? cookieToken;
     if (!refreshToken) {
       throw new UnauthorizedException('Refresh token is required');
     }
@@ -113,7 +112,9 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const refreshToken = dto.refreshToken ?? req.cookies?.[REFRESH_TOKEN_COOKIE];
+    const cookieToken = req.cookies?.[REFRESH_TOKEN_COOKIE] as
+      string | undefined;
+    const refreshToken = dto.refreshToken ?? cookieToken;
     if (refreshToken) {
       await this.authService.logout(refreshToken);
     }

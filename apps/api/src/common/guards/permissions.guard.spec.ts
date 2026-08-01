@@ -12,7 +12,9 @@ function buildContext(user: unknown): ExecutionContext {
 
 describe('PermissionsGuard', () => {
   it('allows the request when no permissions are required', () => {
-    const reflector = { getAllAndOverride: jest.fn().mockReturnValue(undefined) } as unknown as Reflector;
+    const reflector = {
+      getAllAndOverride: jest.fn().mockReturnValue(undefined),
+    } as unknown as Reflector;
     const guard = new PermissionsGuard(reflector);
 
     expect(guard.canActivate(buildContext(undefined))).toBe(true);
@@ -24,7 +26,9 @@ describe('PermissionsGuard', () => {
     } as unknown as Reflector;
     const guard = new PermissionsGuard(reflector);
 
-    const context = buildContext({ permissions: ['company:read', 'company:update'] });
+    const context = buildContext({
+      permissions: ['company:read', 'company:update'],
+    });
 
     expect(guard.canActivate(context)).toBe(true);
   });

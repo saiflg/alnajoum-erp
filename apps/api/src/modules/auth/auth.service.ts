@@ -10,7 +10,10 @@ import { Identity, IdentityType } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { createHash, randomBytes } from 'crypto';
 import { AuthContext } from '../../common/interfaces/auth-context.interface';
-import { durationToMs, durationToSeconds } from '../../common/utils/duration.util';
+import {
+  durationToMs,
+  durationToSeconds,
+} from '../../common/utils/duration.util';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import {
@@ -115,7 +118,10 @@ export class AuthService {
     return this.issueTokenPair(identity, meta);
   }
 
-  async validateCredentials(email: string, password: string): Promise<Identity> {
+  async validateCredentials(
+    email: string,
+    password: string,
+  ): Promise<Identity> {
     const identity = await this.prisma.identity.findUnique({
       where: { email },
     });
@@ -144,9 +150,7 @@ export class AuthService {
         data: {
           failedLoginCount: shouldLock ? 0 : failedLoginCount,
           lockedUntil: shouldLock
-            ? new Date(
-                Date.now() + ACCOUNT_LOCK_DURATION_MINUTES * 60 * 1000,
-              )
+            ? new Date(Date.now() + ACCOUNT_LOCK_DURATION_MINUTES * 60 * 1000)
             : null,
         },
       });
@@ -303,9 +307,8 @@ export class AuthService {
       where: { id: identityId },
       include: { customer: true, staff: true },
     });
-    const { roles, permissions } = await this.rbacService.getEffectiveAccess(
-      identityId,
-    );
+    const { roles, permissions } =
+      await this.rbacService.getEffectiveAccess(identityId);
 
     return {
       id: identity.id,
@@ -343,7 +346,10 @@ export class AuthService {
       for (const permission of permissions) {
         await this.prisma.rolePermission.upsert({
           where: {
-            roleId_permissionId: { roleId: role.id, permissionId: permission.id },
+            roleId_permissionId: {
+              roleId: role.id,
+              permissionId: permission.id,
+            },
           },
           create: { roleId: role.id, permissionId: permission.id },
           update: {},

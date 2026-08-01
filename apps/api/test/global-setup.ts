@@ -10,7 +10,7 @@ import * as path from 'path';
  * Test specs use randomized emails/codes per run instead of relying on a
  * wiped database, which avoids ever needing a destructive reset here.
  */
-export default async function globalSetup(): Promise<void> {
+export default function globalSetup(): void {
   const envPath = path.join(__dirname, '../.env.test');
   const parsed = dotenv.parse(fs.readFileSync(envPath));
   const env = { ...process.env, ...parsed };

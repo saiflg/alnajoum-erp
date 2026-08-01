@@ -35,7 +35,10 @@ describe('Auth + RBAC + Company/Branch/Staff flow (e2e)', () => {
   it('logs in the seeded Super Admin and returns full access', async () => {
     const res = await request(server)
       .post('/api/v1/auth/login')
-      .send({ email: BOOTSTRAP_ADMIN_EMAIL, password: BOOTSTRAP_ADMIN_PASSWORD })
+      .send({
+        email: BOOTSTRAP_ADMIN_EMAIL,
+        password: BOOTSTRAP_ADMIN_PASSWORD,
+      })
       .expect(201);
 
     expect(res.body.data.identity.roles).toContain('SUPER_ADMIN');
@@ -61,7 +64,11 @@ describe('Auth + RBAC + Company/Branch/Staff flow (e2e)', () => {
 
     expect(res.body.data.email).toBe(BOOTSTRAP_ADMIN_EMAIL);
     expect(res.body.data.permissions).toEqual(
-      expect.arrayContaining(['company:create', 'branch:create', 'staff:create']),
+      expect.arrayContaining([
+        'company:create',
+        'branch:create',
+        'staff:create',
+      ]),
     );
   });
 
@@ -107,7 +114,9 @@ describe('Auth + RBAC + Company/Branch/Staff flow (e2e)', () => {
       .set('Authorization', `Bearer ${adminAccessToken}`)
       .expect(200);
 
-    const role = res.body.data.find((r: { name: string }) => r.name === 'BRANCH_MANAGER');
+    const role = res.body.data.find(
+      (r: { name: string }) => r.name === 'BRANCH_MANAGER',
+    );
     expect(role).toBeDefined();
     branchManagerRoleId = role.id;
   });
@@ -190,7 +199,10 @@ describe('Auth + RBAC + Company/Branch/Staff flow (e2e)', () => {
     it('logs in and captures the refresh token', async () => {
       const res = await request(server)
         .post('/api/v1/auth/login')
-        .send({ email: BOOTSTRAP_ADMIN_EMAIL, password: BOOTSTRAP_ADMIN_PASSWORD })
+        .send({
+          email: BOOTSTRAP_ADMIN_EMAIL,
+          password: BOOTSTRAP_ADMIN_PASSWORD,
+        })
         .expect(201);
       refreshToken = res.body.data.refreshToken;
     });
@@ -217,7 +229,10 @@ describe('Auth + RBAC + Company/Branch/Staff flow (e2e)', () => {
     it('revokes the refresh token so it can no longer be used', async () => {
       const loginRes = await request(server)
         .post('/api/v1/auth/login')
-        .send({ email: BOOTSTRAP_ADMIN_EMAIL, password: BOOTSTRAP_ADMIN_PASSWORD })
+        .send({
+          email: BOOTSTRAP_ADMIN_EMAIL,
+          password: BOOTSTRAP_ADMIN_PASSWORD,
+        })
         .expect(201);
       const refreshToken = loginRes.body.data.refreshToken;
 

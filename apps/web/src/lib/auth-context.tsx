@@ -32,7 +32,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    refreshUser().finally(() => setLoading(false));
+    let ignore = false;
+    // This is the standard "check auth on mount" idiom: a session check that
+    // must resolve before the app can decide public vs. protected content.
+    // react-hooks/set-state-in-effect wants Suspense/an external store for
+    // any async setState from an effect, which isn't warranted here — the
+    // `ignore` guard above already prevents the real hazard (a stray update
+    // after unmount).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    refreshUser().finally(() => {
+      if (!ignore) setLoading(false);
+    });
+    return () => {
+      ignore = true;
+    };
   }, [refreshUser]);
 
   const login = useCallback(async (email: string, password: string) => {

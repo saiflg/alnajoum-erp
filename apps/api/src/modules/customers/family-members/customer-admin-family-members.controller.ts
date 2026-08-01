@@ -40,7 +40,10 @@ export class CustomerAdminFamilyMembersController {
 
   @Post()
   @RequirePermissions(PERMISSIONS.CUSTOMER.UPDATE)
-  create(@Param('customerId') customerId: string, @Body() dto: CreateFamilyMemberDto) {
+  create(
+    @Param('customerId') customerId: string,
+    @Body() dto: CreateFamilyMemberDto,
+  ) {
     return this.familyMembersService.create(customerId, dto);
   }
 
@@ -52,7 +55,10 @@ export class CustomerAdminFamilyMembersController {
 
   @Get(':memberId')
   @RequirePermissions(PERMISSIONS.CUSTOMER.READ)
-  findOne(@Param('customerId') customerId: string, @Param('memberId') memberId: string) {
+  findOne(
+    @Param('customerId') customerId: string,
+    @Param('memberId') memberId: string,
+  ) {
     return this.familyMembersService.getMember(memberId, customerId);
   }
 
@@ -68,7 +74,10 @@ export class CustomerAdminFamilyMembersController {
 
   @Delete(':memberId')
   @RequirePermissions(PERMISSIONS.CUSTOMER.DELETE)
-  async remove(@Param('customerId') customerId: string, @Param('memberId') memberId: string) {
+  async remove(
+    @Param('customerId') customerId: string,
+    @Param('memberId') memberId: string,
+  ) {
     await this.familyMembersService.remove(memberId, customerId);
     return { deleted: true };
   }
@@ -86,7 +95,10 @@ export class CustomerAdminFamilyMembersController {
   @Post(':memberId/documents')
   @RequirePermissions(PERMISSIONS.CUSTOMER.UPDATE)
   @UseInterceptors(
-    FileInterceptor('file', createDocumentMulterOptions(FAMILY_MEMBER_DOCUMENTS_NAMESPACE)),
+    FileInterceptor(
+      'file',
+      createDocumentMulterOptions(FAMILY_MEMBER_DOCUMENTS_NAMESPACE),
+    ),
   )
   async uploadDocument(
     @Param('customerId') customerId: string,
@@ -113,14 +125,20 @@ export class CustomerAdminFamilyMembersController {
     @Res({ passthrough: true }) res: Response,
   ): Promise<StreamableFile> {
     await this.familyMembersService.getMember(memberId, customerId);
-    const document = await this.documentsService.getDocument(documentId, memberId);
+    const document = await this.documentsService.getDocument(
+      documentId,
+      memberId,
+    );
     res.set({
       'Content-Type': document.mimeType,
       'Content-Disposition': `inline; filename="${document.originalFileName}"`,
     });
     return new StreamableFile(
       fs.createReadStream(
-        documentFilePath(FAMILY_MEMBER_DOCUMENTS_NAMESPACE, document.storedFileName),
+        documentFilePath(
+          FAMILY_MEMBER_DOCUMENTS_NAMESPACE,
+          document.storedFileName,
+        ),
       ),
     );
   }

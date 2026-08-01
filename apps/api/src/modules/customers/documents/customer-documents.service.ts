@@ -1,4 +1,8 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { DocumentType } from '@prisma/client';
 import * as fs from 'fs';
 import { documentFilePath } from '../../../common/documents/document-storage.util';

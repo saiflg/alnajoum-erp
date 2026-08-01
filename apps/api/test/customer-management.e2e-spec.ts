@@ -8,7 +8,12 @@ import { configureApp } from './../src/bootstrap';
 
 async function flatJpeg(): Promise<Buffer> {
   return sharp({
-    create: { width: 400, height: 400, channels: 3, background: { r: 210, g: 210, b: 210 } },
+    create: {
+      width: 400,
+      height: 400,
+      channels: 3,
+      background: { r: 210, g: 210, b: 210 },
+    },
   })
     .jpeg()
     .toBuffer();
@@ -20,7 +25,9 @@ async function noisyJpeg(): Promise<Buffer> {
   for (let i = 0; i < raw.length; i += 1) {
     raw[i] = (i * 2654435761) % 256;
   }
-  return sharp(raw, { raw: { width: size, height: size, channels: 3 } }).jpeg().toBuffer();
+  return sharp(raw, { raw: { width: size, height: size, channels: 3 } })
+    .jpeg()
+    .toBuffer();
 }
 
 const BOOTSTRAP_ADMIN_EMAIL = 'admin@alnajoum.travel';
@@ -47,7 +54,10 @@ describe('Customer Management (e2e)', () => {
 
     const res = await request(server)
       .post('/api/v1/auth/login')
-      .send({ email: BOOTSTRAP_ADMIN_EMAIL, password: BOOTSTRAP_ADMIN_PASSWORD })
+      .send({
+        email: BOOTSTRAP_ADMIN_EMAIL,
+        password: BOOTSTRAP_ADMIN_PASSWORD,
+      })
       .expect(201);
     adminAccessToken = res.body.data.accessToken;
   });
@@ -63,7 +73,12 @@ describe('Customer Management (e2e)', () => {
     it('registers and logs the customer in', async () => {
       await request(server)
         .post('/api/v1/auth/register')
-        .send({ email, password: 'Passw0rd1', firstName: 'Amina', lastName: 'Bello' })
+        .send({
+          email,
+          password: 'Passw0rd1',
+          firstName: 'Amina',
+          lastName: 'Bello',
+        })
         .expect(201);
 
       const res = await request(server)
@@ -197,7 +212,7 @@ describe('Customer Management (e2e)', () => {
       ).body.data.accessToken;
     });
 
-    it("customer A uploads a document", async () => {
+    it('customer A uploads a document', async () => {
       const res = await request(server)
         .post('/api/v1/customers/me/documents?type=NATIONAL_ID')
         .set('Authorization', `Bearer ${tokenA}`)
@@ -238,7 +253,12 @@ describe('Customer Management (e2e)', () => {
     it('registers and logs in a customer for the blur-detection checks', async () => {
       await request(server)
         .post('/api/v1/auth/register')
-        .send({ email, password: 'Passw0rd1', firstName: 'Blur', lastName: 'Test' })
+        .send({
+          email,
+          password: 'Passw0rd1',
+          firstName: 'Blur',
+          lastName: 'Test',
+        })
         .expect(201);
 
       token = (
@@ -252,7 +272,10 @@ describe('Customer Management (e2e)', () => {
       const res = await request(server)
         .post('/api/v1/customers/me/documents?type=PASSPORT')
         .set('Authorization', `Bearer ${token}`)
-        .attach('file', await flatJpeg(), { filename: 'blurry-passport.jpg', contentType: 'image/jpeg' })
+        .attach('file', await flatJpeg(), {
+          filename: 'blurry-passport.jpg',
+          contentType: 'image/jpeg',
+        })
         .expect(400);
 
       expect(res.body.message).toMatch(/blurry|unclear/i);
@@ -262,7 +285,10 @@ describe('Customer Management (e2e)', () => {
       await request(server)
         .post('/api/v1/customers/me/documents?type=PASSPORT')
         .set('Authorization', `Bearer ${token}`)
-        .attach('file', await noisyJpeg(), { filename: 'clear-passport.jpg', contentType: 'image/jpeg' })
+        .attach('file', await noisyJpeg(), {
+          filename: 'clear-passport.jpg',
+          contentType: 'image/jpeg',
+        })
         .expect(201);
     });
 
@@ -270,7 +296,10 @@ describe('Customer Management (e2e)', () => {
       await request(server)
         .post('/api/v1/customers/me/documents?type=NATIONAL_ID')
         .set('Authorization', `Bearer ${token}`)
-        .attach('file', await flatJpeg(), { filename: 'blurry-id.jpg', contentType: 'image/jpeg' })
+        .attach('file', await flatJpeg(), {
+          filename: 'blurry-id.jpg',
+          contentType: 'image/jpeg',
+        })
         .expect(201);
     });
   });
@@ -319,7 +348,10 @@ describe('Customer Management (e2e)', () => {
 
       const loginRes = await request(server)
         .post('/api/v1/auth/login')
-        .send({ email: staffEmail, password: createRes.body.data.temporaryPassword })
+        .send({
+          email: staffEmail,
+          password: createRes.body.data.temporaryPassword,
+        })
         .expect(201);
       branchManagerToken = loginRes.body.data.accessToken;
     });
@@ -327,7 +359,12 @@ describe('Customer Management (e2e)', () => {
     it('registers the customer to be managed', async () => {
       await request(server)
         .post('/api/v1/auth/register')
-        .send({ email: customerEmail, password: 'Passw0rd1', firstName: 'Kemi', lastName: 'A' })
+        .send({
+          email: customerEmail,
+          password: 'Passw0rd1',
+          firstName: 'Kemi',
+          lastName: 'A',
+        })
         .expect(201);
 
       const res = await request(server)
@@ -335,7 +372,8 @@ describe('Customer Management (e2e)', () => {
         .set('Authorization', `Bearer ${adminAccessToken}`)
         .expect(200);
       const created = res.body.data.find(
-        (c: { identity: { email: string } }) => c.identity.email === customerEmail,
+        (c: { identity: { email: string } }) =>
+          c.identity.email === customerEmail,
       );
       expect(created).toBeDefined();
       customerId = created.id;
@@ -373,7 +411,7 @@ describe('Customer Management (e2e)', () => {
         .expect(403);
     });
 
-    it('admin can view the managed customer\'s documents via the admin route', async () => {
+    it("admin can view the managed customer's documents via the admin route", async () => {
       const res = await request(server)
         .get(`/api/v1/customers/${customerId}/documents`)
         .set('Authorization', `Bearer ${adminAccessToken}`)

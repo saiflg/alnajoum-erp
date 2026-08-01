@@ -20,7 +20,10 @@ describe('CustomersService', () => {
     };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [CustomersService, { provide: PrismaService, useValue: prisma }],
+      providers: [
+        CustomersService,
+        { provide: PrismaService, useValue: prisma },
+      ],
     }).compile();
 
     service = module.get(CustomersService);
@@ -30,7 +33,9 @@ describe('CustomersService', () => {
     it('throws NotFound when the customer does not exist', async () => {
       prisma.customer.findUnique.mockResolvedValue(null);
 
-      await expect(service.findOne('missing')).rejects.toThrow(NotFoundException);
+      await expect(service.findOne('missing')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -48,17 +53,17 @@ describe('CustomersService', () => {
     it('throws NotFound when there is no customer profile', async () => {
       prisma.customer.findUnique.mockResolvedValue(null);
 
-      await expect(service.getCustomerIdForIdentity('identity-1')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.getCustomerIdForIdentity('identity-1'),
+      ).rejects.toThrow(NotFoundException);
     });
 
     it('returns the customer id when found', async () => {
       prisma.customer.findUnique.mockResolvedValue({ id: 'customer-1' });
 
-      await expect(service.getCustomerIdForIdentity('identity-1')).resolves.toBe(
-        'customer-1',
-      );
+      await expect(
+        service.getCustomerIdForIdentity('identity-1'),
+      ).resolves.toBe('customer-1');
     });
   });
 

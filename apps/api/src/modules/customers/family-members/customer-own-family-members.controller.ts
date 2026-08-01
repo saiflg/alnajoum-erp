@@ -41,20 +41,32 @@ export class CustomerOwnFamilyMembersController {
   ) {}
 
   @Post()
-  async create(@CurrentUser() user: AuthContext, @Body() dto: CreateFamilyMemberDto) {
-    const customerId = await this.customersService.getCustomerIdForIdentity(user.sub);
+  async create(
+    @CurrentUser() user: AuthContext,
+    @Body() dto: CreateFamilyMemberDto,
+  ) {
+    const customerId = await this.customersService.getCustomerIdForIdentity(
+      user.sub,
+    );
     return this.familyMembersService.create(customerId, dto);
   }
 
   @Get()
   async list(@CurrentUser() user: AuthContext) {
-    const customerId = await this.customersService.getCustomerIdForIdentity(user.sub);
+    const customerId = await this.customersService.getCustomerIdForIdentity(
+      user.sub,
+    );
     return this.familyMembersService.listForCustomer(customerId);
   }
 
   @Get(':memberId')
-  async findOne(@CurrentUser() user: AuthContext, @Param('memberId') memberId: string) {
-    const customerId = await this.customersService.getCustomerIdForIdentity(user.sub);
+  async findOne(
+    @CurrentUser() user: AuthContext,
+    @Param('memberId') memberId: string,
+  ) {
+    const customerId = await this.customersService.getCustomerIdForIdentity(
+      user.sub,
+    );
     return this.familyMembersService.getMember(memberId, customerId);
   }
 
@@ -64,20 +76,30 @@ export class CustomerOwnFamilyMembersController {
     @Param('memberId') memberId: string,
     @Body() dto: UpdateFamilyMemberDto,
   ) {
-    const customerId = await this.customersService.getCustomerIdForIdentity(user.sub);
+    const customerId = await this.customersService.getCustomerIdForIdentity(
+      user.sub,
+    );
     return this.familyMembersService.update(memberId, dto, customerId);
   }
 
   @Delete(':memberId')
-  async remove(@CurrentUser() user: AuthContext, @Param('memberId') memberId: string) {
-    const customerId = await this.customersService.getCustomerIdForIdentity(user.sub);
+  async remove(
+    @CurrentUser() user: AuthContext,
+    @Param('memberId') memberId: string,
+  ) {
+    const customerId = await this.customersService.getCustomerIdForIdentity(
+      user.sub,
+    );
     await this.familyMembersService.remove(memberId, customerId);
     return { deleted: true };
   }
 
   @Post(':memberId/documents')
   @UseInterceptors(
-    FileInterceptor('file', createDocumentMulterOptions(FAMILY_MEMBER_DOCUMENTS_NAMESPACE)),
+    FileInterceptor(
+      'file',
+      createDocumentMulterOptions(FAMILY_MEMBER_DOCUMENTS_NAMESPACE),
+    ),
   )
   async uploadDocument(
     @CurrentUser() user: AuthContext,
@@ -85,7 +107,9 @@ export class CustomerOwnFamilyMembersController {
     @UploadedFile() file: Express.Multer.File,
     @Query() query: UploadDocumentQueryDto,
   ) {
-    const customerId = await this.customersService.getCustomerIdForIdentity(user.sub);
+    const customerId = await this.customersService.getCustomerIdForIdentity(
+      user.sub,
+    );
     await this.familyMembersService.getMember(memberId, customerId);
     if (query.type === 'PASSPORT') {
       await assertImageIsReadableOrCleanup(
@@ -97,8 +121,13 @@ export class CustomerOwnFamilyMembersController {
   }
 
   @Get(':memberId/documents')
-  async listDocuments(@CurrentUser() user: AuthContext, @Param('memberId') memberId: string) {
-    const customerId = await this.customersService.getCustomerIdForIdentity(user.sub);
+  async listDocuments(
+    @CurrentUser() user: AuthContext,
+    @Param('memberId') memberId: string,
+  ) {
+    const customerId = await this.customersService.getCustomerIdForIdentity(
+      user.sub,
+    );
     await this.familyMembersService.getMember(memberId, customerId);
     return this.documentsService.listForMember(memberId);
   }
@@ -110,16 +139,24 @@ export class CustomerOwnFamilyMembersController {
     @Param('documentId') documentId: string,
     @Res({ passthrough: true }) res: Response,
   ): Promise<StreamableFile> {
-    const customerId = await this.customersService.getCustomerIdForIdentity(user.sub);
+    const customerId = await this.customersService.getCustomerIdForIdentity(
+      user.sub,
+    );
     await this.familyMembersService.getMember(memberId, customerId);
-    const document = await this.documentsService.getDocument(documentId, memberId);
+    const document = await this.documentsService.getDocument(
+      documentId,
+      memberId,
+    );
     res.set({
       'Content-Type': document.mimeType,
       'Content-Disposition': `inline; filename="${document.originalFileName}"`,
     });
     return new StreamableFile(
       fs.createReadStream(
-        documentFilePath(FAMILY_MEMBER_DOCUMENTS_NAMESPACE, document.storedFileName),
+        documentFilePath(
+          FAMILY_MEMBER_DOCUMENTS_NAMESPACE,
+          document.storedFileName,
+        ),
       ),
     );
   }
@@ -130,7 +167,9 @@ export class CustomerOwnFamilyMembersController {
     @Param('memberId') memberId: string,
     @Param('documentId') documentId: string,
   ) {
-    const customerId = await this.customersService.getCustomerIdForIdentity(user.sub);
+    const customerId = await this.customersService.getCustomerIdForIdentity(
+      user.sub,
+    );
     await this.familyMembersService.getMember(memberId, customerId);
     await this.documentsService.deleteDocument(documentId, memberId);
     return { deleted: true };

@@ -34,7 +34,9 @@ export class CustomerOwnDocumentsController {
   ) {}
 
   @Post()
-  @UseInterceptors(FileInterceptor('file', createDocumentMulterOptions(NAMESPACE)))
+  @UseInterceptors(
+    FileInterceptor('file', createDocumentMulterOptions(NAMESPACE)),
+  )
   async upload(
     @CurrentUser() user: AuthContext,
     @UploadedFile() file: Express.Multer.File,
@@ -46,13 +48,17 @@ export class CustomerOwnDocumentsController {
         file.mimetype,
       );
     }
-    const customerId = await this.customersService.getCustomerIdForIdentity(user.sub);
+    const customerId = await this.customersService.getCustomerIdForIdentity(
+      user.sub,
+    );
     return this.documentsService.recordUpload(customerId, file, query.type);
   }
 
   @Get()
   async list(@CurrentUser() user: AuthContext) {
-    const customerId = await this.customersService.getCustomerIdForIdentity(user.sub);
+    const customerId = await this.customersService.getCustomerIdForIdentity(
+      user.sub,
+    );
     return this.documentsService.listForCustomer(customerId);
   }
 
@@ -62,8 +68,13 @@ export class CustomerOwnDocumentsController {
     @Param('documentId') documentId: string,
     @Res({ passthrough: true }) res: Response,
   ): Promise<StreamableFile> {
-    const customerId = await this.customersService.getCustomerIdForIdentity(user.sub);
-    const document = await this.documentsService.getDocument(documentId, customerId);
+    const customerId = await this.customersService.getCustomerIdForIdentity(
+      user.sub,
+    );
+    const document = await this.documentsService.getDocument(
+      documentId,
+      customerId,
+    );
     res.set({
       'Content-Type': document.mimeType,
       'Content-Disposition': `inline; filename="${document.originalFileName}"`,
@@ -74,8 +85,13 @@ export class CustomerOwnDocumentsController {
   }
 
   @Delete(':documentId')
-  async remove(@CurrentUser() user: AuthContext, @Param('documentId') documentId: string) {
-    const customerId = await this.customersService.getCustomerIdForIdentity(user.sub);
+  async remove(
+    @CurrentUser() user: AuthContext,
+    @Param('documentId') documentId: string,
+  ) {
+    const customerId = await this.customersService.getCustomerIdForIdentity(
+      user.sub,
+    );
     await this.documentsService.deleteDocument(documentId, customerId);
     return { deleted: true };
   }

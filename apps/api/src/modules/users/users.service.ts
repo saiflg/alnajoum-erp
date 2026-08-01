@@ -88,7 +88,12 @@ export class UsersService {
       where: { id },
       include: {
         identity: {
-          select: { email: true, phone: true, status: true, roles: { include: { role: true } } },
+          select: {
+            email: true,
+            phone: true,
+            status: true,
+            roles: { include: { role: true } },
+          },
         },
         company: true,
         branch: true,
@@ -122,7 +127,10 @@ export class UsersService {
     if (!staff) {
       throw new NotFoundException('Staff member not found');
     }
-    await this.prisma.staff.update({ where: { id }, data: { isActive: false } });
+    await this.prisma.staff.update({
+      where: { id },
+      data: { isActive: false },
+    });
     await this.prisma.identity.update({
       where: { id: staff.identityId },
       data: { status: 'DEACTIVATED' },

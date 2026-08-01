@@ -15,10 +15,17 @@ export const MAX_DOCUMENT_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
 
 /** `namespace` picks the upload subfolder, e.g. "customer-documents". */
 export function documentsUploadRoot(namespace: string): string {
-  return path.resolve(process.cwd(), process.env.UPLOADS_DIR ?? './uploads', namespace);
+  return path.resolve(
+    process.cwd(),
+    process.env.UPLOADS_DIR ?? './uploads',
+    namespace,
+  );
 }
 
-export function documentFilePath(namespace: string, storedFileName: string): string {
+export function documentFilePath(
+  namespace: string,
+  storedFileName: string,
+): string {
   return path.join(documentsUploadRoot(namespace), storedFileName);
 }
 

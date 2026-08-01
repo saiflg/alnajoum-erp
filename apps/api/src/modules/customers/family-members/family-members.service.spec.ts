@@ -19,7 +19,10 @@ describe('FamilyMembersService', () => {
     };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [FamilyMembersService, { provide: PrismaService, useValue: prisma }],
+      providers: [
+        FamilyMembersService,
+        { provide: PrismaService, useValue: prisma },
+      ],
     }).compile();
 
     service = module.get(FamilyMembersService);
@@ -29,7 +32,9 @@ describe('FamilyMembersService', () => {
     it('throws NotFound when the member does not exist', async () => {
       prisma.familyMember.findUnique.mockResolvedValue(null);
 
-      await expect(service.getMember('missing')).rejects.toThrow(NotFoundException);
+      await expect(service.getMember('missing')).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('throws Forbidden when the member belongs to a different customer', async () => {
@@ -49,9 +54,9 @@ describe('FamilyMembersService', () => {
         customerId: 'customer-a',
       });
 
-      await expect(service.getMember('member-1', 'customer-a')).resolves.toEqual(
-        expect.objectContaining({ id: 'member-1' }),
-      );
+      await expect(
+        service.getMember('member-1', 'customer-a'),
+      ).resolves.toEqual(expect.objectContaining({ id: 'member-1' }));
     });
   });
 
@@ -60,7 +65,7 @@ describe('FamilyMembersService', () => {
       prisma.familyMember.create.mockResolvedValue({ id: 'member-1' });
 
       await service.create('customer-a', {
-        relationship: 'CHILD' as never,
+        relationship: 'CHILD',
         firstName: 'Zara',
         lastName: 'Bello',
         dateOfBirth: '2015-06-01',

@@ -284,7 +284,38 @@ or roles (`RolesGuard` + `@Roles`).
   test runner yet; add Playwright/Vitest once there are more portal
   features worth testing beyond CRUD forms.
 
-## 7. Manual verification performed
+## 7. Continuous Integration
+
+`.github/workflows/ci.yml` runs on every push/PR to `main`/`master`, as two
+parallel jobs:
+
+- **lint-and-build**: `pnpm install --frozen-lockfile` → generate the
+  Prisma client → `pnpm lint` → `pnpm build` (both apps, via Turborepo).
+- **test**: spins up `postgres:16-alpine` and `redis:7-alpine` as service
+  containers, then runs `pnpm --filter api test` (unit) followed by
+  `pnpm --filter api test:e2e`. No workflow-level env vars or secrets are
+  needed — `apps/api/test/global-setup.ts` and `setup-env.ts` read
+  `apps/api/.env.test` directly (it's committed, with non-sensitive dummy
+  secrets), and the Postgres service's user/password/database name are set
+  to match it exactly.
+
+Both jobs were dry-run locally with the exact same commands before this
+workflow was added, including a clean-slate check that `prisma generate`
+doesn't require `DATABASE_URL` to already be set (it only reads the schema
+file, so a fresh CI checkout without a local `.env` is fine). Getting the
+repo to a genuinely clean `pnpm lint` was part of adding this, since a CI
+gate that starts red teaches everyone to ignore it — that surfaced 141
+real errors (mostly `@typescript-eslint/no-unsafe-*` on supertest's
+untyped response bodies in e2e specs, relaxed via a scoped ESLint override
+for `test/**` and `*.spec.ts`) plus a few genuine issues worth fixing
+properly: two `any`-typed cookie reads in `auth.controller.ts` and
+`jwt-access.strategy.ts` given explicit types, an unnecessary `async` on
+`global-setup.ts`'s synchronous body, and a React `useEffect` in
+`auth-context.tsx` restructured with an unmount guard (still needed an
+explicit, documented rule exception — the "fetch on mount" idiom it
+implements is legitimate but structurally triggers `react-hooks/set-state-in-effect`).
+
+## 8. Manual verification performed
 
 Both servers were run locally and exercised through the actual UI:
 login as the bootstrap Super Admin → correct redirect to
@@ -334,7 +365,7 @@ Re-ran the same sharp/blurred pair afterward: the sharp upload succeeds
 (201) and the blurred one is rejected (400) with a message asking for a
 clearer retake, confirmed via both the API directly and end-to-end tests.
 
-## 8. Remaining tasks (explicitly out of scope so far)
+## 9. Remaining tasks (explicitly out of scope so far)
 
 - Forced password change on first staff login; email/SMS delivery of
   temporary credentials (depends on the Notifications module).
@@ -356,7 +387,7 @@ clearer retake, confirmed via both the API directly and end-to-end tests.
 - Rate limiting is a flat global default (100 req/min); login-specific
   throttling should be tightened before production.
 
-## 9. Risks
+## 10. Risks
 
 - **Temporary staff passwords are returned once, in-band, with no
   delivery channel** — acceptable for admin testing today, but must not
@@ -387,24 +418,25 @@ clearer retake, confirmed via both the API directly and end-to-end tests.
 - **Cookie-based auth relies on `localhost` cookie sharing across ports**
   (3000 ↔ 4000), which works in this dev setup but will need explicit
   CORS/cookie-domain configuration for any non-localhost environment.
-- **No CI pipeline yet** — tests are verified to pass locally but aren't
-  gated on push. Add before more contributors join.
+- **CI runs lint/build/tests but isn't yet a required check** — the
+  workflow exists (`.github/workflows/ci.yml`) and passes, but branch
+  protection to actually block merges on a red run hasn't been configured
+  (that's a GitHub repo setting, not something in this codebase — set it
+  up once this repo has a remote and more than one contributor).
 
-## 10. Recommendations for what's next
+## 11. Recommendations for what's next
 
 1. Wire up the Notifications module (email/SMS/WhatsApp) so staff
    onboarding and password resets don't rely on manually relayed
    temporary passwords.
-2. Add a CI workflow running `pnpm lint`, `pnpm test`, and the e2e suite
-   (with a disposable Postgres service container) on every PR.
-3. Introduce Playwright for frontend e2e coverage once there are
+2. Introduce Playwright for frontend e2e coverage once there are
    real portal features worth testing beyond CRUD forms.
-4. Begin the Flight/Hajj/Umrah booking modules behind the existing
+3. Begin the Flight/Hajj/Umrah booking modules behind the existing
    RBAC/permission system — `Customer` and `FamilyMember` are now both
    in place as the traveler records those bookings will reference. Add
    `flight:*` / `hajj:*` permission keys following the established
    `<module>:<action>` convention.
-5. Add a document verification status (`PENDING`/`APPROVED`/`REJECTED`)
+4. Add a document verification status (`PENDING`/`APPROVED`/`REJECTED`)
    to `CustomerDocument`/`FamilyMemberDocument` once a KYC review
    workflow is needed — the current schema deliberately leaves this out
    until there's a concrete reviewer UI to attach it to.

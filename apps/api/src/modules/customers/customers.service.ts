@@ -8,7 +8,9 @@ export class CustomersService {
 
   findAll() {
     return this.prisma.customer.findMany({
-      include: { identity: { select: { email: true, phone: true, status: true } } },
+      include: {
+        identity: { select: { email: true, phone: true, status: true } },
+      },
       orderBy: { createdAt: 'desc' },
     });
   }

@@ -12,7 +12,9 @@ function buildContext(user: unknown): ExecutionContext {
 
 describe('RolesGuard', () => {
   it('allows the request when no roles are required', () => {
-    const reflector = { getAllAndOverride: jest.fn().mockReturnValue(undefined) } as unknown as Reflector;
+    const reflector = {
+      getAllAndOverride: jest.fn().mockReturnValue(undefined),
+    } as unknown as Reflector;
     const guard = new RolesGuard(reflector);
 
     expect(guard.canActivate(buildContext(undefined))).toBe(true);
@@ -20,7 +22,9 @@ describe('RolesGuard', () => {
 
   it('allows the request when the user holds one of the required roles', () => {
     const reflector = {
-      getAllAndOverride: jest.fn().mockReturnValue(['SUPER_ADMIN', 'COMPANY_ADMIN']),
+      getAllAndOverride: jest
+        .fn()
+        .mockReturnValue(['SUPER_ADMIN', 'COMPANY_ADMIN']),
     } as unknown as Reflector;
     const guard = new RolesGuard(reflector);
 

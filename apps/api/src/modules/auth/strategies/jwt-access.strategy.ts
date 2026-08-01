@@ -6,7 +6,8 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 import { AuthContext } from '../../../common/interfaces/auth-context.interface';
 
 function extractFromCookie(req: Request): string | null {
-  return req?.cookies?.access_token ?? null;
+  const token = req?.cookies?.access_token as string | undefined;
+  return token ?? null;
 }
 
 @Injectable()

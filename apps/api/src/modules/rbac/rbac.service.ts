@@ -60,9 +60,7 @@ export class RbacService {
       throw new NotFoundException('Role not found');
     }
     if (role.isSystem && dto.permissionKeys) {
-      throw new ConflictException(
-        'System role permissions cannot be modified',
-      );
+      throw new ConflictException('System role permissions cannot be modified');
     }
 
     if (dto.permissionKeys) {

@@ -12,7 +12,12 @@ const TMP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'image-quality-test-'));
 
 async function writeFlatImage(filePath: string): Promise<void> {
   await sharp({
-    create: { width: 400, height: 400, channels: 3, background: { r: 200, g: 200, b: 200 } },
+    create: {
+      width: 400,
+      height: 400,
+      channels: 3,
+      background: { r: 200, g: 200, b: 200 },
+    },
   })
     .jpeg()
     .toFile(filePath);
@@ -63,25 +68,27 @@ describe('image-quality.util', () => {
       const filePath = path.join(TMP_DIR, 'flat.jpg');
       await writeFlatImage(filePath);
 
-      await expect(assertImageIsReadable(filePath, 'image/jpeg')).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(
+        assertImageIsReadable(filePath, 'image/jpeg'),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('accepts a high-detail/noisy image as sharp enough to read', async () => {
       const filePath = path.join(TMP_DIR, 'noisy.jpg');
       await writeNoisyImage(filePath);
 
-      await expect(assertImageIsReadable(filePath, 'image/jpeg')).resolves.toBeUndefined();
+      await expect(
+        assertImageIsReadable(filePath, 'image/jpeg'),
+      ).resolves.toBeUndefined();
     });
 
     it('rejects a realistically blurred document photo', async () => {
       const filePath = path.join(TMP_DIR, 'blurred-document.jpg');
       await writeBlurredDocumentImage(filePath);
 
-      await expect(assertImageIsReadable(filePath, 'image/jpeg')).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(
+        assertImageIsReadable(filePath, 'image/jpeg'),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('accepts a sharp image that has an alpha channel (regression)', async () => {
@@ -91,7 +98,9 @@ describe('image-quality.util', () => {
       const filePath = path.join(TMP_DIR, 'sharp-with-alpha.png');
       await writeSharpImageWithAlpha(filePath);
 
-      await expect(assertImageIsReadable(filePath, 'image/png')).resolves.toBeUndefined();
+      await expect(
+        assertImageIsReadable(filePath, 'image/png'),
+      ).resolves.toBeUndefined();
     });
 
     it('skips the check entirely for non-image mime types (e.g. PDF)', async () => {

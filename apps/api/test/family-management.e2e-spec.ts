@@ -8,7 +8,12 @@ import { configureApp } from './../src/bootstrap';
 
 async function flatJpeg(): Promise<Buffer> {
   return sharp({
-    create: { width: 400, height: 400, channels: 3, background: { r: 210, g: 210, b: 210 } },
+    create: {
+      width: 400,
+      height: 400,
+      channels: 3,
+      background: { r: 210, g: 210, b: 210 },
+    },
   })
     .jpeg()
     .toBuffer();
@@ -20,7 +25,9 @@ async function noisyJpeg(): Promise<Buffer> {
   for (let i = 0; i < raw.length; i += 1) {
     raw[i] = (i * 2654435761) % 256;
   }
-  return sharp(raw, { raw: { width: size, height: size, channels: 3 } }).jpeg().toBuffer();
+  return sharp(raw, { raw: { width: size, height: size, channels: 3 } })
+    .jpeg()
+    .toBuffer();
 }
 
 const BOOTSTRAP_ADMIN_EMAIL = 'admin@alnajoum.travel';
@@ -45,7 +52,10 @@ describe('Family Management (e2e)', () => {
 
     const res = await request(server)
       .post('/api/v1/auth/login')
-      .send({ email: BOOTSTRAP_ADMIN_EMAIL, password: BOOTSTRAP_ADMIN_PASSWORD })
+      .send({
+        email: BOOTSTRAP_ADMIN_EMAIL,
+        password: BOOTSTRAP_ADMIN_PASSWORD,
+      })
       .expect(201);
     adminAccessToken = res.body.data.accessToken;
   });
@@ -63,7 +73,12 @@ describe('Family Management (e2e)', () => {
     it('registers and logs the customer in', async () => {
       await request(server)
         .post('/api/v1/auth/register')
-        .send({ email, password: 'Passw0rd1', firstName: 'Amina', lastName: 'Bello' })
+        .send({
+          email,
+          password: 'Passw0rd1',
+          firstName: 'Amina',
+          lastName: 'Bello',
+        })
         .expect(201);
 
       const res = await request(server)
@@ -100,7 +115,9 @@ describe('Family Management (e2e)', () => {
     });
 
     it('rejects an unauthenticated request', async () => {
-      await request(server).get('/api/v1/customers/me/family-members').expect(401);
+      await request(server)
+        .get('/api/v1/customers/me/family-members')
+        .expect(401);
     });
 
     it('updates the family member', async () => {
@@ -118,7 +135,9 @@ describe('Family Management (e2e)', () => {
     it('uploads a document for the family member', async () => {
       passportBytes = await noisyJpeg();
       const res = await request(server)
-        .post(`/api/v1/customers/me/family-members/${memberId}/documents?type=PASSPORT`)
+        .post(
+          `/api/v1/customers/me/family-members/${memberId}/documents?type=PASSPORT`,
+        )
         .set('Authorization', `Bearer ${customerToken}`)
         .attach('file', passportBytes, {
           filename: 'zara-passport.jpg',
@@ -138,7 +157,9 @@ describe('Family Management (e2e)', () => {
       expect(listRes.body.data).toHaveLength(1);
 
       const fileRes = await request(server)
-        .get(`/api/v1/customers/me/family-members/${memberId}/documents/${documentId}/file`)
+        .get(
+          `/api/v1/customers/me/family-members/${memberId}/documents/${documentId}/file`,
+        )
         .set('Authorization', `Bearer ${customerToken}`)
         .expect(200);
       expect(fileRes.headers['content-type']).toContain('image/jpeg');
@@ -147,7 +168,9 @@ describe('Family Management (e2e)', () => {
 
     it('deletes the document, then the family member', async () => {
       await request(server)
-        .delete(`/api/v1/customers/me/family-members/${memberId}/documents/${documentId}`)
+        .delete(
+          `/api/v1/customers/me/family-members/${memberId}/documents/${documentId}`,
+        )
         .set('Authorization', `Bearer ${customerToken}`)
         .expect(200);
 
@@ -172,7 +195,12 @@ describe('Family Management (e2e)', () => {
     it('registers a customer and adds a family member', async () => {
       await request(server)
         .post('/api/v1/auth/register')
-        .send({ email, password: 'Passw0rd1', firstName: 'Blur', lastName: 'Test' })
+        .send({
+          email,
+          password: 'Passw0rd1',
+          firstName: 'Blur',
+          lastName: 'Test',
+        })
         .expect(201);
 
       token = (
@@ -191,7 +219,9 @@ describe('Family Management (e2e)', () => {
 
     it("rejects a flat/blurry image uploaded as the family member's passport", async () => {
       await request(server)
-        .post(`/api/v1/customers/me/family-members/${memberId}/documents?type=PASSPORT`)
+        .post(
+          `/api/v1/customers/me/family-members/${memberId}/documents?type=PASSPORT`,
+        )
         .set('Authorization', `Bearer ${token}`)
         .attach('file', await flatJpeg(), {
           filename: 'blurry-passport.jpg',
@@ -258,9 +288,14 @@ describe('Family Management (e2e)', () => {
 
     it("customer B cannot upload a document to customer A's family member", async () => {
       await request(server)
-        .post(`/api/v1/customers/me/family-members/${memberIdA}/documents?type=OTHER`)
+        .post(
+          `/api/v1/customers/me/family-members/${memberIdA}/documents?type=OTHER`,
+        )
         .set('Authorization', `Bearer ${tokenB}`)
-        .attach('file', Buffer.from('nope'), { filename: 'x.png', contentType: 'image/png' })
+        .attach('file', Buffer.from('nope'), {
+          filename: 'x.png',
+          contentType: 'image/png',
+        })
         .expect(403);
     });
   });
@@ -310,7 +345,10 @@ describe('Family Management (e2e)', () => {
 
       const loginRes = await request(server)
         .post('/api/v1/auth/login')
-        .send({ email: staffEmail, password: createRes.body.data.temporaryPassword })
+        .send({
+          email: staffEmail,
+          password: createRes.body.data.temporaryPassword,
+        })
         .expect(201);
       branchManagerToken = loginRes.body.data.accessToken;
     });
@@ -318,7 +356,12 @@ describe('Family Management (e2e)', () => {
     it('registers the customer to be managed', async () => {
       await request(server)
         .post('/api/v1/auth/register')
-        .send({ email: customerEmail, password: 'Passw0rd1', firstName: 'Kemi', lastName: 'A' })
+        .send({
+          email: customerEmail,
+          password: 'Passw0rd1',
+          firstName: 'Kemi',
+          lastName: 'A',
+        })
         .expect(201);
 
       const res = await request(server)
@@ -326,7 +369,8 @@ describe('Family Management (e2e)', () => {
         .set('Authorization', `Bearer ${adminAccessToken}`)
         .expect(200);
       const created = res.body.data.find(
-        (c: { identity: { email: string } }) => c.identity.email === customerEmail,
+        (c: { identity: { email: string } }) =>
+          c.identity.email === customerEmail,
       );
       customerId = created.id;
     });

@@ -32,7 +32,10 @@ export class CustomerAdminDocumentsController {
     @Param('documentId') documentId: string,
     @Res({ passthrough: true }) res: Response,
   ): Promise<StreamableFile> {
-    const document = await this.documentsService.getDocument(documentId, customerId);
+    const document = await this.documentsService.getDocument(
+      documentId,
+      customerId,
+    );
     res.set({
       'Content-Type': document.mimeType,
       'Content-Disposition': `inline; filename="${document.originalFileName}"`,

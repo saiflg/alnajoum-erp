@@ -4,9 +4,9 @@ import { PrismaService } from '../../../infrastructure/prisma/prisma.service';
 import { CustomerDocumentsService } from './customer-documents.service';
 
 jest.mock('fs', () => ({
-  ...jest.requireActual('fs'),
+  ...jest.requireActual<typeof import('fs')>('fs'),
   promises: {
-    ...jest.requireActual('fs').promises,
+    ...jest.requireActual<typeof import('fs')>('fs').promises,
     unlink: jest.fn().mockResolvedValue(undefined),
   },
 }));
@@ -39,7 +39,9 @@ describe('CustomerDocumentsService', () => {
     it('throws NotFound when the document does not exist', async () => {
       prisma.customerDocument.findUnique.mockResolvedValue(null);
 
-      await expect(service.getDocument('missing')).rejects.toThrow(NotFoundException);
+      await expect(service.getDocument('missing')).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('throws Forbidden when the document belongs to a different customer', async () => {
@@ -83,9 +85,9 @@ describe('CustomerDocumentsService', () => {
         customerId: 'customer-a',
       });
 
-      await expect(service.deleteDocument('doc-1', 'customer-b')).rejects.toThrow(
-        ForbiddenException,
-      );
+      await expect(
+        service.deleteDocument('doc-1', 'customer-b'),
+      ).rejects.toThrow(ForbiddenException);
       expect(prisma.customerDocument.delete).not.toHaveBeenCalled();
     });
   });
