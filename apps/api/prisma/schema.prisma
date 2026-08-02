@@ -354,6 +354,12 @@ enum FlightBookingStatus {
   FAILED
 }
 
+enum TripType {
+  ONE_WAY
+  ROUND_TRIP
+  MULTI_CITY
+}
+
 enum PassengerType {
   ADULT
   CHILD
@@ -387,16 +393,20 @@ model FlightBooking {
   currency    String
   totalAmount Int // whole currency units (e.g. NGN), no minor-unit subdivision
 
+  tripType    TripType
+  // Summary columns for indexing/list display, derived from the first and
+  // last leg of the itinerary at booking time. The full per-leg routing
+  // (all stops for a multi-city trip, or the return leg of a round trip)
+  // lives in `itinerary` below.
   origin      String
   destination String
   departureAt DateTime
-  returnAt    DateTime?
   cabinClass  CabinClass
 
-  // Full offer snapshot (segments, fare basis, etc.) as returned by the
-  // provider at booking time — provider payloads vary too much in shape to
-  // model relationally, and a snapshot also preserves what was actually
-  // purchased even if the provider's own record later changes.
+  // Full offer snapshot (all legs, segments, fare basis, etc.) as returned
+  // by the provider at booking time — provider payloads vary too much in
+  // shape to model relationally, and a snapshot also preserves what was
+  // actually purchased even if the provider's own record later changes.
   itinerary Json
 
   createdAt DateTime @default(now())

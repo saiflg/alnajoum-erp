@@ -1,11 +1,12 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { FlightBookingStatus, Prisma } from '@prisma/client';
+import { FlightBookingStatus, Prisma, TripType } from '@prisma/client';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { CreatePassengerDto } from './dto/create-passenger.dto';
@@ -28,17 +29,33 @@ export class FlightsService {
     @Inject(FLIGHT_PROVIDER) private readonly provider: FlightProviderPort,
   ) {}
 
-  search(dto: SearchFlightsDto): Promise<FlightOffer[]> {
+  async search(dto: SearchFlightsDto): Promise<FlightOffer[]> {
+    this.validateLegCount(dto.tripType, dto.legs.length);
+
     return this.provider.searchOffers({
-      origin: dto.origin,
-      destination: dto.destination,
-      departureDate: dto.departureDate,
-      returnDate: dto.returnDate,
+      tripType: dto.tripType,
+      legs: dto.legs,
       adults: dto.adults,
       children: dto.children,
       infants: dto.infants,
       cabinClass: dto.cabinClass,
     });
+  }
+
+  private validateLegCount(tripType: TripType, legCount: number): void {
+    if (tripType === TripType.ONE_WAY && legCount !== 1) {
+      throw new BadRequestException('A one-way trip must have exactly 1 leg');
+    }
+    if (tripType === TripType.ROUND_TRIP && legCount !== 2) {
+      throw new BadRequestException(
+        'A round trip must have exactly 2 legs (outbound and return)',
+      );
+    }
+    if (tripType === TripType.MULTI_CITY && legCount < 2) {
+      throw new BadRequestException(
+        'A multi-city trip must have at least 2 legs',
+      );
+    }
   }
 
   async getOffer(offerId: string): Promise<FlightOffer> {
@@ -120,6 +137,9 @@ export class FlightsService {
       );
     }
 
+    const firstLeg = offer.legs[0];
+    const lastLeg = offer.legs[offer.legs.length - 1];
+
     return this.prisma.flightBooking.create({
       data: {
         bookingReference: generateBookingReference(),
@@ -131,12 +151,10 @@ export class FlightsService {
         status: FlightBookingStatus.CONFIRMED,
         currency: offer.currency,
         totalAmount: offer.totalAmount,
-        origin: offer.origin,
-        destination: offer.destination,
-        departureAt: new Date(offer.departureAt),
-        returnAt: offer.returnDepartureAt
-          ? new Date(offer.returnDepartureAt)
-          : null,
+        tripType: offer.tripType,
+        origin: firstLeg.origin,
+        destination: lastLeg.destination,
+        departureAt: new Date(firstLeg.departureAt),
         cabinClass: offer.cabinClass,
         itinerary: offer as unknown as Prisma.InputJsonValue,
         passengers: {

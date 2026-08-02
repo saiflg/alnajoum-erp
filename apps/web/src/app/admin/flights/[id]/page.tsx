@@ -68,18 +68,19 @@ export default function AdminFlightBookingDetailPage() {
             )}
 
             <div className="mt-4 max-w-2xl rounded-lg border border-slate-200 bg-white p-4">
-              <p className="font-medium text-slate-900">
-                {booking.origin} → {booking.destination}
-              </p>
-              <p className="text-sm text-slate-600">
-                Depart: {formatDateTime(booking.departureAt)}
-              </p>
-              {booking.returnAt && (
-                <p className="text-sm text-slate-600">
-                  Return: {formatDateTime(booking.returnAt)}
+              {booking.itinerary.legs.map((leg, i) => (
+                <p key={i} className="text-sm text-slate-700">
+                  {i === 0
+                    ? ''
+                    : i === booking.itinerary.legs.length - 1 &&
+                        booking.tripType === 'ROUND_TRIP'
+                      ? 'Return: '
+                      : `Flight ${i + 1}: `}
+                  {leg.segments[0].airline} · {leg.segments[0].flightNumber} · {leg.origin} →{' '}
+                  {leg.destination} · {formatDateTime(leg.departureAt)}
                 </p>
-              )}
-              <p className="text-sm text-slate-600">
+              ))}
+              <p className="mt-2 text-sm text-slate-600">
                 Cabin: {booking.cabinClass.replace('_', ' ')}
               </p>
               <p className="mt-2 text-lg font-semibold text-slate-900">

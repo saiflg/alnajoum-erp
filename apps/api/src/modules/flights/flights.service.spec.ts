@@ -1,10 +1,15 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { FlightBookingStatus, FlightProviderName } from '@prisma/client';
+import {
+  FlightBookingStatus,
+  FlightProviderName,
+  TripType,
+} from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { FlightsService } from './flights.service';
 import { FLIGHT_PROVIDER } from './providers/flight-provider.port';
@@ -12,15 +17,20 @@ import { FLIGHT_PROVIDER } from './providers/flight-provider.port';
 const baseOffer = {
   id: 'offer-1',
   provider: FlightProviderName.MOCK,
-  origin: 'LOS',
-  destination: 'ABV',
-  departureAt: '2027-01-10T08:00:00.000Z',
-  arrivalAt: '2027-01-10T09:10:00.000Z',
+  tripType: TripType.ONE_WAY,
+  legs: [
+    {
+      origin: 'LOS',
+      destination: 'ABV',
+      departureAt: '2027-01-10T08:00:00.000Z',
+      arrivalAt: '2027-01-10T09:10:00.000Z',
+      segments: [],
+    },
+  ],
   cabinClass: 'ECONOMY' as const,
   currency: 'NGN',
   totalAmount: 50_000,
   seatsAvailable: 5,
-  outboundSegments: [],
   expiresAt: '2027-01-10T09:00:00.000Z',
 };
 
@@ -70,6 +80,69 @@ describe('FlightsService', () => {
       await expect(service.getOffer('missing')).rejects.toThrow(
         NotFoundException,
       );
+    });
+  });
+
+  describe('search', () => {
+    const leg = {
+      origin: 'LOS',
+      destination: 'ABV',
+      departureDate: '2027-01-10',
+    };
+
+    it('accepts a one-way search with exactly 1 leg', async () => {
+      provider.searchOffers.mockResolvedValue([baseOffer]);
+
+      await service.search({
+        tripType: TripType.ONE_WAY,
+        legs: [leg],
+        adults: 1,
+      });
+
+      expect(provider.searchOffers).toHaveBeenCalled();
+    });
+
+    it('rejects a one-way search with more than 1 leg', async () => {
+      await expect(
+        service.search({
+          tripType: TripType.ONE_WAY,
+          legs: [leg, leg],
+          adults: 1,
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(provider.searchOffers).not.toHaveBeenCalled();
+    });
+
+    it('rejects a round trip search without exactly 2 legs', async () => {
+      await expect(
+        service.search({
+          tripType: TripType.ROUND_TRIP,
+          legs: [leg],
+          adults: 1,
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('rejects a multi-city search with fewer than 2 legs', async () => {
+      await expect(
+        service.search({
+          tripType: TripType.MULTI_CITY,
+          legs: [leg],
+          adults: 1,
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('accepts a multi-city search with 3 legs', async () => {
+      provider.searchOffers.mockResolvedValue([baseOffer]);
+
+      await service.search({
+        tripType: TripType.MULTI_CITY,
+        legs: [leg, leg, leg],
+        adults: 1,
+      });
+
+      expect(provider.searchOffers).toHaveBeenCalled();
     });
   });
 

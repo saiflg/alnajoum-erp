@@ -152,6 +152,30 @@ alnajoum-erp/
   input identifies who they are by omitting `familyMemberId` (self) or
   providing one (a family member), and ownership is checked either way —
   the same shape is reused for self-service and admin/staff bookings.
+- **One-way, round trip, and multi-city all share a single `legs[]` shape**:
+  rather than modeling round trips as a special case with dedicated
+  `origin`/`destination`/`returnDate` fields, every search and offer is just
+  an ordered list of `{ origin, destination, departureDate }` legs — one
+  leg for a one-way trip, two for a round trip, up to six for multi-city.
+  `FlightsService.search` enforces the leg-count rules per `tripType`
+  (exactly 1 for `ONE_WAY`, exactly 2 for `ROUND_TRIP`, 2+ for
+  `MULTI_CITY`) rather than the DTO, since that's a business rule, not a
+  shape constraint. `MockFlightProviderService` prices a round trip 10%
+  below the same two legs booked as multi-city, modeling the bundled-fare
+  discount real GDSs apply — and deliberately seeds its PRNG from the legs
+  and cabin class only (not `tripType`), so the same underlying flights
+  price identically whether they're bundled as a round trip or not; only
+  the discount differs. `FlightBooking` keeps `origin`/`destination`/
+  `departureAt` as summary columns (first leg's origin, last leg's
+  destination, first leg's departure) for list display and indexing, while
+  the full per-leg routing lives in the existing `itinerary` JSON snapshot
+  — there's no separate `returnAt` column to special-case anymore.
+- **Flight search is a `POST`, not a `GET`**: once search criteria became a
+  nested `legs[]` array, encoding it into query-string parameters would
+  have been more awkward than the request body it naturally is (Duffel's
+  own API does the same for offer requests). It's read-only in effect but
+  not idiomatically RESTful — a deliberate trade for a DTO class-validator
+  can actually validate.
 
 ## 3. Getting started (localhost)
 
@@ -204,13 +228,13 @@ The seed script creates:
 | `IdentityRole` | Role grants per identity, optionally scoped to a company/branch |
 | `RefreshToken` | Hashed, revocable refresh tokens |
 | `AuditLog` | Append-only action log (auth events today; extensible via `entityType`/`entityId`) |
-| `FlightBooking` | A booking: customer, optional booking staff member, provider + provider order/offer ids, status, route/dates/cabin, total, and a full `itinerary` JSON snapshot of the offer |
+| `FlightBooking` | A booking: customer, optional booking staff member, provider + provider order/offer ids, status, trip type (ONE_WAY/ROUND_TRIP/MULTI_CITY), summary route/departure/cabin, total, and a full `itinerary` JSON snapshot of the offer (every leg) |
 | `FlightBookingPassenger` | One passenger on a booking — references a `Customer` or a `FamilyMember` (exactly one), plus a name/DOB/passport snapshot taken at booking time |
 
 Full definitions: [`apps/api/prisma/schema.prisma`](apps/api/prisma/schema.prisma).
 Migrations: `20260731134308_init`, `20260731172525_customer_management`,
 `20260731191249_family_management`, `20260731195715_expand_document_types`,
-`20260801133125_flight_booking`.
+`20260801133125_flight_booking`, `20260801182427_flight_multi_city`.
 
 ## 5. APIs implemented
 
@@ -263,9 +287,11 @@ additionally allows staff-assisted uploads, since walk-in customers often
 hand over physical documents for their dependents). Same 5MB/JPEG-PNG-PDF
 limits as customer documents.
 
-**Flights** (`/flights`) — `GET search` (query: `origin`, `destination`,
-`departureDate`, `returnDate?`, `adults`, `children?`, `infants?`,
-`cabinClass?`; any authenticated identity), `GET offers/:offerId` (offer
+**Flights** (`/flights`) — `POST search` (body: `{ tripType:
+ONE_WAY|ROUND_TRIP|MULTI_CITY, legs: [{ origin, destination,
+departureDate }, ...], adults, children?, infants?, cabinClass? }` — 1 leg
+for ONE_WAY, exactly 2 for ROUND_TRIP, 2-6 for MULTI_CITY, 400 on a
+mismatch; any authenticated identity), `GET offers/:offerId` (offer
 detail; 404 once expired/unknown).
 
 **Flight bookings** — self-service under `/flights/bookings/me`: `POST`
@@ -288,7 +314,7 @@ or roles (`RolesGuard` + `@Roles`).
 
 ## 6. Tests written
 
-- **71 unit tests** (`pnpm test` in `apps/api`): `AuthService` (credential
+- **79 unit tests** (`pnpm test` in `apps/api`): `AuthService` (credential
   validation, lockout after repeated failures, registration conflicts,
   refresh token rejection paths, password change), `RbacService`
   (role CRUD guards, permission aggregation), `RolesGuard` /
@@ -302,13 +328,16 @@ or roles (`RolesGuard` + `@Roles`).
   development — correctly accepts a *sharp* image that has an alpha
   channel, which `sharp`'s `.convolve()` previously scored as unreadable
   regardless of actual content), `MockFlightProviderService` (offer count/
-  sorting, deterministic content for identical searches, return-segment
-  generation, cabin-class pricing, offer expiry via fake timers, order
-  confirmation consuming the cached offer, order rejection once an offer
-  is gone), `FlightsService` (passenger snapshot resolution for self vs.
-  a family member, ownership rejection, provider-rejection → Conflict,
-  booking ownership checks, double-cancel rejection).
-- **86 e2e tests** across 5 spec files (`pnpm test:e2e` in `apps/api`, needs
+  sorting, deterministic content for identical searches, correct leg count
+  and ordering for one-way/round-trip/multi-city, the round-trip bundle
+  discount priced against the identical legs booked as multi-city,
+  cabin-class pricing, offer expiry via fake timers, order confirmation
+  consuming the cached offer, order rejection once an offer is gone),
+  `FlightsService` (passenger snapshot resolution for self vs. a family
+  member, ownership rejection, provider-rejection → Conflict, booking
+  ownership checks, double-cancel rejection, leg-count validation per
+  trip type).
+- **91 e2e tests** across 5 spec files (`pnpm test:e2e` in `apps/api`, needs
   Docker running): full journeys against a real, dedicated
   `alnajoum_erp_test` Postgres database —
   - **auth-rbac-flow**: login, `/auth/me`, company/branch/staff creation,
@@ -329,15 +358,19 @@ or roles (`RolesGuard` + `@Roles`).
     a Branch Manager's read-only boundary (403 on create/update/delete),
     and the same passport blur rejection wired through the family-member
     upload path.
-  - **flight-booking**: unauthenticated search rejected, offer search and
-    detail lookup, 404 on an unknown/expired offer, the full self-service
+  - **flight-booking**: unauthenticated search rejected, correct leg count/
+    ordering for one-way, round-trip, and multi-city searches, 400 on a
+    leg count that doesn't match the declared `tripType`, offer detail
+    lookup, 404 on an unknown/expired offer, the full self-service
     lifecycle (book → list → view → cancel → re-cancel returns 409),
-    booking with a family member as a second passenger, cross-customer
-    boundaries on both a booking and a family member reference (403),
-    staff booking on behalf of a customer with `flight:book`, a Branch
-    Manager's read-only boundary (`flight:read` only — 403 on book/cancel),
-    staff lacking `flight:cancel` being blocked from cancelling, and admin
-    cancellation plus filtering the admin list by `status`.
+    booking with a family member as a second passenger, a 3-leg multi-city
+    booking correctly deriving `tripType`/summary `origin`/`destination`
+    from the first and last leg, cross-customer boundaries on both a
+    booking and a family member reference (403), staff booking on behalf
+    of a customer with `flight:book`, a Branch Manager's read-only
+    boundary (`flight:read` only — 403 on book/cancel), staff lacking
+    `flight:cancel` being blocked from cancelling, and admin cancellation
+    plus filtering the admin list by `status`.
   - Test data uses a per-run random suffix so the suite is safely
     re-runnable without ever needing a destructive database reset.
 - **Frontend**: manually verified in-browser (see below) — no frontend

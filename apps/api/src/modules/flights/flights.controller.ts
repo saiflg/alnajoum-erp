@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { SearchFlightsDto } from './dto/search-flights.dto';
 import { FlightsService } from './flights.service';
 
@@ -6,8 +6,8 @@ import { FlightsService } from './flights.service';
 export class FlightsController {
   constructor(private readonly flightsService: FlightsService) {}
 
-  @Get('search')
-  search(@Query() dto: SearchFlightsDto) {
+  @Post('search')
+  search(@Body() dto: SearchFlightsDto) {
     return this.flightsService.search(dto);
   }
 

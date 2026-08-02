@@ -1,12 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { CabinClass, FlightProviderName } from '@prisma/client';
+import { CabinClass, FlightProviderName, TripType } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import {
   BookingPassengerSnapshot,
   CreateOrderResult,
+  FlightLegOffer,
   FlightOffer,
   FlightProviderPort,
-  FlightSegment,
   SearchFlightsCriteria,
 } from './flight-provider.port';
 
@@ -65,96 +65,78 @@ export class MockFlightProviderService implements FlightProviderPort {
 
   searchOffers(criteria: SearchFlightsCriteria): Promise<FlightOffer[]> {
     const cabinClass = criteria.cabinClass ?? CabinClass.ECONOMY;
+    // Deliberately excludes tripType: the same legs represent the same
+    // underlying flights regardless of how they're bundled, so a round trip
+    // and a multi-city search over identical legs see identical per-leg
+    // pricing before the round-trip bundle discount is applied below.
     const seedKey = [
-      criteria.origin,
-      criteria.destination,
-      criteria.departureDate,
-      criteria.returnDate ?? '',
+      ...criteria.legs.map(
+        (leg) => `${leg.origin}|${leg.destination}|${leg.departureDate}`,
+      ),
       cabinClass,
-    ].join('|');
+    ].join('~');
     const rand = mulberry32(hashString(seedKey));
 
     const offerCount = randInt(rand, 3, 5);
     const offers: FlightOffer[] = [];
 
     for (let i = 0; i < offerCount; i += 1) {
+      // One carrier operates the whole itinerary for a given offer, same as
+      // a real GDS fare family — mixed-carrier itineraries aren't modeled.
       const airline = AIRLINES[randInt(rand, 0, AIRLINES.length - 1)];
-      const outboundDurationMinutes = randInt(rand, 70, 420);
-      const outboundDepartHour = randInt(rand, 0, 23);
-      const outboundDepartMinute = randInt(rand, 0, 59);
+      let legsTotal = 0;
 
-      const departureAt = new Date(criteria.departureDate);
-      departureAt.setUTCHours(outboundDepartHour, outboundDepartMinute, 0, 0);
-      const arrivalAt = new Date(
-        departureAt.getTime() + outboundDurationMinutes * 60_000,
-      );
+      const legs: FlightLegOffer[] = criteria.legs.map((legCriteria) => {
+        const durationMinutes = randInt(rand, 70, 420);
+        const departHour = randInt(rand, 0, 23);
+        const departMinute = randInt(rand, 0, 59);
 
-      const outboundSegments: FlightSegment[] = [
-        {
-          origin: criteria.origin,
-          destination: criteria.destination,
-          departureAt: departureAt.toISOString(),
-          arrivalAt: arrivalAt.toISOString(),
-          airline: airline.name,
-          airlineCode: airline.code,
-          flightNumber: `${airline.code}${randInt(rand, 100, 999)}`,
-          cabinClass,
-          durationMinutes: outboundDurationMinutes,
-        },
-      ];
-
-      let returnSegments: FlightSegment[] | undefined;
-      let returnDepartureAt: string | undefined;
-      let returnArrivalAt: string | undefined;
-
-      if (criteria.returnDate) {
-        const returnDurationMinutes = randInt(rand, 70, 420);
-        const returnDepartHour = randInt(rand, 0, 23);
-        const returnDepartMinute = randInt(rand, 0, 59);
-        const returnDeparture = new Date(criteria.returnDate);
-        returnDeparture.setUTCHours(returnDepartHour, returnDepartMinute, 0, 0);
-        const returnArrival = new Date(
-          returnDeparture.getTime() + returnDurationMinutes * 60_000,
+        const departureAt = new Date(legCriteria.departureDate);
+        departureAt.setUTCHours(departHour, departMinute, 0, 0);
+        const arrivalAt = new Date(
+          departureAt.getTime() + durationMinutes * 60_000,
         );
 
-        returnDepartureAt = returnDeparture.toISOString();
-        returnArrivalAt = returnArrival.toISOString();
-        returnSegments = [
-          {
-            origin: criteria.destination,
-            destination: criteria.origin,
-            departureAt: returnDepartureAt,
-            arrivalAt: returnArrivalAt,
-            airline: airline.name,
-            airlineCode: airline.code,
-            flightNumber: `${airline.code}${randInt(rand, 100, 999)}`,
-            cabinClass,
-            durationMinutes: returnDurationMinutes,
-          },
-        ];
-      }
+        const basePrice = randInt(rand, 45_000, 220_000);
+        legsTotal += Math.round(basePrice * CABIN_MULTIPLIER[cabinClass]);
 
-      const basePrice = randInt(rand, 45_000, 220_000);
-      const roundTripFactor = criteria.returnDate ? 1.8 : 1;
-      const totalAmount = Math.round(
-        basePrice * CABIN_MULTIPLIER[cabinClass] * roundTripFactor,
-      );
+        return {
+          origin: legCriteria.origin,
+          destination: legCriteria.destination,
+          departureAt: departureAt.toISOString(),
+          arrivalAt: arrivalAt.toISOString(),
+          segments: [
+            {
+              origin: legCriteria.origin,
+              destination: legCriteria.destination,
+              departureAt: departureAt.toISOString(),
+              arrivalAt: arrivalAt.toISOString(),
+              airline: airline.name,
+              airlineCode: airline.code,
+              flightNumber: `${airline.code}${randInt(rand, 100, 999)}`,
+              cabinClass,
+              durationMinutes,
+            },
+          ],
+        };
+      });
+
+      // Bundled round-trip fares are typically priced below two separate
+      // one-ways; multi-city itineraries don't get that bundle discount.
+      const totalAmount =
+        criteria.tripType === TripType.ROUND_TRIP
+          ? Math.round(legsTotal * 0.9)
+          : legsTotal;
 
       const offer: FlightOffer = {
         id: randomUUID(),
         provider: FlightProviderName.MOCK,
-        origin: criteria.origin,
-        destination: criteria.destination,
-        departureAt: outboundSegments[0].departureAt,
-        arrivalAt: outboundSegments[0].arrivalAt,
-        returnDepartureAt,
-        returnArrivalAt,
+        tripType: criteria.tripType,
+        legs,
         cabinClass,
         currency: 'NGN',
         totalAmount,
         seatsAvailable: randInt(rand, 1, 9),
-        outboundSegments,
-        returnSegments,
         expiresAt: new Date(Date.now() + OFFER_TTL_MS).toISOString(),
       };
 

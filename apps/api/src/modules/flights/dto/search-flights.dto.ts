@@ -1,6 +1,8 @@
-import { CabinClass } from '@prisma/client';
-import { Transform, TransformFnParams } from 'class-transformer';
+import { CabinClass, TripType } from '@prisma/client';
+import { Transform, TransformFnParams, Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  ArrayMinSize,
   IsDateString,
   IsEnum,
   IsInt,
@@ -9,13 +11,14 @@ import {
   Length,
   Max,
   Min,
+  ValidateNested,
 } from 'class-validator';
 
 function toUpperCase({ value }: TransformFnParams): unknown {
   return typeof value === 'string' ? value.toUpperCase() : value;
 }
 
-export class SearchFlightsDto {
+export class FlightLegDto {
   @IsString()
   @Length(3, 3)
   @Transform(toUpperCase)
@@ -28,10 +31,17 @@ export class SearchFlightsDto {
 
   @IsDateString()
   departureDate: string;
+}
 
-  @IsOptional()
-  @IsDateString()
-  returnDate?: string;
+export class SearchFlightsDto {
+  @IsEnum(TripType)
+  tripType: TripType;
+
+  @ValidateNested({ each: true })
+  @Type(() => FlightLegDto)
+  @ArrayMinSize(1)
+  @ArrayMaxSize(6)
+  legs: FlightLegDto[];
 
   @IsInt()
   @Min(1)

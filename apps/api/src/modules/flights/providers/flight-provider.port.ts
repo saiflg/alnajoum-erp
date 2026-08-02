@@ -1,4 +1,9 @@
-import { CabinClass, FlightProviderName, PassengerType } from '@prisma/client';
+import {
+  CabinClass,
+  FlightProviderName,
+  PassengerType,
+  TripType,
+} from '@prisma/client';
 
 /** DI token — inject with `@Inject(FLIGHT_PROVIDER)`. */
 export const FLIGHT_PROVIDER = 'FLIGHT_PROVIDER';
@@ -15,30 +20,40 @@ export interface FlightSegment {
   durationMinutes: number;
 }
 
-export interface FlightOffer {
-  id: string;
-  provider: FlightProviderName;
+/** One origin→destination hop of an itinerary (a one-way leg, one side of a
+ * round trip, or one stop of a multi-city trip). Direct flights only for
+ * now — no connections within a leg. */
+export interface FlightLegOffer {
   origin: string;
   destination: string;
   departureAt: string;
   arrivalAt: string;
-  returnDepartureAt?: string;
-  returnArrivalAt?: string;
+  segments: FlightSegment[];
+}
+
+export interface FlightOffer {
+  id: string;
+  provider: FlightProviderName;
+  tripType: TripType;
+  /** 1 leg for ONE_WAY, 2 for ROUND_TRIP, 2-6 for MULTI_CITY. */
+  legs: FlightLegOffer[];
   cabinClass: CabinClass;
   currency: string;
   totalAmount: number;
   seatsAvailable: number;
-  outboundSegments: FlightSegment[];
-  returnSegments?: FlightSegment[];
   /** Offers are only valid for a limited window, matching real GDS behavior. */
   expiresAt: string;
 }
 
-export interface SearchFlightsCriteria {
+export interface FlightLegCriteria {
   origin: string;
   destination: string;
   departureDate: string; // YYYY-MM-DD
-  returnDate?: string;
+}
+
+export interface SearchFlightsCriteria {
+  tripType: TripType;
+  legs: FlightLegCriteria[];
   adults: number;
   children?: number;
   infants?: number;

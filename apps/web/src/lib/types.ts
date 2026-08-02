@@ -133,6 +133,7 @@ export interface FamilyMember {
 export type CabinClass = 'ECONOMY' | 'PREMIUM_ECONOMY' | 'BUSINESS' | 'FIRST';
 export type PassengerType = 'ADULT' | 'CHILD' | 'INFANT';
 export type FlightBookingStatus = 'PENDING' | 'CONFIRMED' | 'CANCELLED' | 'FAILED';
+export type TripType = 'ONE_WAY' | 'ROUND_TRIP' | 'MULTI_CITY';
 
 export interface FlightSegment {
   origin: string;
@@ -146,22 +147,30 @@ export interface FlightSegment {
   durationMinutes: number;
 }
 
-export interface FlightOffer {
-  id: string;
-  provider: string;
+export interface FlightLegOffer {
   origin: string;
   destination: string;
   departureAt: string;
   arrivalAt: string;
-  returnDepartureAt?: string;
-  returnArrivalAt?: string;
+  segments: FlightSegment[];
+}
+
+export interface FlightOffer {
+  id: string;
+  provider: string;
+  tripType: TripType;
+  legs: FlightLegOffer[];
   cabinClass: CabinClass;
   currency: string;
   totalAmount: number;
   seatsAvailable: number;
-  outboundSegments: FlightSegment[];
-  returnSegments?: FlightSegment[];
   expiresAt: string;
+}
+
+export interface FlightLegCriteria {
+  origin: string;
+  destination: string;
+  departureDate: string;
 }
 
 export interface FlightBookingPassengerRecord {
@@ -186,11 +195,13 @@ export interface FlightBooking {
   status: FlightBookingStatus;
   currency: string;
   totalAmount: number;
+  tripType: TripType;
   origin: string;
   destination: string;
   departureAt: string;
-  returnAt: string | null;
   cabinClass: CabinClass;
+  /** Full offer snapshot at booking time, including every leg. */
+  itinerary: FlightOffer;
   createdAt: string;
   passengers: FlightBookingPassengerRecord[];
   customer?: { firstName: string; lastName: string };

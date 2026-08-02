@@ -10,17 +10,25 @@ const BOOTSTRAP_ADMIN_PASSWORD = 'Alnajoum@2026';
 
 const RUN_ID = `flt-${Date.now().toString(36)}`;
 
-const SEARCH_PARAMS =
-  'origin=LOS&destination=ABV&departureDate=2027-02-10&adults=1';
+const ONE_WAY_SEARCH_BODY = {
+  tripType: 'ONE_WAY',
+  legs: [{ origin: 'LOS', destination: 'ABV', departureDate: '2027-02-10' }],
+  adults: 1,
+};
+
+function search(server: App, token: string, body: Record<string, unknown>) {
+  return request(server)
+    .post('/api/v1/flights/search')
+    .set('Authorization', `Bearer ${token}`)
+    .send(body);
+}
 
 async function searchAndGetOfferId(
   server: App,
   token: string,
+  body: Record<string, unknown> = ONE_WAY_SEARCH_BODY,
 ): Promise<string> {
-  const res = await request(server)
-    .get(`/api/v1/flights/search?${SEARCH_PARAMS}`)
-    .set('Authorization', `Bearer ${token}`)
-    .expect(200);
+  const res = await search(server, token, body).expect(201);
   return res.body.data[0].id as string;
 }
 
@@ -56,20 +64,73 @@ describe('Flight Booking (e2e)', () => {
   describe('search and offers', () => {
     it('rejects an unauthenticated search', async () => {
       await request(server)
-        .get(`/api/v1/flights/search?${SEARCH_PARAMS}`)
+        .post('/api/v1/flights/search')
+        .send(ONE_WAY_SEARCH_BODY)
         .expect(401);
     });
 
-    it('returns offers for an authenticated search', async () => {
-      const res = await request(server)
-        .get(`/api/v1/flights/search?${SEARCH_PARAMS}`)
-        .set('Authorization', `Bearer ${adminAccessToken}`)
-        .expect(200);
+    it('returns offers for an authenticated one-way search', async () => {
+      const res = await search(
+        server,
+        adminAccessToken,
+        ONE_WAY_SEARCH_BODY,
+      ).expect(201);
 
       expect(res.body.data.length).toBeGreaterThan(0);
-      expect(res.body.data[0]).toEqual(
+      expect(res.body.data[0].legs).toHaveLength(1);
+      expect(res.body.data[0].legs[0]).toEqual(
         expect.objectContaining({ origin: 'LOS', destination: 'ABV' }),
       );
+    });
+
+    it('returns both legs for a round-trip search', async () => {
+      const res = await search(server, adminAccessToken, {
+        tripType: 'ROUND_TRIP',
+        legs: [
+          { origin: 'LOS', destination: 'ABV', departureDate: '2027-02-10' },
+          { origin: 'ABV', destination: 'LOS', departureDate: '2027-02-20' },
+        ],
+        adults: 1,
+      }).expect(201);
+
+      expect(res.body.data[0].legs).toHaveLength(2);
+      expect(res.body.data[0].legs[0].destination).toBe('ABV');
+      expect(res.body.data[0].legs[1].destination).toBe('LOS');
+    });
+
+    it('returns every leg in order for a multi-city search', async () => {
+      const res = await search(server, adminAccessToken, {
+        tripType: 'MULTI_CITY',
+        legs: [
+          { origin: 'LOS', destination: 'ABV', departureDate: '2027-02-10' },
+          { origin: 'ABV', destination: 'KAN', departureDate: '2027-02-13' },
+          { origin: 'KAN', destination: 'LOS', departureDate: '2027-02-17' },
+        ],
+        adults: 1,
+      }).expect(201);
+
+      expect(
+        res.body.data[0].legs.map(
+          (l: { origin: string; destination: string }) =>
+            `${l.origin}-${l.destination}`,
+        ),
+      ).toEqual(['LOS-ABV', 'ABV-KAN', 'KAN-LOS']);
+    });
+
+    it('rejects a one-way search sent with 2 legs', async () => {
+      await search(server, adminAccessToken, {
+        tripType: 'ONE_WAY',
+        legs: ONE_WAY_SEARCH_BODY.legs.concat(ONE_WAY_SEARCH_BODY.legs),
+        adults: 1,
+      }).expect(400);
+    });
+
+    it('rejects a round trip search sent with only 1 leg', async () => {
+      await search(server, adminAccessToken, {
+        tripType: 'ROUND_TRIP',
+        legs: ONE_WAY_SEARCH_BODY.legs,
+        adults: 1,
+      }).expect(400);
     });
 
     it('fetches a single offer by id', async () => {
@@ -165,6 +226,49 @@ describe('Flight Booking (e2e)', () => {
         .post(`/api/v1/flights/bookings/me/${bookingId}/cancel`)
         .set('Authorization', `Bearer ${token}`)
         .expect(409);
+    });
+  });
+
+  describe('multi-city booking', () => {
+    const email = `${RUN_ID}.multicity-customer@example.com`;
+    let token: string;
+
+    it('books a 3-leg multi-city trip and derives summary fields from it', async () => {
+      await request(server)
+        .post('/api/v1/auth/register')
+        .send({
+          email,
+          password: 'Passw0rd1',
+          firstName: 'Chidi',
+          lastName: 'Okafor',
+        })
+        .expect(201);
+      token = (
+        await request(server)
+          .post('/api/v1/auth/login')
+          .send({ email, password: 'Passw0rd1' })
+      ).body.data.accessToken;
+
+      const offerId = await searchAndGetOfferId(server, token, {
+        tripType: 'MULTI_CITY',
+        legs: [
+          { origin: 'LOS', destination: 'ABV', departureDate: '2027-02-10' },
+          { origin: 'ABV', destination: 'KAN', departureDate: '2027-02-13' },
+          { origin: 'KAN', destination: 'LOS', departureDate: '2027-02-17' },
+        ],
+        adults: 1,
+      });
+
+      const res = await request(server)
+        .post('/api/v1/flights/bookings/me')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ offerId, passengers: [{ type: 'ADULT' }] })
+        .expect(201);
+
+      expect(res.body.data.tripType).toBe('MULTI_CITY');
+      expect(res.body.data.origin).toBe('LOS');
+      expect(res.body.data.destination).toBe('LOS');
+      expect(res.body.data.itinerary.legs).toHaveLength(3);
     });
   });
 
