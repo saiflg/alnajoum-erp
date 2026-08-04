@@ -206,3 +206,39 @@ export interface FlightBooking {
   passengers: FlightBookingPassengerRecord[];
   customer?: { firstName: string; lastName: string };
 }
+
+export type InvoiceStatus = 'ISSUED' | 'PARTIALLY_PAID' | 'PAID' | 'VOID';
+export type PaymentMethod = 'CASH' | 'BANK_TRANSFER' | 'POS' | 'CARD' | 'OTHER';
+
+export interface InvoiceLineItem {
+  id: string;
+  invoiceId: string;
+  description: string;
+  amount: number;
+}
+
+export interface Payment {
+  id: string;
+  paymentReference: string;
+  invoiceId: string;
+  amount: number;
+  method: PaymentMethod;
+  note: string | null;
+  recordedByStaffId: string | null;
+  paidAt: string;
+}
+
+export interface Invoice {
+  id: string;
+  invoiceNumber: string;
+  customerId: string;
+  flightBookingId: string | null;
+  status: InvoiceStatus;
+  currency: string;
+  totalAmount: number;
+  issuedByStaffId: string | null;
+  createdAt: string;
+  lineItems: InvoiceLineItem[];
+  payments: Payment[];
+  customer?: { firstName: string; lastName: string };
+}

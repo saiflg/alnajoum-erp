@@ -33,6 +33,12 @@ export default function CustomerPortalDashboardPage() {
             My Bookings
           </Link>
           <Link
+            href="/portal/invoices"
+            className="inline-block rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 shadow-sm hover:border-slate-300"
+          >
+            My Invoices
+          </Link>
+          <Link
             href="/portal/profile"
             className="inline-block rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 shadow-sm hover:border-slate-300"
           >

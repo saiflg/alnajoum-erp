@@ -83,6 +83,7 @@ model Customer {
   familyMembers          FamilyMember[]
   flightBookings         FlightBooking[]
   flightBookingPassenger FlightBookingPassenger[]
+  invoices               Invoice[]
 
   @@map("customers")
 }
@@ -189,6 +190,8 @@ model Staff {
   updatedAt DateTime @updatedAt
 
   bookedFlightBookings FlightBooking[]
+  issuedInvoices       Invoice[]
+  recordedPayments     Payment[]
 
   @@index([companyId])
   @@index([branchId])
@@ -413,6 +416,7 @@ model FlightBooking {
   updatedAt DateTime @updatedAt
 
   passengers FlightBookingPassenger[]
+  invoice    Invoice?
 
   @@index([customerId])
   @@index([status])
@@ -447,4 +451,91 @@ model FlightBookingPassenger {
   @@index([customerId])
   @@index([familyMemberId])
   @@map("flight_booking_passengers")
+}
+
+enum InvoiceStatus {
+  ISSUED
+  PARTIALLY_PAID
+  PAID
+  VOID
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  POS
+  CARD
+  OTHER
+}
+
+model Invoice {
+  id            String @id @default(cuid())
+  invoiceNumber String @unique
+
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+
+  // Nullable/unique rather than required: today every invoice is generated
+  // from a flight booking, but the shape stays valid for a future
+  // standalone invoice (e.g. a manual fee) that isn't tied to one booking.
+  flightBookingId String?        @unique
+  flightBooking   FlightBooking? @relation(fields: [flightBookingId], references: [id], onDelete: SetNull)
+
+  status InvoiceStatus @default(ISSUED)
+
+  currency    String
+  totalAmount Int // whole currency units, no minor-unit subdivision — matches FlightBooking.totalAmount
+
+  // Set when a staff action generated the invoice; null for a
+  // system-generated invoice from a customer's own self-service booking.
+  issuedByStaffId String?
+  issuedByStaff   Staff?  @relation(fields: [issuedByStaffId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lineItems InvoiceLineItem[]
+  payments  Payment[]
+
+  @@index([customerId])
+  @@index([status])
+  @@map("invoices")
+}
+
+model InvoiceLineItem {
+  id        String  @id @default(cuid())
+  invoiceId String
+  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  description String
+  amount      Int
+
+  createdAt DateTime @default(now())
+
+  @@index([invoiceId])
+  @@map("invoice_line_items")
+}
+
+model Payment {
+  id               String @id @default(cuid())
+  paymentReference String @unique
+
+  invoiceId String
+  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+
+  amount Int
+  method PaymentMethod
+  note   String?
+
+  // Payments are always recorded by a staff member (cash/bank transfer/POS
+  // handled in-office) — there's no customer self-service payment path
+  // until a real online gateway (Paystack/Flutterwave) is integrated.
+  recordedByStaffId String?
+  recordedByStaff   Staff?  @relation(fields: [recordedByStaffId], references: [id], onDelete: SetNull)
+
+  paidAt    DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  @@index([invoiceId])
+  @@map("payments")
 }

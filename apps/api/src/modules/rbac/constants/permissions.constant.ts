@@ -32,6 +32,12 @@ export const PERMISSIONS = {
     READ: 'flight:read',
     CANCEL: 'flight:cancel',
   },
+  INVOICE: {
+    READ: 'invoice:read',
+  },
+  PAYMENT: {
+    RECORD: 'payment:record',
+  },
   ROLE: {
     CREATE: 'role:create',
     READ: 'role:read',

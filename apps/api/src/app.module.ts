@@ -15,6 +15,7 @@ import { BranchModule } from './modules/branch/branch.module';
 import { CompanyModule } from './modules/company/company.module';
 import { CustomersModule } from './modules/customers/customers.module';
 import { FlightsModule } from './modules/flights/flights.module';
+import { PaymentsModule } from './modules/payments/payments.module';
 import { RbacModule } from './modules/rbac/rbac.module';
 import { UsersModule } from './modules/users/users.module';
 
@@ -33,6 +34,7 @@ import { UsersModule } from './modules/users/users.module';
     BranchModule,
     UsersModule,
     CustomersModule,
+    PaymentsModule,
     FlightsModule,
   ],
   controllers: [AppController],

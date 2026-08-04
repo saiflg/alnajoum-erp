@@ -9,6 +9,7 @@ import {
 import { FlightBookingStatus, Prisma, TripType } from '@prisma/client';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
+import { InvoicesService } from '../payments/invoices.service';
 import { CreatePassengerDto } from './dto/create-passenger.dto';
 import { SearchFlightsDto } from './dto/search-flights.dto';
 import { FLIGHT_PROVIDER } from './providers/flight-provider.port';
@@ -27,6 +28,7 @@ export class FlightsService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(FLIGHT_PROVIDER) private readonly provider: FlightProviderPort,
+    private readonly invoicesService: InvoicesService,
   ) {}
 
   async search(dto: SearchFlightsDto): Promise<FlightOffer[]> {
@@ -140,36 +142,42 @@ export class FlightsService {
     const firstLeg = offer.legs[0];
     const lastLeg = offer.legs[offer.legs.length - 1];
 
-    return this.prisma.flightBooking.create({
-      data: {
-        bookingReference: generateBookingReference(),
-        customerId,
-        bookedByStaffId,
-        provider: offer.provider,
-        providerOfferId: offer.id,
-        providerOrderId: result.providerOrderId,
-        status: FlightBookingStatus.CONFIRMED,
-        currency: offer.currency,
-        totalAmount: offer.totalAmount,
-        tripType: offer.tripType,
-        origin: firstLeg.origin,
-        destination: lastLeg.destination,
-        departureAt: new Date(firstLeg.departureAt),
-        cabinClass: offer.cabinClass,
-        itinerary: offer as unknown as Prisma.InputJsonValue,
-        passengers: {
-          create: passengerInputs.map((input, index) => ({
-            type: snapshots[index].type,
-            customerId: input.familyMemberId ? null : customerId,
-            familyMemberId: input.familyMemberId ?? null,
-            firstName: snapshots[index].firstName,
-            lastName: snapshots[index].lastName,
-            dateOfBirth: snapshots[index].dateOfBirth,
-            passportNumber: snapshots[index].passportNumber,
-          })),
+    return this.prisma.$transaction(async (tx) => {
+      const booking = await tx.flightBooking.create({
+        data: {
+          bookingReference: generateBookingReference(),
+          customerId,
+          bookedByStaffId,
+          provider: offer.provider,
+          providerOfferId: offer.id,
+          providerOrderId: result.providerOrderId,
+          status: FlightBookingStatus.CONFIRMED,
+          currency: offer.currency,
+          totalAmount: offer.totalAmount,
+          tripType: offer.tripType,
+          origin: firstLeg.origin,
+          destination: lastLeg.destination,
+          departureAt: new Date(firstLeg.departureAt),
+          cabinClass: offer.cabinClass,
+          itinerary: offer as unknown as Prisma.InputJsonValue,
+          passengers: {
+            create: passengerInputs.map((input, index) => ({
+              type: snapshots[index].type,
+              customerId: input.familyMemberId ? null : customerId,
+              familyMemberId: input.familyMemberId ?? null,
+              firstName: snapshots[index].firstName,
+              lastName: snapshots[index].lastName,
+              dateOfBirth: snapshots[index].dateOfBirth,
+              passportNumber: snapshots[index].passportNumber,
+            })),
+          },
         },
-      },
-      include: { passengers: true },
+        include: { passengers: true },
+      });
+
+      await this.invoicesService.createForFlightBooking(booking, tx);
+
+      return booking;
     });
   }
 
@@ -219,10 +227,14 @@ export class FlightsService {
       await this.provider.cancelOrder(booking.providerOrderId);
     }
 
-    return this.prisma.flightBooking.update({
+    const cancelled = await this.prisma.flightBooking.update({
       where: { id },
       data: { status: FlightBookingStatus.CANCELLED },
       include: { passengers: true },
     });
+
+    await this.invoicesService.voidIfUnpaid(id);
+
+    return cancelled;
   }
 }

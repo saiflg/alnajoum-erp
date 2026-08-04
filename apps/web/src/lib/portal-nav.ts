@@ -4,4 +4,5 @@ export const PORTAL_NAV = [
   { href: '/portal/family', label: 'Family Members' },
   { href: '/portal/flights/search', label: 'Book a Flight' },
   { href: '/portal/flights', label: 'My Bookings' },
+  { href: '/portal/invoices', label: 'My Invoices' },
 ];

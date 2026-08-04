@@ -61,6 +61,8 @@ export const DEFAULT_ROLE_DEFINITIONS: Array<{
       PERMISSIONS.FLIGHT.BOOK,
       PERMISSIONS.FLIGHT.READ,
       PERMISSIONS.FLIGHT.CANCEL,
+      PERMISSIONS.INVOICE.READ,
+      PERMISSIONS.PAYMENT.RECORD,
     ],
   },
   {
@@ -74,17 +76,21 @@ export const DEFAULT_ROLE_DEFINITIONS: Array<{
       PERMISSIONS.STAFF.UPDATE,
       PERMISSIONS.CUSTOMER.READ,
       PERMISSIONS.FLIGHT.READ,
+      PERMISSIONS.INVOICE.READ,
     ],
   },
   {
     name: SYSTEM_ROLES.FINANCE_OFFICER,
-    description: 'Read access to company/branch data for finance reporting.',
+    description:
+      'Manages invoicing and payment collection; read access to company/branch data for finance reporting.',
     isSystem: true,
     permissions: [
       PERMISSIONS.COMPANY.READ,
       PERMISSIONS.BRANCH.READ,
       PERMISSIONS.AUDIT.READ,
       PERMISSIONS.FLIGHT.READ,
+      PERMISSIONS.INVOICE.READ,
+      PERMISSIONS.PAYMENT.RECORD,
     ],
   },
   {
@@ -96,6 +102,7 @@ export const DEFAULT_ROLE_DEFINITIONS: Array<{
       PERMISSIONS.CUSTOMER.READ,
       PERMISSIONS.FLIGHT.BOOK,
       PERMISSIONS.FLIGHT.READ,
+      PERMISSIONS.INVOICE.READ,
     ],
   },
   {

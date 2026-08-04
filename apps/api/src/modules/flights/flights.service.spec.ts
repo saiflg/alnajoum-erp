@@ -11,6 +11,7 @@ import {
   TripType,
 } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
+import { InvoicesService } from '../payments/invoices.service';
 import { FlightsService } from './flights.service';
 import { FLIGHT_PROVIDER } from './providers/flight-provider.port';
 
@@ -36,12 +37,18 @@ const baseOffer = {
 
 describe('FlightsService', () => {
   let service: FlightsService;
-  let prisma: Record<string, Record<string, jest.Mock>>;
+  let prisma: Record<string, Record<string, jest.Mock>> & {
+    $transaction: jest.Mock;
+  };
   let provider: {
     searchOffers: jest.Mock;
     getOffer: jest.Mock;
     createOrder: jest.Mock;
     cancelOrder: jest.Mock;
+  };
+  let invoicesService: {
+    createForFlightBooking: jest.Mock;
+    voidIfUnpaid: jest.Mock;
   };
 
   beforeEach(async () => {
@@ -54,6 +61,9 @@ describe('FlightsService', () => {
         findUnique: jest.fn(),
         update: jest.fn(),
       },
+      $transaction: jest.fn((callback: (tx: unknown) => unknown) =>
+        callback(prisma),
+      ),
     };
     provider = {
       searchOffers: jest.fn(),
@@ -61,12 +71,17 @@ describe('FlightsService', () => {
       createOrder: jest.fn(),
       cancelOrder: jest.fn(),
     };
+    invoicesService = {
+      createForFlightBooking: jest.fn(),
+      voidIfUnpaid: jest.fn(),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         FlightsService,
         { provide: PrismaService, useValue: prisma },
         { provide: FLIGHT_PROVIDER, useValue: provider },
+        { provide: InvoicesService, useValue: invoicesService },
       ],
     }).compile();
 
@@ -176,6 +191,10 @@ describe('FlightsService', () => {
         expect.objectContaining({
           data: expect.objectContaining({ customerId: 'customer-1' }),
         }),
+      );
+      expect(invoicesService.createForFlightBooking).toHaveBeenCalledWith(
+        { id: 'booking-1' },
+        prisma,
       );
     });
 
@@ -301,6 +320,7 @@ describe('FlightsService', () => {
 
       expect(provider.cancelOrder).toHaveBeenCalledWith('MOCK-1');
       expect(result.status).toBe(FlightBookingStatus.CANCELLED);
+      expect(invoicesService.voidIfUnpaid).toHaveBeenCalledWith('booking-1');
     });
   });
 });

@@ -1,12 +1,15 @@
 # Alnajoum Travel ERP Platform
 
-**Phase 1** (auth, RBAC, Company/Branch/Staff management) plus three Phase 2
+**Phase 1** (auth, RBAC, Company/Branch/Staff management) plus four Phase 2
 modules: **Customer Management** (self-service profiles + document uploads),
 **Family Management** (dependents per customer, each with their own
-documents), and **Flight Booking** (search/book/manage flights, self-service
-or staff-assisted, against a swappable provider — Mock today, Duffel once
-credentials exist). Built to run entirely on localhost during development,
-with Oracle Cloud deployment deferred to a later phase.
+documents), **Flight Booking** (search/book/manage one-way, round-trip, and
+multi-city flights, self-service or staff-assisted, against a swappable
+provider — Mock today, Duffel once credentials exist), and **Payments &
+Invoicing** (an invoice is generated automatically the moment a flight
+booking is confirmed; finance staff record cash/bank-transfer/POS/card
+payments against it until it's paid). Built to run entirely on localhost
+during development, with Oracle Cloud deployment deferred to a later phase.
 
 ## 1. Project structure
 
@@ -176,6 +179,35 @@ alnajoum-erp/
   own API does the same for offer requests). It's read-only in effect but
   not idiomatically RESTful — a deliberate trade for a DTO class-validator
   can actually validate.
+- **An invoice is generated in the same transaction as its flight booking,
+  not after the fact**: `FlightsService.createBooking` wraps the
+  `flightBooking.create` and `InvoicesService.createForFlightBooking` calls
+  in one `prisma.$transaction`, so a booking can never exist without a
+  matching invoice (or vice versa) even if the process crashes mid-request.
+  `Invoice.flightBookingId` is nullable and unique rather than a required
+  1:1 — every invoice today comes from a flight booking, but the shape
+  stays valid for a future standalone invoice (a manual fee, say) that
+  isn't tied to one.
+- **Invoice status is derived, not set directly**: `ISSUED` /
+  `PARTIALLY_PAID` / `PAID` is recomputed from the sum of recorded
+  `Payment` rows every time a payment is added (`InvoicesService.
+  recomputeStatus`), rather than being an independent field a caller could
+  set inconsistently with the actual payment total. `VOID` is the one
+  status recomputation never touches once set. Cancelling a booking voids
+  its invoice automatically (`FlightsService.cancelBooking` →
+  `voidIfUnpaid`) — but only when nothing has been paid against it yet; an
+  invoice with payments already recorded needs a manual refund/
+  reconciliation step rather than silently disappearing.
+- **Payments are staff-recorded, not self-service**: there's no online
+  payment gateway integrated yet (no Paystack/Flutterwave account to test
+  against, same constraint that shaped the Duffel stub), so `payment:record`
+  models how the agency actually takes payment today — cash, bank transfer,
+  or POS in-office — logged by a staff member against `recordedByStaffId`.
+  Recording payments is deliberately a narrower grant than viewing invoices:
+  `COMPANY_ADMIN`/`FINANCE_OFFICER` hold both `invoice:read` and
+  `payment:record`, while `BRANCH_MANAGER`/`STAFF` hold only `invoice:read`
+  — the same separation-of-duties pattern as `flight:cancel` being withheld
+  from `STAFF`.
 
 ## 3. Getting started (localhost)
 
@@ -205,7 +237,7 @@ pnpm dev
 ```
 
 The seed script creates:
-- 22 permissions and 6 system roles (`SUPER_ADMIN`, `COMPANY_ADMIN`,
+- 27 permissions and 6 system roles (`SUPER_ADMIN`, `COMPANY_ADMIN`,
   `BRANCH_MANAGER`, `FINANCE_OFFICER`, `STAFF`, `CUSTOMER`)
 - A bootstrap company ("Alnajoum Travel") with a Head Office branch
 - A bootstrap Super Admin: **admin@alnajoum.travel / Alnajoum@2026**
@@ -230,11 +262,15 @@ The seed script creates:
 | `AuditLog` | Append-only action log (auth events today; extensible via `entityType`/`entityId`) |
 | `FlightBooking` | A booking: customer, optional booking staff member, provider + provider order/offer ids, status, trip type (ONE_WAY/ROUND_TRIP/MULTI_CITY), summary route/departure/cabin, total, and a full `itinerary` JSON snapshot of the offer (every leg) |
 | `FlightBookingPassenger` | One passenger on a booking — references a `Customer` or a `FamilyMember` (exactly one), plus a name/DOB/passport snapshot taken at booking time |
+| `Invoice` | Billing record for a customer: status (ISSUED/PARTIALLY_PAID/PAID/VOID), currency, total, optional link to the `FlightBooking` it was generated from, optional issuing staff member |
+| `InvoiceLineItem` | One charge line on an invoice (description + amount) — one per flight booking today |
+| `Payment` | A staff-recorded payment against an invoice: amount, method (CASH/BANK_TRANSFER/POS/CARD/OTHER), optional note, recording staff member |
 
 Full definitions: [`apps/api/prisma/schema.prisma`](apps/api/prisma/schema.prisma).
 Migrations: `20260731134308_init`, `20260731172525_customer_management`,
 `20260731191249_family_management`, `20260731195715_expand_document_types`,
-`20260801133125_flight_booking`, `20260801182427_flight_multi_city`.
+`20260801133125_flight_booking`, `20260801182427_flight_multi_city`,
+`20260802124631_payments_invoicing`.
 
 ## 5. APIs implemented
 
@@ -303,6 +339,17 @@ cancelled). Admin/staff equivalent under `/flights/bookings`: `POST`
 (list all, optional `?customerId=&status=`, `flight:read`), `GET :id`
 (view any, `flight:read`), `POST :id/cancel` (cancel any, `flight:cancel`).
 
+**Invoices** — self-service under `/invoices/me`: `GET` (list own), `GET
+:id` (view own, with line items and payments). Admin/finance equivalent
+under `/invoices`: `GET` (list all, optional `?customerId=&status=`,
+`invoice:read`), `GET :id` (view any, `invoice:read`), `POST
+:id/payments` (record a payment — `{ amount, method:
+CASH|BANK_TRANSFER|POS|CARD|OTHER, note? }`, `payment:record`; 400 if
+`amount` exceeds the outstanding balance, 409 against a `VOID` or already
+`PAID` invoice). An invoice is never created directly — one is generated
+automatically, with a single line item, the moment a flight booking is
+confirmed.
+
 **Audit** (`/audit-logs`) — `GET ?entityType=&entityId=`.
 
 **Health** — `GET /health` (public).
@@ -314,7 +361,7 @@ or roles (`RolesGuard` + `@Roles`).
 
 ## 6. Tests written
 
-- **79 unit tests** (`pnpm test` in `apps/api`): `AuthService` (credential
+- **95 unit tests** (`pnpm test` in `apps/api`): `AuthService` (credential
   validation, lockout after repeated failures, registration conflicts,
   refresh token rejection paths, password change), `RbacService`
   (role CRUD guards, permission aggregation), `RolesGuard` /
@@ -336,9 +383,15 @@ or roles (`RolesGuard` + `@Roles`).
   `FlightsService` (passenger snapshot resolution for self vs. a family
   member, ownership rejection, provider-rejection → Conflict, booking
   ownership checks, double-cancel rejection, leg-count validation per
-  trip type).
-- **91 e2e tests** across 5 spec files (`pnpm test:e2e` in `apps/api`, needs
-  Docker running): full journeys against a real, dedicated
+  trip type), `InvoicesService` (line-item generation from a flight
+  booking, ownership checks on `getInvoice`, status recomputation across
+  all four states, `voidIfUnpaid` correctly skipping invoices that already
+  have a payment or don't exist), `PaymentsService` (rejects payment
+  against a VOID or already-PAID invoice, rejects an amount exceeding the
+  outstanding balance, records a valid payment and triggers status
+  recomputation, accepts a payment that exactly zeroes the balance).
+- **105 e2e tests** across 6 spec files (`pnpm test:e2e` in `apps/api`,
+  needs Docker running): full journeys against a real, dedicated
   `alnajoum_erp_test` Postgres database —
   - **auth-rbac-flow**: login, `/auth/me`, company/branch/staff creation,
     duplicate rejection, a Branch Manager's permissions being correctly
@@ -371,6 +424,17 @@ or roles (`RolesGuard` + `@Roles`).
     boundary (`flight:read` only — 403 on book/cancel), staff lacking
     `flight:cancel` being blocked from cancelling, and admin cancellation
     plus filtering the admin list by `status`.
+  - **payments-invoicing**: booking a flight produces a matching `ISSUED`
+    invoice with one line item describing it, cross-customer boundaries on
+    an invoice (403) and on the admin invoices list for a plain customer
+    (403, lacks `invoice:read`), STAFF/BRANCH_MANAGER able to read invoices
+    but blocked (403) from recording a payment, a payment amount exceeding
+    the balance rejected (400), a FINANCE_OFFICER's partial payment moving
+    the invoice to `PARTIALLY_PAID` and the remaining balance moving it to
+    `PAID`, a further payment against a `PAID` invoice rejected (409),
+    cancelling an unpaid booking voiding its invoice, cancelling a
+    fully-paid booking leaving its invoice untouched, and filtering the
+    admin list by `status`.
   - Test data uses a per-run random suffix so the suite is safely
     re-runnable without ever needing a destructive database reset.
 - **Frontend**: manually verified in-browser (see below) — no frontend
@@ -481,8 +545,50 @@ in-browser cancel action itself relies on a native `confirm()` dialog
 that the browser automation tool can't drive, so the cancel/re-cancel
 transition, cross-customer/family-member ownership boundaries, staff
 booking-on-behalf, and permission gating (`flight:book`/`flight:cancel`)
-were exercised through the 86 e2e tests instead, which assert against
-the real API and database rather than just mocks.
+were exercised through the e2e tests instead, which assert against the
+real API and database rather than just mocks.
+
+Multi-city flight booking: re-verified `/portal/flights/search` after the
+legs-based redesign. One-way search (LOS → ABV) returned single-leg
+offers unchanged. Switching to "Round trip" revealed a Return date field
+and returned offers with both outbound and return legs listed, correctly
+labeled "Round trip". Switching to "Multi-city" showed two leg rows by
+default with a "+ Add another flight" control; added a third leg
+(LOS → ABV → KAN → LOS across three dates) and confirmed the results
+showed all three legs in order with a combined total. Booked the 3-leg
+offer end-to-end: the confirmation page listed all three flights, the
+booking detail page (both `/portal/flights/[id]` and the admin
+equivalent) rendered them identically post-booking, and "My Bookings"
+correctly summarized the trip as "LOS → LOS" (first origin, last
+destination) in the list view.
+
+Payments & Invoicing: booked a flight as a fresh customer and confirmed
+`/portal/invoices` immediately showed a matching invoice in `ISSUED`
+status with the balance due equal to the full total — generated
+automatically, with no manual step. Opened the invoice detail page and
+confirmed the single line item ("Flight ANJ-XXXXXXXX: LOS → ABV")
+matched the booking total. Logged in as the bootstrap Super Admin,
+confirmed `/admin/invoices` lists the invoice with the customer's name,
+and recorded a partial payment (₦50,000 via bank transfer) through the
+"Record a payment" form — the status flipped to `PARTIALLY_PAID` and the
+balance recalculated correctly. Recorded a second payment for the exact
+remaining balance and confirmed the status moved to `PAID`, the payments
+table listed both with their references/methods/dates, and the payment
+form itself disappeared once nothing was left to collect (mirroring the
+409 the API returns for a payment against an already-`PAID` invoice).
+Created a dedicated `FINANCE_OFFICER` staff account and confirmed their
+`/finance/dashboard` shows a live "outstanding invoices" / "outstanding
+balance" summary (correctly `0`/`₦0` once the test invoice was fully
+paid) and a narrower nav (`Dashboard`, `Invoices` only) that still
+resolves `/admin/invoices` correctly under that role. One real gap
+surfaced during this pass and is worth calling out: the two new
+permissions (`invoice:read`, `payment:record`) only take effect for an
+identity after their *next* login, since permissions are computed once
+at login time and embedded in the JWT — an already-issued session
+doesn't pick up a newly-granted permission until it's refreshed. This is
+consistent with how every other permission in the system already
+behaves (not a new limitation introduced here), but it's easy to trip
+over when testing locally against a long-lived dev session.
 
 ## 9. Remaining tasks (explicitly out of scope so far)
 
@@ -547,15 +653,24 @@ the real API and database rather than just mocks.
 
 1. Wire up the Notifications module (email/SMS/WhatsApp) so staff
    onboarding and password resets don't rely on manually relayed
-   temporary passwords.
+   temporary passwords, and so an invoice/payment receipt can actually
+   reach a customer instead of only being visible in the portal.
 2. Introduce Playwright for frontend e2e coverage once there are
    real portal features worth testing beyond CRUD forms.
-3. Begin the Flight/Hajj/Umrah booking modules behind the existing
-   RBAC/permission system — `Customer` and `FamilyMember` are now both
-   in place as the traveler records those bookings will reference. Add
-   `flight:*` / `hajj:*` permission keys following the established
-   `<module>:<action>` convention.
-4. Add a document verification status (`PENDING`/`APPROVED`/`REJECTED`)
+3. Integrate a real online payment gateway (Paystack/Flutterwave are the
+   standard choices for a Nigeria-based agency) behind a
+   `PaymentProviderPort`-style seam, mirroring how `FlightProviderPort`
+   decouples Duffel from the booking flow — today every payment is
+   staff-recorded (cash/bank transfer/POS/card typed in after the fact),
+   with no customer-initiated checkout.
+4. Begin the Hotel/Hajj/Umrah booking modules behind the existing
+   RBAC/permission system, reusing the same provider-abstraction and
+   auto-invoice-on-confirmation patterns established for flights —
+   `Customer` and `FamilyMember` are already in place as the traveler
+   records those bookings will reference. Add `hotel:*` / `hajj:*`
+   permission keys following the established `<module>:<action>`
+   convention.
+5. Add a document verification status (`PENDING`/`APPROVED`/`REJECTED`)
    to `CustomerDocument`/`FamilyMemberDocument` once a KYC review
    workflow is needed — the current schema deliberately leaves this out
    until there's a concrete reviewer UI to attach it to.
