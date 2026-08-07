@@ -57,6 +57,36 @@ class EnvironmentVariables {
   @IsOptional()
   @IsString()
   FLIGHT_PROVIDER?: string; // 'mock' (default) | 'duffel'
+
+  @IsOptional()
+  @IsString()
+  NOTIFICATION_PROVIDER?: string; // 'mock' (default) | 'smtp'
+
+  @IsOptional()
+  @IsString()
+  SMTP_HOST?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(65535)
+  SMTP_PORT?: number;
+
+  @IsOptional()
+  @IsString()
+  SMTP_SECURE?: string;
+
+  @IsOptional()
+  @IsString()
+  SMTP_USER?: string;
+
+  @IsOptional()
+  @IsString()
+  SMTP_PASSWORD?: string;
+
+  @IsOptional()
+  @IsString()
+  SMTP_FROM?: string;
 }
 
 export function validateEnv(config: Record<string, unknown>) {

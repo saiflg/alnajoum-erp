@@ -7,6 +7,7 @@ import { IdentityType } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { CreateStaffDto } from './dto/create-staff.dto';
 import { UpdateStaffDto } from './dto/update-staff.dto';
 
@@ -17,7 +18,10 @@ function generateTemporaryPassword(): string {
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationsService: NotificationsService,
+  ) {}
 
   async createStaff(dto: CreateStaffDto) {
     const existing = await this.prisma.identity.findUnique({
@@ -66,6 +70,12 @@ export class UsersService {
       },
       include: { staff: true },
     });
+
+    await this.notificationsService.sendStaffTempPassword(
+      identity.email,
+      dto.firstName,
+      temporaryPassword,
+    );
 
     return {
       staff: identity.staff,

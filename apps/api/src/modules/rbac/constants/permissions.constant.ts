@@ -38,6 +38,9 @@ export const PERMISSIONS = {
   PAYMENT: {
     RECORD: 'payment:record',
   },
+  NOTIFICATION: {
+    READ: 'notification:read',
+  },
   ROLE: {
     CREATE: 'role:create',
     READ: 'role:read',

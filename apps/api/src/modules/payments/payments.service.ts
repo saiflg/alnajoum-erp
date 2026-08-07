@@ -7,6 +7,7 @@ import {
 import { InvoiceStatus } from '@prisma/client';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { RecordPaymentDto } from './dto/record-payment.dto';
 import { InvoicesService } from './invoices.service';
 
@@ -19,6 +20,7 @@ export class PaymentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly invoicesService: InvoicesService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async recordPayment(
@@ -61,6 +63,26 @@ export class PaymentsService {
       },
     });
 
-    return this.invoicesService.recomputeStatus(invoiceId);
+    const updatedInvoice =
+      await this.invoicesService.recomputeStatus(invoiceId);
+
+    const customer = await this.prisma.customer.findUnique({
+      where: { id: invoice.customerId },
+      include: { identity: { select: { email: true } } },
+    });
+    if (customer) {
+      const newBalance = invoice.totalAmount - (totalPaid + dto.amount);
+      await this.notificationsService.sendPaymentReceipt(
+        customer.identity.email,
+        {
+          invoiceNumber: invoice.invoiceNumber,
+          amount: dto.amount,
+          balance: newBalance,
+          currency: invoice.currency,
+        },
+      );
+    }
+
+    return updatedInvoice;
   }
 }

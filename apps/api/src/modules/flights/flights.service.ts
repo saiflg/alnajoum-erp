@@ -9,6 +9,7 @@ import {
 import { FlightBookingStatus, Prisma, TripType } from '@prisma/client';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { InvoicesService } from '../payments/invoices.service';
 import { CreatePassengerDto } from './dto/create-passenger.dto';
 import { SearchFlightsDto } from './dto/search-flights.dto';
@@ -29,6 +30,7 @@ export class FlightsService {
     private readonly prisma: PrismaService,
     @Inject(FLIGHT_PROVIDER) private readonly provider: FlightProviderPort,
     private readonly invoicesService: InvoicesService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async search(dto: SearchFlightsDto): Promise<FlightOffer[]> {
@@ -142,8 +144,8 @@ export class FlightsService {
     const firstLeg = offer.legs[0];
     const lastLeg = offer.legs[offer.legs.length - 1];
 
-    return this.prisma.$transaction(async (tx) => {
-      const booking = await tx.flightBooking.create({
+    const booking = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.flightBooking.create({
         data: {
           bookingReference: generateBookingReference(),
           customerId,
@@ -175,10 +177,30 @@ export class FlightsService {
         include: { passengers: true },
       });
 
-      await this.invoicesService.createForFlightBooking(booking, tx);
+      await this.invoicesService.createForFlightBooking(created, tx);
 
-      return booking;
+      return created;
     });
+
+    const customer = await this.prisma.customer.findUnique({
+      where: { id: customerId },
+      include: { identity: { select: { email: true } } },
+    });
+    if (customer) {
+      await this.notificationsService.sendBookingConfirmation(
+        customer.identity.email,
+        {
+          bookingReference: booking.bookingReference,
+          origin: booking.origin,
+          destination: booking.destination,
+          departureAt: booking.departureAt,
+          totalAmount: booking.totalAmount,
+          currency: booking.currency,
+        },
+      );
+    }
+
+    return booking;
   }
 
   listForCustomer(customerId: string) {

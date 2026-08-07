@@ -242,3 +242,20 @@ export interface Invoice {
   payments: Payment[];
   customer?: { firstName: string; lastName: string };
 }
+
+export type NotificationType =
+  | 'STAFF_TEMP_PASSWORD'
+  | 'BOOKING_CONFIRMATION'
+  | 'PAYMENT_RECEIPT';
+export type NotificationStatus = 'SENT' | 'FAILED';
+
+export interface Notification {
+  id: string;
+  type: NotificationType;
+  recipient: string;
+  subject: string;
+  body: string;
+  status: NotificationStatus;
+  errorMessage: string | null;
+  createdAt: string;
+}

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { CustomersModule } from '../customers/customers.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { UsersModule } from '../users/users.module';
 import { FlightBookingsAdminController } from './flight-bookings-admin.controller';
@@ -12,7 +13,13 @@ import { FLIGHT_PROVIDER } from './providers/flight-provider.port';
 import { MockFlightProviderService } from './providers/mock-flight-provider.service';
 
 @Module({
-  imports: [ConfigModule, CustomersModule, UsersModule, PaymentsModule],
+  imports: [
+    ConfigModule,
+    CustomersModule,
+    UsersModule,
+    PaymentsModule,
+    NotificationsModule,
+  ],
   // Order matters: the static "flights/bookings/me" routes must be
   // registered before the dynamic "flights/bookings/:id" ones, otherwise
   // Express would match "me" as a booking id.

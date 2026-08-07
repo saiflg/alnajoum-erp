@@ -11,6 +11,7 @@ import {
   TripType,
 } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { InvoicesService } from '../payments/invoices.service';
 import { FlightsService } from './flights.service';
 import { FLIGHT_PROVIDER } from './providers/flight-provider.port';
@@ -37,7 +38,15 @@ const baseOffer = {
 
 describe('FlightsService', () => {
   let service: FlightsService;
-  let prisma: Record<string, Record<string, jest.Mock>> & {
+  let prisma: {
+    customer: { findUnique: jest.Mock };
+    familyMember: { findUnique: jest.Mock };
+    flightBooking: {
+      create: jest.Mock;
+      findMany: jest.Mock;
+      findUnique: jest.Mock;
+      update: jest.Mock;
+    };
     $transaction: jest.Mock;
   };
   let provider: {
@@ -50,6 +59,7 @@ describe('FlightsService', () => {
     createForFlightBooking: jest.Mock;
     voidIfUnpaid: jest.Mock;
   };
+  let notificationsService: { sendBookingConfirmation: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
@@ -75,6 +85,7 @@ describe('FlightsService', () => {
       createForFlightBooking: jest.fn(),
       voidIfUnpaid: jest.fn(),
     };
+    notificationsService = { sendBookingConfirmation: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -82,6 +93,7 @@ describe('FlightsService', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: FLIGHT_PROVIDER, useValue: provider },
         { provide: InvoicesService, useValue: invoicesService },
+        { provide: NotificationsService, useValue: notificationsService },
       ],
     }).compile();
 
@@ -169,12 +181,21 @@ describe('FlightsService', () => {
         lastName: 'Bello',
         dateOfBirth: null,
         passportNumber: 'A1234567',
+        identity: { email: 'amina@example.com' },
       });
       provider.createOrder.mockResolvedValue({
         providerOrderId: 'MOCK-1',
         status: 'CONFIRMED',
       });
-      prisma.flightBooking.create.mockResolvedValue({ id: 'booking-1' });
+      prisma.flightBooking.create.mockResolvedValue({
+        id: 'booking-1',
+        bookingReference: 'ANJ-ABCD1234',
+        origin: 'LOS',
+        destination: 'ABV',
+        departureAt: new Date('2027-01-10T08:00:00.000Z'),
+        totalAmount: 50_000,
+        currency: 'NGN',
+      });
 
       await service.createBooking('customer-1', 'offer-1', [
         { type: 'ADULT' as const },
@@ -193,8 +214,12 @@ describe('FlightsService', () => {
         }),
       );
       expect(invoicesService.createForFlightBooking).toHaveBeenCalledWith(
-        { id: 'booking-1' },
+        expect.objectContaining({ id: 'booking-1' }),
         prisma,
+      );
+      expect(notificationsService.sendBookingConfirmation).toHaveBeenCalledWith(
+        'amina@example.com',
+        expect.objectContaining({ bookingReference: 'ANJ-ABCD1234' }),
       );
     });
 

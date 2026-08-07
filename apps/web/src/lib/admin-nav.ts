@@ -6,6 +6,7 @@ export const ADMIN_NAV = [
   { href: '/admin/customers', label: 'Customers' },
   { href: '/admin/flights', label: 'Flight Bookings' },
   { href: '/admin/invoices', label: 'Invoices' },
+  { href: '/admin/notifications', label: 'Notifications' },
   { href: '/admin/roles', label: 'Roles' },
 ];
 
@@ -13,4 +14,5 @@ export const ADMIN_NAV = [
 export const FINANCE_NAV = [
   { href: '/finance/dashboard', label: 'Dashboard' },
   { href: '/admin/invoices', label: 'Invoices' },
+  { href: '/admin/notifications', label: 'Notifications' },
 ];

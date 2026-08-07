@@ -539,3 +539,39 @@ model Payment {
   @@index([invoiceId])
   @@map("payments")
 }
+
+enum NotificationType {
+  STAFF_TEMP_PASSWORD
+  BOOKING_CONFIRMATION
+  PAYMENT_RECEIPT
+}
+
+enum NotificationStatus {
+  SENT
+  FAILED
+}
+
+/**
+ * Append-only send log — every attempt is recorded regardless of outcome,
+ * so a failed send is visible without needing real inbox access. Not
+ * linked to other models by foreign key (mirrors AuditLog): the recipient
+ * address and rendered body are the durable record, since the underlying
+ * Customer/Staff/Invoice may change or be deleted after the fact.
+ */
+model Notification {
+  id        String             @id @default(cuid())
+  type      NotificationType
+  recipient String
+  subject   String
+  body      String
+  status    NotificationStatus
+
+  errorMessage String?
+
+  createdAt DateTime @default(now())
+
+  @@index([type])
+  @@index([status])
+  @@index([createdAt])
+  @@map("notifications")
+}

@@ -6,6 +6,7 @@ import {
 import { Test, TestingModule } from '@nestjs/testing';
 import { InvoiceStatus, PaymentMethod } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { InvoicesService } from './invoices.service';
 import { PaymentsService } from './payments.service';
 
@@ -13,19 +14,23 @@ describe('PaymentsService', () => {
   let service: PaymentsService;
   let prisma: Record<string, Record<string, jest.Mock>>;
   let invoicesService: { recomputeStatus: jest.Mock };
+  let notificationsService: { sendPaymentReceipt: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
       invoice: { findUnique: jest.fn() },
       payment: { create: jest.fn() },
+      customer: { findUnique: jest.fn() },
     };
     invoicesService = { recomputeStatus: jest.fn() };
+    notificationsService = { sendPaymentReceipt: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PaymentsService,
         { provide: PrismaService, useValue: prisma },
         { provide: InvoicesService, useValue: invoicesService },
+        { provide: NotificationsService, useValue: notificationsService },
       ],
     }).compile();
 
@@ -92,12 +97,19 @@ describe('PaymentsService', () => {
     expect(prisma.payment.create).not.toHaveBeenCalled();
   });
 
-  it('records a valid payment and recomputes the invoice status', async () => {
+  it('records a valid payment, recomputes the invoice status, and emails a receipt', async () => {
     prisma.invoice.findUnique.mockResolvedValue({
       id: 'invoice-1',
+      invoiceNumber: 'INV-ABCD1234',
+      customerId: 'customer-1',
+      currency: 'NGN',
       status: InvoiceStatus.ISSUED,
       totalAmount: 50_000,
       payments: [],
+    });
+    prisma.customer.findUnique.mockResolvedValue({
+      id: 'customer-1',
+      identity: { email: 'amina@example.com' },
     });
     invoicesService.recomputeStatus.mockResolvedValue({
       id: 'invoice-1',
@@ -126,6 +138,15 @@ describe('PaymentsService', () => {
       }),
     );
     expect(invoicesService.recomputeStatus).toHaveBeenCalledWith('invoice-1');
+    expect(notificationsService.sendPaymentReceipt).toHaveBeenCalledWith(
+      'amina@example.com',
+      {
+        invoiceNumber: 'INV-ABCD1234',
+        amount: 20_000,
+        balance: 30_000,
+        currency: 'NGN',
+      },
+    );
     expect(result.status).toBe(InvoiceStatus.PARTIALLY_PAID);
   });
 

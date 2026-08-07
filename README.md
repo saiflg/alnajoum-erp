@@ -1,15 +1,18 @@
 # Alnajoum Travel ERP Platform
 
-**Phase 1** (auth, RBAC, Company/Branch/Staff management) plus four Phase 2
+**Phase 1** (auth, RBAC, Company/Branch/Staff management) plus five Phase 2
 modules: **Customer Management** (self-service profiles + document uploads),
 **Family Management** (dependents per customer, each with their own
 documents), **Flight Booking** (search/book/manage one-way, round-trip, and
 multi-city flights, self-service or staff-assisted, against a swappable
-provider — Mock today, Duffel once credentials exist), and **Payments &
+provider — Mock today, Duffel once credentials exist), **Payments &
 Invoicing** (an invoice is generated automatically the moment a flight
 booking is confirmed; finance staff record cash/bank-transfer/POS/card
-payments against it until it's paid). Built to run entirely on localhost
-during development, with Oracle Cloud deployment deferred to a later phase.
+payments against it until it's paid), and **Notifications** (email sent on
+staff onboarding, booking confirmation, and payment receipt, against a
+swappable provider — Mock today, genuine SMTP once credentials exist).
+Built to run entirely on localhost during development, with Oracle Cloud
+deployment deferred to a later phase.
 
 ## 1. Project structure
 
@@ -208,6 +211,19 @@ alnajoum-erp/
   `payment:record`, while `BRANCH_MANAGER`/`STAFF` hold only `invoice:read`
   — the same separation-of-duties pattern as `flight:cancel` being withheld
   from `STAFF`.
+- **Notifications never block the operation that triggered them**: staff
+  creation, a flight booking, and a payment all call `NotificationsService`
+  after their own write succeeds, and every send attempt — success or
+  failure — is caught and recorded as a `Notification` row rather than
+  thrown. A down mail server should never turn a successful booking into a
+  500. Unlike `DuffelFlightProviderService`, the SMTP notification provider
+  (`SmtpNotificationProviderService`) is a genuine working implementation,
+  not a stub: SMTP is an open protocol usable with any mail server the
+  deployer configures, not a vendor SDK requiring an account to be created
+  on the agency's behalf, so there was nothing blocking a real
+  implementation. `NOTIFICATION_PROVIDER=mock` (default) logs instead of
+  sending, so the whole platform is exercisable without any mail
+  credentials configured.
 
 ## 3. Getting started (localhost)
 
@@ -265,12 +281,13 @@ The seed script creates:
 | `Invoice` | Billing record for a customer: status (ISSUED/PARTIALLY_PAID/PAID/VOID), currency, total, optional link to the `FlightBooking` it was generated from, optional issuing staff member |
 | `InvoiceLineItem` | One charge line on an invoice (description + amount) — one per flight booking today |
 | `Payment` | A staff-recorded payment against an invoice: amount, method (CASH/BANK_TRANSFER/POS/CARD/OTHER), optional note, recording staff member |
+| `Notification` | Append-only send log (mirrors `AuditLog`): type (STAFF_TEMP_PASSWORD/BOOKING_CONFIRMATION/PAYMENT_RECEIPT), recipient, subject/body, status (SENT/FAILED), error message |
 
 Full definitions: [`apps/api/prisma/schema.prisma`](apps/api/prisma/schema.prisma).
 Migrations: `20260731134308_init`, `20260731172525_customer_management`,
 `20260731191249_family_management`, `20260731195715_expand_document_types`,
 `20260801133125_flight_booking`, `20260801182427_flight_multi_city`,
-`20260802124631_payments_invoicing`.
+`20260802124631_payments_invoicing`, `20260804121945_notifications`.
 
 ## 5. APIs implemented
 
@@ -350,6 +367,11 @@ CASH|BANK_TRANSFER|POS|CARD|OTHER, note? }`, `payment:record`; 400 if
 automatically, with a single line item, the moment a flight booking is
 confirmed.
 
+**Notifications** (`/notifications`) — `GET ?type=&status=` (admin/finance
+list of every send attempt, `notification:read`). No send endpoint — a
+notification is only ever produced as a side effect of staff creation, a
+booking, or a payment; there's no way to trigger one directly.
+
 **Audit** (`/audit-logs`) — `GET ?entityType=&entityId=`.
 
 **Health** — `GET /health` (public).
@@ -361,7 +383,7 @@ or roles (`RolesGuard` + `@Roles`).
 
 ## 6. Tests written
 
-- **95 unit tests** (`pnpm test` in `apps/api`): `AuthService` (credential
+- **101 unit tests** (`pnpm test` in `apps/api`): `AuthService` (credential
   validation, lockout after repeated failures, registration conflicts,
   refresh token rejection paths, password change), `RbacService`
   (role CRUD guards, permission aggregation), `RolesGuard` /
@@ -389,8 +411,14 @@ or roles (`RolesGuard` + `@Roles`).
   have a payment or don't exist), `PaymentsService` (rejects payment
   against a VOID or already-PAID invoice, rejects an amount exceeding the
   outstanding balance, records a valid payment and triggers status
-  recomputation, accepts a payment that exactly zeroes the balance).
-- **105 e2e tests** across 6 spec files (`pnpm test:e2e` in `apps/api`,
+  recomputation, accepts a payment that exactly zeroes the balance),
+  `MockNotificationProviderService` (always reports success without
+  sending anything), `NotificationsService` (records a SENT notification
+  on provider success, a FAILED one with the provider's error message on
+  failure, never throws even if the provider itself throws, renders the
+  booking-confirmation template with route/total, lists with optional
+  type/status filters).
+- **111 e2e tests** across 7 spec files (`pnpm test:e2e` in `apps/api`,
   needs Docker running): full journeys against a real, dedicated
   `alnajoum_erp_test` Postgres database —
   - **auth-rbac-flow**: login, `/auth/me`, company/branch/staff creation,
@@ -435,6 +463,12 @@ or roles (`RolesGuard` + `@Roles`).
     cancelling an unpaid booking voiding its invoice, cancelling a
     fully-paid booking leaving its invoice untouched, and filtering the
     admin list by `status`.
+  - **notifications**: creating a staff member records a SENT
+    `STAFF_TEMP_PASSWORD` notification addressed to their email, booking a
+    flight records a SENT `BOOKING_CONFIRMATION`, recording a payment
+    records a SENT `PAYMENT_RECEIPT`, a plain customer is forbidden from
+    the admin list (403, lacks `notification:read`), and the list can be
+    filtered by `status`.
   - Test data uses a per-run random suffix so the suite is safely
     re-runnable without ever needing a destructive database reset.
 - **Frontend**: manually verified in-browser (see below) — no frontend
@@ -590,6 +624,20 @@ consistent with how every other permission in the system already
 behaves (not a new limitation introduced here), but it's easy to trip
 over when testing locally against a long-lived dev session.
 
+Notifications: hit the same JWT-permissions-cached-at-login gotcha again
+— the dev database's `FINANCE_OFFICER`/`COMPANY_ADMIN` roles needed a
+reseed to pick up `notification:read`, and a long-lived local session had
+to log out and back in to pick up the new grant, confirmed directly
+(decoded the fresh JWT and saw `notification:read` present) rather than
+guessed at. Confirmed via the API that a staff creation, a flight
+booking, and a payment each produce a `SENT` `Notification` row against
+the mock provider. The `/admin/notifications` and Finance
+`/admin/notifications` nav entries were confirmed to render for the
+correct roles; a full in-browser click-through of the notifications list
+page itself (expand-to-see-body, filter dropdowns) was not completed
+before development moved on to the public website — the 101 unit + 111
+e2e tests are the primary evidence of correctness for this module.
+
 ## 9. Remaining tasks (explicitly out of scope so far)
 
 - Forced password change on first staff login; email/SMS delivery of
@@ -651,10 +699,10 @@ over when testing locally against a long-lived dev session.
 
 ## 11. Recommendations for what's next
 
-1. Wire up the Notifications module (email/SMS/WhatsApp) so staff
-   onboarding and password resets don't rely on manually relayed
-   temporary passwords, and so an invoice/payment receipt can actually
-   reach a customer instead of only being visible in the portal.
+1. Build the public marketing website (`apps/web/src/app/(marketing)` or
+   similar) — the original spec called for a full multi-page public site;
+   today only the authenticated portal/admin/staff/finance shells exist.
+   This is the current focus.
 2. Introduce Playwright for frontend e2e coverage once there are
    real portal features worth testing beyond CRUD forms.
 3. Integrate a real online payment gateway (Paystack/Flutterwave are the
@@ -663,14 +711,22 @@ over when testing locally against a long-lived dev session.
    decouples Duffel from the booking flow — today every payment is
    staff-recorded (cash/bank transfer/POS/card typed in after the fact),
    with no customer-initiated checkout.
-4. Begin the Hotel/Hajj/Umrah booking modules behind the existing
+4. Add SMS/WhatsApp as a second `NotificationProviderPort` channel
+   alongside email (Termii/Africa's Talking are the standard choices for
+   a Nigeria-based agency) — the port is already channel-agnostic in
+   spirit, just email-only in practice today.
+5. Begin the Hotel/Hajj/Umrah booking modules behind the existing
    RBAC/permission system, reusing the same provider-abstraction and
    auto-invoice-on-confirmation patterns established for flights —
    `Customer` and `FamilyMember` are already in place as the traveler
    records those bookings will reference. Add `hotel:*` / `hajj:*`
    permission keys following the established `<module>:<action>`
    convention.
-5. Add a document verification status (`PENDING`/`APPROVED`/`REJECTED`)
+6. Add a document verification status (`PENDING`/`APPROVED`/`REJECTED`)
    to `CustomerDocument`/`FamilyMemberDocument` once a KYC review
    workflow is needed — the current schema deliberately leaves this out
    until there's a concrete reviewer UI to attach it to.
+7. Deploy to Oracle Cloud Free Tier once the public website exists —
+   an Always Free Ampere A1 compute instance (4 OCPU/24GB, enough for
+   Postgres + Redis + both Node apps) is the natural target; see the
+   deployment guide once it's written.
