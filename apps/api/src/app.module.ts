@@ -13,6 +13,7 @@ import { AuditModule } from './modules/audit/audit.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { BranchModule } from './modules/branch/branch.module';
 import { CompanyModule } from './modules/company/company.module';
+import { ContactModule } from './modules/contact/contact.module';
 import { CustomersModule } from './modules/customers/customers.module';
 import { FlightsModule } from './modules/flights/flights.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
@@ -38,6 +39,7 @@ import { UsersModule } from './modules/users/users.module';
     NotificationsModule,
     PaymentsModule,
     FlightsModule,
+    ContactModule,
   ],
   controllers: [AppController],
   providers: [

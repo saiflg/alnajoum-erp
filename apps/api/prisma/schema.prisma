@@ -544,6 +544,7 @@ enum NotificationType {
   STAFF_TEMP_PASSWORD
   BOOKING_CONFIRMATION
   PAYMENT_RECEIPT
+  CONTACT_MESSAGE
 }
 
 enum NotificationStatus {

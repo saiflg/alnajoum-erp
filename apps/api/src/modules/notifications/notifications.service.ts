@@ -1,4 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { NotificationStatus, NotificationType } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { NOTIFICATION_PROVIDER } from './providers/notification-provider.port';
@@ -20,12 +21,20 @@ interface PaymentReceiptDetails {
   currency: string;
 }
 
+interface ContactMessageDetails {
+  name: string;
+  email: string;
+  subject: string;
+  message: string;
+}
+
 @Injectable()
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly configService: ConfigService,
     @Inject(NOTIFICATION_PROVIDER)
     private readonly provider: NotificationProviderPort,
   ) {}
@@ -115,6 +124,21 @@ export class NotificationsService {
       `Remaining balance: ${receipt.currency} ${receipt.balance}`,
     ].join('\n');
     await this.send(NotificationType.PAYMENT_RECEIPT, email, subject, body);
+  }
+
+  /** Public contact form submission — emails the agency, not the visitor. */
+  async sendContactMessage(details: ContactMessageDetails): Promise<void> {
+    const recipient = this.configService.get<string>(
+      'CONTACT_RECIPIENT_EMAIL',
+      'info@alnajoum.travel',
+    );
+    const subject = `Website contact: ${details.subject}`;
+    const body = [
+      `From: ${details.name} <${details.email}>`,
+      '',
+      details.message,
+    ].join('\n');
+    await this.send(NotificationType.CONTACT_MESSAGE, recipient, subject, body);
   }
 
   listAll(filters: { type?: NotificationType; status?: NotificationStatus }) {

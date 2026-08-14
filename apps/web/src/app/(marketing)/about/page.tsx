@@ -1,0 +1,65 @@
+'use client';
+
+import { Reveal } from '@/components/marketing/Reveal';
+
+const VALUES = [
+  {
+    title: 'Built on a real platform',
+    body: 'Every feature you see — bookings, invoices, payments — runs on the same production-grade API our staff use internally. Nothing here is a mockup.',
+  },
+  {
+    title: 'Transparent by default',
+    body: 'You can always see exactly what you owe, what you’ve paid, and the status of every booking — no phone calls required.',
+  },
+  {
+    title: 'Family-first design',
+    body: 'Travel in Nigeria is rarely solo. We built family and dependent management as a first-class feature, not an afterthought.',
+  },
+  {
+    title: 'Growing deliberately',
+    body: 'We ship one module at a time, fully tested, rather than promising everything at once. Flights and family travel are live; more is on the way.',
+  },
+];
+
+export default function AboutPage() {
+  return (
+    <div className="mx-auto max-w-4xl px-4 py-20 sm:px-6 lg:px-8">
+      <Reveal className="text-center">
+        <span className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-4 py-1.5 text-xs font-medium text-amber-700">
+          About Alnajoum Travel
+        </span>
+        <h1 className="mt-6 text-4xl font-bold tracking-tight text-slate-900 sm:text-5xl">
+          A travel agency platform, built the way it should be run
+        </h1>
+        <p className="mx-auto mt-6 max-w-2xl text-lg text-slate-600">
+          Alnajoum Travel is a Nigeria-based travel agency ERP: one platform for
+          customers, staff, and finance, covering booking, invoicing, and payment
+          collection under a single, properly-permissioned system.
+        </p>
+      </Reveal>
+
+      <Reveal delay={0.1} className="mt-16 rounded-2xl border border-slate-200 bg-slate-50 p-8">
+        <h2 className="text-xl font-semibold text-slate-900">Our story</h2>
+        <p className="mt-4 text-slate-600">
+          We started by asking a simple question: why do travel bookings, family
+          records, and invoicing usually live in three different systems that
+          don&apos;t talk to each other? Alnajoum Travel exists to close that gap —
+          a single platform where a customer&apos;s profile, their family members,
+          their bookings, and their invoices are always in sync, and where staff
+          only ever see what their role allows them to.
+        </p>
+      </Reveal>
+
+      <div className="mt-16 grid gap-6 sm:grid-cols-2">
+        {VALUES.map((value, i) => (
+          <Reveal key={value.title} delay={i * 0.08}>
+            <div className="h-full rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+              <h3 className="text-base font-semibold text-slate-900">{value.title}</h3>
+              <p className="mt-2 text-sm text-slate-600">{value.body}</p>
+            </div>
+          </Reveal>
+        ))}
+      </div>
+    </div>
+  );
+}

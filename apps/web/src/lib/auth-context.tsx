@@ -4,10 +4,19 @@ import { createContext, useCallback, useContext, useEffect, useState } from 'rea
 import { apiRequest, ApiError } from './api';
 import { CurrentUser } from './types';
 
+interface RegisterInput {
+  email: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+  phone?: string;
+}
+
 interface AuthContextValue {
   user: CurrentUser | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<CurrentUser>;
+  register: (input: RegisterInput) => Promise<CurrentUser>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
@@ -59,13 +68,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return me;
   }, []);
 
+  const register = useCallback(async (input: RegisterInput) => {
+    await apiRequest('/auth/register', {
+      method: 'POST',
+      body: input,
+      retryOn401: false,
+    });
+    const me = await apiRequest<CurrentUser>('/auth/me');
+    setUser(me);
+    return me;
+  }, []);
+
   const logout = useCallback(async () => {
     await apiRequest('/auth/logout', { method: 'POST', retryOn401: false }).catch(() => undefined);
     setUser(null);
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, refreshUser }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

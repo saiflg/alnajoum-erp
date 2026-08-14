@@ -41,7 +41,7 @@ async function findNotification(
     .get(`/api/v1/notifications?type=${type}`)
     .set('Authorization', `Bearer ${adminToken}`)
     .expect(200);
-  return (res.body.data as Array<{ recipient: string }>).find(
+  return (res.body.data as Array<{ recipient: string; status: string }>).find(
     (n) => n.recipient === recipient,
   );
 }

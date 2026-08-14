@@ -1,7 +1,7 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
-import { FormEvent, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { FormEvent, Suspense, useState } from 'react';
 import { AppShell } from '@/components/AppShell';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { apiRequest, ApiError } from '@/lib/api';
@@ -24,10 +24,22 @@ function emptyLeg(): FlightLegCriteria {
   return { origin: '', destination: '', departureDate: '' };
 }
 
-export default function FlightSearchPage() {
+function FlightSearchForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [tripType, setTripType] = useState<TripType>('ONE_WAY');
-  const [legs, setLegs] = useState<FlightLegCriteria[]>([emptyLeg()]);
+  // Prefills from the marketing site's search teaser, carried through
+  // registration/login (?origin=&destination=&date=) — read once at
+  // initialization rather than via an effect, since the URL is already
+  // known on first render and doesn't need to "synchronize" afterward.
+  const [legs, setLegs] = useState<FlightLegCriteria[]>(() => {
+    const origin = searchParams.get('origin');
+    const destination = searchParams.get('destination');
+    const date = searchParams.get('date');
+    return origin || destination || date
+      ? [{ origin: origin ?? '', destination: destination ?? '', departureDate: date ?? '' }]
+      : [emptyLeg()];
+  });
   const [returnDate, setReturnDate] = useState('');
   const [adults, setAdults] = useState(1);
   const [children, setChildren] = useState(0);
@@ -306,5 +318,13 @@ export default function FlightSearchPage() {
         )}
       </AppShell>
     </ProtectedRoute>
+  );
+}
+
+export default function FlightSearchPage() {
+  return (
+    <Suspense fallback={null}>
+      <FlightSearchForm />
+    </Suspense>
   );
 }

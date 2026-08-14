@@ -1,0 +1,380 @@
+'use client';
+
+import { motion } from 'framer-motion';
+import Link from 'next/link';
+import { AnimatedCounter } from '@/components/marketing/AnimatedCounter';
+import { FlightSearchTeaser } from '@/components/marketing/FlightSearchTeaser';
+import { Reveal } from '@/components/marketing/Reveal';
+
+const STATS = [
+  { target: 4, suffix: '', label: 'Core modules live today' },
+  { target: 6, suffix: '', label: 'Nigerian & partner airlines' },
+  { target: 100, suffix: '%', label: 'Bookings backed by a real API' },
+  { target: 24, suffix: '/7', label: 'Portal access, anywhere' },
+];
+
+const SERVICES = [
+  {
+    id: 'flights',
+    title: 'Flight Booking',
+    status: 'Live',
+    description:
+      'Search and book one-way, round-trip, or multi-city flights across major Nigerian and international carriers, with an auto-generated invoice the moment your booking is confirmed.',
+    icon: (
+      <path d="M22 16.5v-2l-8.5-5V4a1.5 1.5 0 0 0-3 0v5.5L2 14.5v2l8.5-2.6V19l-2.5 1.8V22l3.5-1 3.5 1v-1.2L12.5 19v-5.1z" />
+    ),
+  },
+  {
+    id: 'family',
+    title: 'Family Travel Management',
+    status: 'Live',
+    description:
+      'Add dependents to your profile once, keep their documents on file, and book flights for the whole family without re-entering their details every time.',
+    icon: (
+      <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z" />
+    ),
+  },
+  {
+    id: 'hotels',
+    title: 'Hotel Booking',
+    status: 'Coming Soon',
+    description:
+      'Domestic and international hotel stays, booked and invoiced the same way flights are today — on the roadmap now that the provider-abstraction pattern is proven.',
+    icon: (
+      <path d="M7 13c1.66 0 3-1.34 3-3S8.66 7 7 7s-3 1.34-3 3 1.34 3 3 3zm12-6h-8v7H3V5H1v15h2v-3h18v3h2v-9c0-2.21-1.79-4-4-4z" />
+    ),
+  },
+  {
+    id: 'visa',
+    title: 'Visa Processing',
+    status: 'Coming Soon',
+    description:
+      'Document collection and status tracking for visa applications, building on the same passport/document upload pipeline already live for customer profiles.',
+    icon: (
+      <path d="M20 3H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zM9 17H7v-7h2zm4 0h-2V7h2zm4 0h-2v-4h2z" />
+    ),
+  },
+  {
+    id: 'hajj',
+    title: 'Hajj & Umrah Packages',
+    status: 'Coming Soon',
+    description:
+      'End-to-end pilgrimage packages — flights, accommodation, and group coordination — for Nigerian pilgrims traveling to Makkah and Madinah.',
+    icon: (
+      <path d="M12 2 4 7v2h16V7zM4 11v9h4v-6h8v6h4v-9z" />
+    ),
+  },
+  {
+    id: 'corporate',
+    title: 'Corporate Travel',
+    status: 'Coming Soon',
+    description:
+      'Company-managed booking and consolidated invoicing for organizations sending staff on business travel — built on the same Company/Branch/Staff structure already live.',
+    icon: (
+      <path d="M12 7V3H2v18h20V7zM6 19H4v-2h2zm0-4H4v-2h2zm0-4H4V9h2zm0-4H4V5h2zm4 12H8v-2h2zm0-4H8v-2h2zm0-4H8V9h2zm0-4H8V5h2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8zm-2-8h-2v2h2zm0 4h-2v2h2z" />
+    ),
+  },
+];
+
+const DESTINATIONS = [
+  { city: 'Lagos', country: 'Nigeria', gradient: 'from-amber-500 to-orange-600' },
+  { city: 'Abuja', country: 'Nigeria', gradient: 'from-emerald-500 to-teal-600' },
+  { city: 'Jeddah', country: 'Saudi Arabia', gradient: 'from-slate-600 to-slate-800' },
+  { city: 'Dubai', country: 'UAE', gradient: 'from-sky-500 to-blue-700' },
+  { city: 'London', country: 'United Kingdom', gradient: 'from-indigo-500 to-violet-700' },
+  { city: 'Cairo', country: 'Egypt', gradient: 'from-yellow-600 to-amber-800' },
+];
+
+const TESTIMONIALS = [
+  {
+    name: 'Amina B.',
+    role: 'Family traveler',
+    quote:
+      'Booking for myself and my kids used to mean re-typing passport details every single time. Now I add them once and every future booking just works.',
+  },
+  {
+    name: 'Tunde O.',
+    role: 'Frequent flyer',
+    quote:
+      'I can see my invoice and payment status the moment a flight is confirmed — no waiting on a call back to know what I owe.',
+  },
+  {
+    name: 'Chidinma A.',
+    role: 'Corporate travel coordinator',
+    quote:
+      'Having staff and customer accounts on one platform, with proper role permissions, is exactly what our back office needed.',
+  },
+];
+
+function FadeIn({ children }: { children: React.ReactNode }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 24 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
+export default function MarketingHomePage() {
+  return (
+    <>
+      {/* Hero */}
+      <section className="relative overflow-hidden bg-slate-900 pb-28 pt-20 sm:pb-36 sm:pt-28">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 opacity-40"
+          style={{
+            background:
+              'radial-gradient(60% 50% at 50% 0%, rgba(245,158,11,0.25) 0%, rgba(15,23,42,0) 70%)',
+          }}
+        />
+        <motion.div
+          aria-hidden
+          className="pointer-events-none absolute -right-24 top-24 h-72 w-72 rounded-full bg-amber-500/10 blur-3xl"
+          animate={{ y: [0, 20, 0] }}
+          transition={{ duration: 8, repeat: Infinity, ease: 'easeInOut' }}
+        />
+        <motion.div
+          aria-hidden
+          className="pointer-events-none absolute -left-24 top-64 h-72 w-72 rounded-full bg-sky-500/10 blur-3xl"
+          animate={{ y: [0, -20, 0] }}
+          transition={{ duration: 9, repeat: Infinity, ease: 'easeInOut' }}
+        />
+
+        <div className="relative mx-auto max-w-4xl px-4 text-center sm:px-6 lg:px-8">
+          <FadeIn>
+            <span className="inline-flex items-center gap-2 rounded-full border border-amber-400/30 bg-amber-400/10 px-4 py-1.5 text-xs font-medium text-amber-300">
+              Built for Nigerian travelers
+            </span>
+          </FadeIn>
+          <motion.h1
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.7, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
+            className="mt-6 text-4xl font-bold tracking-tight text-white sm:text-6xl"
+          >
+            Travel, booked and billed
+            <span className="text-amber-400"> the right way.</span>
+          </motion.h1>
+          <motion.p
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.7, delay: 0.2, ease: [0.22, 1, 0.36, 1] }}
+            className="mx-auto mt-6 max-w-2xl text-lg text-slate-300"
+          >
+            Alnajoum Travel brings flights, family travel, invoicing, and payments into
+            one platform — real accounts, real bookings, real invoices, not a demo.
+          </motion.p>
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.7, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
+            className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row"
+          >
+            <Link
+              href="/register"
+              className="rounded-full bg-amber-500 px-7 py-3 text-sm font-semibold text-slate-900 shadow-lg shadow-amber-500/30 transition-transform hover:scale-105 hover:bg-amber-400"
+            >
+              Create your free account
+            </Link>
+            <Link
+              href="/services"
+              className="rounded-full border border-white/20 px-7 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/10"
+            >
+              Explore services
+            </Link>
+          </motion.div>
+
+          <FlightSearchTeaser />
+        </div>
+      </section>
+
+      {/* Stats */}
+      <section className="border-b border-slate-100 bg-white py-14">
+        <div className="mx-auto grid max-w-6xl grid-cols-2 gap-8 px-4 sm:px-6 md:grid-cols-4 lg:px-8">
+          {STATS.map((stat, i) => (
+            <Reveal key={stat.label} delay={i * 0.08} className="text-center">
+              <p className="text-3xl font-bold text-slate-900 sm:text-4xl">
+                <AnimatedCounter target={stat.target} suffix={stat.suffix} />
+              </p>
+              <p className="mt-1 text-sm text-slate-500">{stat.label}</p>
+            </Reveal>
+          ))}
+        </div>
+      </section>
+
+      {/* Services */}
+      <section id="services" className="bg-slate-50 py-24">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+          <Reveal className="mx-auto max-w-2xl text-center">
+            <h2 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
+              Everything a modern travel agency needs
+            </h2>
+            <p className="mt-4 text-slate-600">
+              Flights and family travel are live today, running on the same real
+              booking and invoicing engine that powers every module we add next.
+            </p>
+          </Reveal>
+
+          <div className="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {SERVICES.map((service, i) => (
+              <Reveal key={service.id} delay={(i % 3) * 0.08}>
+                <motion.div
+                  whileHover={{ y: -6 }}
+                  transition={{ duration: 0.25 }}
+                  className="group h-full rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-shadow hover:shadow-lg"
+                >
+                  <div className="flex items-start justify-between">
+                    <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-900 text-amber-400">
+                      <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5">
+                        {service.icon}
+                      </svg>
+                    </span>
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                        service.status === 'Live'
+                          ? 'bg-emerald-100 text-emerald-700'
+                          : 'bg-slate-100 text-slate-500'
+                      }`}
+                    >
+                      {service.status}
+                    </span>
+                  </div>
+                  <h3 className="mt-4 text-lg font-semibold text-slate-900">
+                    {service.title}
+                  </h3>
+                  <p className="mt-2 text-sm text-slate-600">{service.description}</p>
+                </motion.div>
+              </Reveal>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Why choose us */}
+      <section className="bg-white py-24">
+        <div className="mx-auto grid max-w-6xl gap-12 px-4 sm:px-6 lg:grid-cols-2 lg:px-8">
+          <Reveal>
+            <h2 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
+              Why travelers choose Alnajoum
+            </h2>
+            <p className="mt-4 max-w-lg text-slate-600">
+              We built the booking engine first, the marketing after — so what you see
+              here is backed by a real, tested API, not static mockups.
+            </p>
+          </Reveal>
+
+          <div className="grid gap-6 sm:grid-cols-2">
+            {[
+              {
+                title: 'Real invoices, automatically',
+                body: 'Every confirmed booking generates an invoice instantly — no manual paperwork, no waiting.',
+              },
+              {
+                title: 'Family accounts, done right',
+                body: 'Add dependents once with their documents on file, then book for the whole family in one flow.',
+              },
+              {
+                title: 'Transparent payments',
+                body: 'Track exactly what you’ve paid and what’s outstanding on every invoice, in real time.',
+              },
+              {
+                title: 'Role-based staff access',
+                body: 'From branch managers to finance officers, every staff role sees exactly what they need — nothing more.',
+              },
+            ].map((item, i) => (
+              <Reveal key={item.title} delay={i * 0.08}>
+                <div className="rounded-xl border border-slate-100 bg-slate-50 p-5">
+                  <h3 className="text-sm font-semibold text-slate-900">{item.title}</h3>
+                  <p className="mt-2 text-sm text-slate-600">{item.body}</p>
+                </div>
+              </Reveal>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Destinations */}
+      <section className="bg-slate-50 py-24">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+          <Reveal className="mx-auto max-w-2xl text-center">
+            <h2 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
+              Popular destinations
+            </h2>
+            <p className="mt-4 text-slate-600">
+              A sample of routes searchable today through the live mock provider —
+              swap in real fares the moment airline API credentials are connected.
+            </p>
+          </Reveal>
+
+          <div className="mt-14 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {DESTINATIONS.map((dest, i) => (
+              <Reveal key={dest.city} delay={(i % 3) * 0.08}>
+                <motion.div
+                  whileHover={{ scale: 1.03 }}
+                  transition={{ duration: 0.25 }}
+                  className={`flex h-40 flex-col justify-end rounded-2xl bg-gradient-to-br ${dest.gradient} p-5 shadow-md`}
+                >
+                  <p className="text-lg font-semibold text-white">{dest.city}</p>
+                  <p className="text-sm text-white/80">{dest.country}</p>
+                </motion.div>
+              </Reveal>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Testimonials */}
+      <section className="bg-white py-24">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+          <Reveal className="mx-auto max-w-2xl text-center">
+            <h2 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
+              What travelers are saying
+            </h2>
+          </Reveal>
+
+          <div className="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {TESTIMONIALS.map((t, i) => (
+              <Reveal key={t.name} delay={i * 0.08}>
+                <div className="h-full rounded-2xl border border-slate-100 bg-slate-50 p-6">
+                  <p className="text-sm leading-relaxed text-slate-700">“{t.quote}”</p>
+                  <p className="mt-4 text-sm font-semibold text-slate-900">{t.name}</p>
+                  <p className="text-xs text-slate-500">{t.role}</p>
+                </div>
+              </Reveal>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Final CTA */}
+      <section className="bg-slate-900 py-24">
+        <Reveal className="mx-auto max-w-2xl px-4 text-center sm:px-6 lg:px-8">
+          <h2 className="text-3xl font-bold text-white sm:text-4xl">
+            Ready to start your journey?
+          </h2>
+          <p className="mt-4 text-slate-300">
+            Create an account in under a minute and book your first flight today.
+          </p>
+          <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+            <Link
+              href="/register"
+              className="rounded-full bg-amber-500 px-7 py-3 text-sm font-semibold text-slate-900 shadow-lg shadow-amber-500/30 transition-transform hover:scale-105 hover:bg-amber-400"
+            >
+              Get Started Free
+            </Link>
+            <Link
+              href="/contact"
+              className="rounded-full border border-white/20 px-7 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/10"
+            >
+              Talk to us
+            </Link>
+          </div>
+        </Reveal>
+      </section>
+    </>
+  );
+}

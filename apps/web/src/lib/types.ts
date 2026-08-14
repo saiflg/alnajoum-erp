@@ -246,7 +246,8 @@ export interface Invoice {
 export type NotificationType =
   | 'STAFF_TEMP_PASSWORD'
   | 'BOOKING_CONFIRMATION'
-  | 'PAYMENT_RECEIPT';
+  | 'PAYMENT_RECEIPT'
+  | 'CONTACT_MESSAGE';
 export type NotificationStatus = 'SENT' | 'FAILED';
 
 export interface Notification {

@@ -1,3 +1,4 @@
+import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotificationStatus, NotificationType } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
@@ -8,17 +9,22 @@ describe('NotificationsService', () => {
   let service: NotificationsService;
   let prisma: { notification: { create: jest.Mock; findMany: jest.Mock } };
   let provider: { sendEmail: jest.Mock };
+  let configService: { get: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
       notification: { create: jest.fn(), findMany: jest.fn() },
     };
     provider = { sendEmail: jest.fn() };
+    configService = {
+      get: jest.fn((_key: string, fallback?: unknown) => fallback),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         NotificationsService,
         { provide: PrismaService, useValue: prisma },
+        { provide: ConfigService, useValue: configService },
         { provide: NOTIFICATION_PROVIDER, useValue: provider },
       ],
     }).compile();
@@ -116,6 +122,34 @@ describe('NotificationsService', () => {
     expect(prisma.notification.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { status: NotificationStatus.FAILED },
+      }),
+    );
+  });
+
+  it('sends a contact message to the configured agency inbox, not the visitor', async () => {
+    configService.get.mockReturnValue('contact-inbox@example.com');
+    provider.sendEmail.mockResolvedValue({ success: true });
+
+    await service.sendContactMessage({
+      name: 'Ada Lovelace',
+      email: 'ada@example.com',
+      subject: 'Hajj package pricing',
+      message: 'How much for a family of four?',
+    });
+
+    expect(provider.sendEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: 'contact-inbox@example.com',
+        subject: expect.stringContaining('Hajj package pricing'),
+        textBody: expect.stringContaining('ada@example.com'),
+      }),
+    );
+    expect(prisma.notification.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          type: NotificationType.CONTACT_MESSAGE,
+          recipient: 'contact-inbox@example.com',
+        }),
       }),
     );
   });

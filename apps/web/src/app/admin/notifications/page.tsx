@@ -14,6 +14,7 @@ const TYPES: Array<NotificationType | ''> = [
   'STAFF_TEMP_PASSWORD',
   'BOOKING_CONFIRMATION',
   'PAYMENT_RECEIPT',
+  'CONTACT_MESSAGE',
 ];
 const STATUSES: Array<NotificationStatus | ''> = ['', 'SENT', 'FAILED'];
 

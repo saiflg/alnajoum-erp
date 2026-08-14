@@ -87,6 +87,10 @@ class EnvironmentVariables {
   @IsOptional()
   @IsString()
   SMTP_FROM?: string;
+
+  @IsOptional()
+  @IsString()
+  CONTACT_RECIPIENT_EMAIL?: string;
 }
 
 export function validateEnv(config: Record<string, unknown>) {

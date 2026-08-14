@@ -9,10 +9,14 @@ provider — Mock today, Duffel once credentials exist), **Payments &
 Invoicing** (an invoice is generated automatically the moment a flight
 booking is confirmed; finance staff record cash/bank-transfer/POS/card
 payments against it until it's paid), and **Notifications** (email sent on
-staff onboarding, booking confirmation, and payment receipt, against a
-swappable provider — Mock today, genuine SMTP once credentials exist).
-Built to run entirely on localhost during development, with Oracle Cloud
-deployment deferred to a later phase.
+staff onboarding, booking confirmation, payment receipt, and public contact
+form submissions, against a swappable provider — Mock today, genuine SMTP
+once credentials exist). A **public marketing website** (home, services,
+about, contact, self-service registration) sits in front of all of it in
+the same Next.js app, fully wired to the real API — the "Book a flight"
+teaser on the homepage carries a search straight through registration into
+a live, working flight search. Built to run entirely on localhost during
+development, with Oracle Cloud deployment deferred to a later phase.
 
 ## 1. Project structure
 
@@ -44,6 +48,10 @@ alnajoum-erp/
 │   │   │   │   ├── flights/   # search, book, manage flight bookings
 │   │   │   │   │   ├── providers/  # FlightProviderPort + Mock/Duffel(stub) adapters
 │   │   │   │   │   └── dto/
+│   │   │   │   ├── payments/  # invoices + payments, self-service + admin/finance
+│   │   │   │   ├── notifications/  # email send log
+│   │   │   │   │   └── providers/  # NotificationProviderPort + Mock/Smtp adapters
+│   │   │   │   ├── contact/   # public (unauthenticated) contact form endpoint
 │   │   │   │   └── audit/     # audit log read + write
 │   │   │   ├── app.module.ts
 │   │   │   ├── bootstrap.ts   # shared app config (used by main.ts AND e2e tests)
@@ -54,12 +62,14 @@ alnajoum-erp/
 │   └── web/                   # Next.js frontend (App Router, TypeScript, Tailwind)
 │       └── src/
 │           ├── app/
-│           │   ├── login/
-│           │   ├── admin/{dashboard,companies,branches,staff,customers,flights,roles}
+│           │   ├── (marketing)/  # public site: home, about, services, contact
+│           │   ├── privacy/, terms/  # legal pages, linked from the footer
+│           │   ├── login/, register/
+│           │   ├── admin/{dashboard,companies,branches,staff,customers,flights,invoices,notifications,roles}
 │           │   ├── branch/dashboard, staff/dashboard,
-│           │   │   finance/dashboard, portal/{dashboard,profile,family,flights}
-│           │   └── layout.tsx, page.tsx
-│           ├── components/    # AppShell, ProtectedRoute, CountrySelect
+│           │   │   finance/dashboard, portal/{dashboard,profile,family,flights,invoices}
+│           │   └── layout.tsx
+│           ├── components/    # AppShell, ProtectedRoute, CountrySelect, marketing/*
 │           └── lib/           # api client, auth context, types, format helpers
 └── packages/                  # reserved for future shared libraries
 ```
@@ -224,6 +234,42 @@ alnajoum-erp/
   implementation. `NOTIFICATION_PROVIDER=mock` (default) logs instead of
   sending, so the whole platform is exercisable without any mail
   credentials configured.
+- **The public marketing site is a Next.js route group in the same app,
+  not a separate project**: `(marketing)` shares the existing `AuthProvider`
+  and `apiRequest`/cookie-auth plumbing that `/login` and every
+  `/portal`/`/admin` page already use — "Log in" and "Get Started" on the
+  homepage are the real, working auth flow, not placeholder links to a
+  page that doesn't exist yet.
+- **The homepage flight-search teaser is a genuine lead-through, not a
+  fake demo widget**: since every route except a short public allowlist
+  requires auth, an unauthenticated visitor's search can't hit
+  `/flights/search` directly. Submitting the teaser instead carries
+  `origin`/`destination`/`date` as query params through `/register` (or
+  straight to the real search page if already signed in) — registration
+  succeeds, and the visitor lands on `/portal/flights/search` with their
+  original search already filled in and already run against the live
+  mock provider. A real bug surfaced building this: the register page's
+  "already signed in? bounce to dashboard" effect raced the post-register
+  redirect and won, sending new users to `/portal/dashboard` instead of
+  their intended search — fixed with a ref that suppresses the generic
+  redirect for the duration of an in-flight registration.
+- **The contact form is the one truly public write endpoint** in the API
+  (`POST /contact`, `@Public()`), reusing `NotificationsService` to email
+  the agency's inbox (not the visitor) and recording a `CONTACT_MESSAGE`
+  `Notification` row — visible in the same admin notifications log as
+  every other send, so "did the message actually go out" is answerable
+  without needing real inbox access.
+- **The footer ships with real, complete content rather than a stripped-
+  down placeholder**: expanded service/company links, a "Legal" column
+  linking to genuine `/privacy` and `/terms` pages (each carrying real
+  NDPA/NDPR-aware boilerplate and an explicit "review before production"
+  note, since this is a starting template rather than counsel-reviewed
+  legal text), clickable `mailto:`/`tel:` contact details, business
+  hours, and social-icon placeholders (`href="#"`, ready to point at the
+  agency's real profiles once they exist). The intent was to make the
+  footer something the business can hand off and edit — real headings,
+  real structure, real (if placeholder) contact details — not a `TODO`
+  banner.
 
 ## 3. Getting started (localhost)
 
@@ -281,13 +327,14 @@ The seed script creates:
 | `Invoice` | Billing record for a customer: status (ISSUED/PARTIALLY_PAID/PAID/VOID), currency, total, optional link to the `FlightBooking` it was generated from, optional issuing staff member |
 | `InvoiceLineItem` | One charge line on an invoice (description + amount) — one per flight booking today |
 | `Payment` | A staff-recorded payment against an invoice: amount, method (CASH/BANK_TRANSFER/POS/CARD/OTHER), optional note, recording staff member |
-| `Notification` | Append-only send log (mirrors `AuditLog`): type (STAFF_TEMP_PASSWORD/BOOKING_CONFIRMATION/PAYMENT_RECEIPT), recipient, subject/body, status (SENT/FAILED), error message |
+| `Notification` | Append-only send log (mirrors `AuditLog`): type (STAFF_TEMP_PASSWORD/BOOKING_CONFIRMATION/PAYMENT_RECEIPT/CONTACT_MESSAGE), recipient, subject/body, status (SENT/FAILED), error message |
 
 Full definitions: [`apps/api/prisma/schema.prisma`](apps/api/prisma/schema.prisma).
 Migrations: `20260731134308_init`, `20260731172525_customer_management`,
 `20260731191249_family_management`, `20260731195715_expand_document_types`,
 `20260801133125_flight_booking`, `20260801182427_flight_multi_city`,
-`20260802124631_payments_invoicing`, `20260804121945_notifications`.
+`20260802124631_payments_invoicing`, `20260804121945_notifications`,
+`20260807182153_contact_message_notification`.
 
 ## 5. APIs implemented
 
@@ -368,22 +415,27 @@ automatically, with a single line item, the moment a flight booking is
 confirmed.
 
 **Notifications** (`/notifications`) — `GET ?type=&status=` (admin/finance
-list of every send attempt, `notification:read`). No send endpoint — a
-notification is only ever produced as a side effect of staff creation, a
-booking, or a payment; there's no way to trigger one directly.
+list of every send attempt, `notification:read`). No admin send endpoint —
+a notification is only ever produced as a side effect of staff creation, a
+booking, a payment, or a public contact form submission.
+
+**Contact** (`/contact`) — `POST` (public, no auth — `{ name, email,
+subject, message }`), emails the agency and records a `CONTACT_MESSAGE`
+notification. The only unauthenticated write route in the API besides
+`auth/register`.
 
 **Audit** (`/audit-logs`) — `GET ?entityType=&entityId=`.
 
 **Health** — `GET /health` (public).
 
-Every route other than `register`/`login`/`refresh`/`logout`/`health`
+Every route other than `register`/`login`/`refresh`/`logout`/`contact`/`health`
 requires a valid access token (`JwtAuthGuard`, global) and, where
 declared, specific permissions (`PermissionsGuard` + `@RequirePermissions`)
 or roles (`RolesGuard` + `@Roles`).
 
 ## 6. Tests written
 
-- **101 unit tests** (`pnpm test` in `apps/api`): `AuthService` (credential
+- **102 unit tests** (`pnpm test` in `apps/api`): `AuthService` (credential
   validation, lockout after repeated failures, registration conflicts,
   refresh token rejection paths, password change), `RbacService`
   (role CRUD guards, permission aggregation), `RolesGuard` /
@@ -417,8 +469,10 @@ or roles (`RolesGuard` + `@Roles`).
   on provider success, a FAILED one with the provider's error message on
   failure, never throws even if the provider itself throws, renders the
   booking-confirmation template with route/total, lists with optional
-  type/status filters).
-- **111 e2e tests** across 7 spec files (`pnpm test:e2e` in `apps/api`,
+  type/status filters, and sends a contact-form submission to the
+  configured agency inbox — not the visitor — with the visitor's own
+  email folded into the message body).
+- **114 e2e tests** across 8 spec files (`pnpm test:e2e` in `apps/api`,
   needs Docker running): full journeys against a real, dedicated
   `alnajoum_erp_test` Postgres database —
   - **auth-rbac-flow**: login, `/auth/me`, company/branch/staff creation,
@@ -469,6 +523,12 @@ or roles (`RolesGuard` + `@Roles`).
     records a SENT `PAYMENT_RECEIPT`, a plain customer is forbidden from
     the admin list (403, lacks `notification:read`), and the list can be
     filtered by `status`.
+  - **contact**: an unauthenticated visitor can submit the public contact
+    form with no auth token at all, the submission records a SENT
+    `CONTACT_MESSAGE` notification visible via the admin notifications
+    list with the visitor's email present in the body, a submission
+    missing required fields is rejected (400), and an invalid email is
+    rejected (400).
   - Test data uses a per-run random suffix so the suite is safely
     re-runnable without ever needing a destructive database reset.
 - **Frontend**: manually verified in-browser (see below) — no frontend
@@ -633,10 +693,55 @@ guessed at. Confirmed via the API that a staff creation, a flight
 booking, and a payment each produce a `SENT` `Notification` row against
 the mock provider. The `/admin/notifications` and Finance
 `/admin/notifications` nav entries were confirmed to render for the
-correct roles; a full in-browser click-through of the notifications list
-page itself (expand-to-see-body, filter dropdowns) was not completed
-before development moved on to the public website — the 101 unit + 111
-e2e tests are the primary evidence of correctness for this module.
+correct roles. A full in-browser click-through of the notifications list
+page (expand-to-see-body, filter dropdowns) *was* later completed as part
+of verifying the contact form below — that pass is also where a missing
+`CONTACT_MESSAGE` option in the type filter's dropdown was caught and
+fixed.
+
+Public marketing website: ran through the entire public site as a fresh,
+unauthenticated visitor. `/` renders the animated hero, scroll-reveal
+sections, and count-up stats correctly; the header shows Login/Register
+links (not "Go to Dashboard") when logged out. Used the homepage's
+"Book a Flight" search teaser (LOS → ABV, a future date) while logged
+out: it redirected to `/register?next=%2Fportal%2Fflights%2Fsearch&origin=LOS&destination=ABV&date=...`
+as expected. The first attempt exposed a real race-condition bug —
+after successful registration the app landed on `/portal/dashboard`
+instead of the intended prefilled search page, because a generic
+"already logged in → redirect to dashboard" effect fired after
+`setUser()` and won the race against the intended `next`-aware redirect
+in the submit handler. Fixed with a `justRegisteredRef` guard so that
+effect only fires for a visitor who was *already* authenticated on page
+load, not one who just registered in the current render cycle. Re-ran
+the exact same flow afterward and confirmed via `read_page` that it
+correctly lands on `/portal/flights/search` with all three fields
+(origin, destination, date) prefilled and a live search already run
+against the real API — not a static page. Also verified the teaser
+redirects straight to the prefilled search (skipping registration) when
+already logged in. Clicked through `/about` and `/services` (including
+the anchor links from the footer resolving to the right section on
+`/services`) and confirmed both render real content, not placeholders.
+Submitted the `/contact` form as a visitor with a real name/email/
+subject/message; confirmed the success state rendered, then logged in
+as the Super Admin and confirmed the exact same message appeared as a
+`SENT` `CONTACT_MESSAGE` row in `/admin/notifications`, with its body
+showing the visitor's name/email and message text when expanded — this
+is also where the type-filter dropdown was found to be missing the
+`CONTACT_MESSAGE` option and fixed. Confirmed a rejected submission
+(missing fields) is blocked client-side before it ever reaches the API.
+Finally, ran the full test suites (102 unit / 114 e2e, all passing),
+`pnpm lint` (clean), and `pnpm build` (clean, after fixing a frontend
+`NotificationType` union that was still missing `'CONTACT_MESSAGE'` and
+failed the production type-check) as the closing check for this phase.
+
+Footer content: scrolled through the full homepage footer and confirmed
+the expanded services list, social icons, `mailto:`/`tel:` links,
+Business hours table, and the new Legal column render correctly; clicked
+through to `/privacy` and `/terms` directly and confirmed both render
+their full section content (title, "last updated" line, the explicit
+review-before-production note, and every numbered section) rather than
+404ing or rendering empty. Re-ran `pnpm lint` and `pnpm build` afterward
+— both stayed clean with the two new routes included in the build output.
 
 ## 9. Remaining tasks (explicitly out of scope so far)
 
@@ -652,9 +757,14 @@ e2e tests are the primary evidence of correctness for this module.
   and delete, matching that the primary account holder manages their own
   uploads) — only family-member documents have an admin upload path,
   since staff often collect those in person.
-- The 22-page public marketing website and the Staff/Admin portal
-  *features* (flights, hotels, visas, Hajj/Umrah, wallets, CRM, etc.) —
-  only the routing shell and role-based redirect exist today.
+- The public marketing website now covers Home/About/Services/Contact
+  plus real customer self-registration, all wired to the live backend —
+  but it's 4 pages, not the originally-specced 22 (e.g. no dedicated
+  per-destination pages, no blog/news, no FAQ, no legal/policy pages).
+  The Staff/Admin portal *feature* pages beyond auth (hotels, visas,
+  Hajj/Umrah, wallets, CRM, etc.) still only have flights/payments/
+  notifications implemented — the rest is routing shell and role-based
+  redirect only.
 - Role/permission management UI beyond read-only viewing (create/edit
   custom roles via the API works; there's no admin screen for it yet).
 - Rate limiting is a flat global default (100 req/min); login-specific
@@ -699,10 +809,17 @@ e2e tests are the primary evidence of correctness for this module.
 
 ## 11. Recommendations for what's next
 
-1. Build the public marketing website (`apps/web/src/app/(marketing)` or
-   similar) — the original spec called for a full multi-page public site;
-   today only the authenticated portal/admin/staff/finance shells exist.
-   This is the current focus.
+1. **Deploy to Oracle Cloud Free Tier** — explicitly requested next by
+   the project owner now that the public marketing site is live and
+   genuinely wired to the real backend (register/login from `/`, real
+   flight search, real contact form). An Always Free Ampere A1 compute
+   instance (4 OCPU/24GB, enough for Postgres + Redis + both Node apps)
+   is the natural target. Needs: a step-by-step provisioning guide
+   (instance shape, VCN/security-list rules for 80/443, a reverse proxy
+   in front of the Next.js and Nest processes, TLS via Let's Encrypt,
+   swapping local-disk document storage for Oracle Cloud Object Storage
+   per the risk noted above, and environment/secrets configuration for
+   production `DATABASE_URL`/`JWT`/`SMTP` values). Not started yet.
 2. Introduce Playwright for frontend e2e coverage once there are
    real portal features worth testing beyond CRUD forms.
 3. Integrate a real online payment gateway (Paystack/Flutterwave are the
@@ -726,7 +843,6 @@ e2e tests are the primary evidence of correctness for this module.
    to `CustomerDocument`/`FamilyMemberDocument` once a KYC review
    workflow is needed — the current schema deliberately leaves this out
    until there's a concrete reviewer UI to attach it to.
-7. Deploy to Oracle Cloud Free Tier once the public website exists —
-   an Always Free Ampere A1 compute instance (4 OCPU/24GB, enough for
-   Postgres + Redis + both Node apps) is the natural target; see the
-   deployment guide once it's written.
+7. Expand the marketing site toward the originally-specced ~22 pages
+   (per-destination landing pages, FAQ, blog/news, legal/privacy/terms)
+   once there's real content to put on them.
