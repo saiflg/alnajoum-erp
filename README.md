@@ -64,6 +64,7 @@ alnajoum-erp/
 │           ├── app/
 │           │   ├── (marketing)/  # public site: home, about, services, contact
 │           │   ├── privacy/, terms/  # legal pages, linked from the footer
+│           │   ├── checkout/mock/  # stand-in hosted checkout page (PAYMENT_PROVIDER=mock)
 │           │   ├── login/, register/
 │           │   ├── admin/{dashboard,companies,branches,staff,customers,flights,invoices,notifications,roles}
 │           │   ├── branch/dashboard, staff/dashboard,
@@ -270,6 +271,33 @@ alnajoum-erp/
   footer something the business can hand off and edit — real headings,
   real structure, real (if placeholder) contact details — not a `TODO`
   banner.
+- **Online checkout via `PaymentProviderPort`**, the same seam pattern as
+  `FlightProviderPort`/`NotificationProviderPort`: `PaymentIntent` records
+  a PENDING row before ever redirecting the customer to the provider, so
+  there's always a reference to reconcile against even if the browser
+  never comes back. `MockPaymentProviderService` (default) sends the
+  customer to a real page in the web app (`/checkout/mock`) that mimics a
+  hosted checkout screen, so the full redirect-out/redirect-back flow is
+  genuinely exercisable — including the "browser never returns, only the
+  webhook confirms it" path — without any vendor account.
+  `PaystackPaymentProviderService` sits in between Duffel and SMTP on the
+  "genuine vs. stub" spectrum: unlike Duffel it's a real, complete
+  implementation against Paystack's public, stable REST API (initialize,
+  verify, and HMAC-SHA512 webhook signature checking), covered by unit
+  tests that mock the HTTP layer to check request/response shapes — but
+  unlike SMTP, it has **not** been exercised against a live account in
+  this environment (that needs a Paystack sign-up only the business owner
+  can do, even for a free test key). Set `PAYMENT_PROVIDER=paystack` plus
+  `PAYSTACK_SECRET_KEY` once ready, and run one real test-mode transaction
+  before trusting it in production.
+- **Payments finalize the same way whether the browser comes back or
+  not**: `PaymentsService.verifyCheckout` (customer-facing, throws on
+  failure so the UI can show an error) and
+  `handleProviderWebhookEvent` (webhook-facing, never throws, so a
+  legitimately failed payment doesn't make Paystack retry forever) both
+  funnel through one private `finalizeIntent`, which is idempotent —
+  whichever path reaches a PENDING intent first wins, and the other is a
+  silent no-op.
 
 ## 3. Getting started (localhost)
 
@@ -326,7 +354,8 @@ The seed script creates:
 | `FlightBookingPassenger` | One passenger on a booking — references a `Customer` or a `FamilyMember` (exactly one), plus a name/DOB/passport snapshot taken at booking time |
 | `Invoice` | Billing record for a customer: status (ISSUED/PARTIALLY_PAID/PAID/VOID), currency, total, optional link to the `FlightBooking` it was generated from, optional issuing staff member |
 | `InvoiceLineItem` | One charge line on an invoice (description + amount) — one per flight booking today |
-| `Payment` | A staff-recorded payment against an invoice: amount, method (CASH/BANK_TRANSFER/POS/CARD/OTHER), optional note, recording staff member |
+| `Payment` | A completed payment against an invoice: amount, method (CASH/BANK_TRANSFER/POS/CARD/OTHER/ONLINE), optional note, recording staff member (null for an ONLINE payment — there's no staff involved) |
+| `PaymentIntent` | One customer-initiated online checkout attempt: invoice/customer, provider transaction reference (unique), provider name, amount/currency, status (PENDING/SUCCEEDED/FAILED) — created before ever redirecting to the provider |
 | `Notification` | Append-only send log (mirrors `AuditLog`): type (STAFF_TEMP_PASSWORD/BOOKING_CONFIRMATION/PAYMENT_RECEIPT/CONTACT_MESSAGE), recipient, subject/body, status (SENT/FAILED), error message |
 
 Full definitions: [`apps/api/prisma/schema.prisma`](apps/api/prisma/schema.prisma).
@@ -334,7 +363,8 @@ Migrations: `20260731134308_init`, `20260731172525_customer_management`,
 `20260731191249_family_management`, `20260731195715_expand_document_types`,
 `20260801133125_flight_booking`, `20260801182427_flight_multi_city`,
 `20260802124631_payments_invoicing`, `20260804121945_notifications`,
-`20260807182153_contact_message_notification`.
+`20260807182153_contact_message_notification`,
+`20260817131848_payment_gateway_checkout`.
 
 ## 5. APIs implemented
 
@@ -404,15 +434,32 @@ cancelled). Admin/staff equivalent under `/flights/bookings`: `POST`
 (view any, `flight:read`), `POST :id/cancel` (cancel any, `flight:cancel`).
 
 **Invoices** — self-service under `/invoices/me`: `GET` (list own), `GET
-:id` (view own, with line items and payments). Admin/finance equivalent
-under `/invoices`: `GET` (list all, optional `?customerId=&status=`,
-`invoice:read`), `GET :id` (view any, `invoice:read`), `POST
-:id/payments` (record a payment — `{ amount, method:
-CASH|BANK_TRANSFER|POS|CARD|OTHER, note? }`, `payment:record`; 400 if
-`amount` exceeds the outstanding balance, 409 against a `VOID` or already
-`PAID` invoice). An invoice is never created directly — one is generated
-automatically, with a single line item, the moment a flight booking is
-confirmed.
+:id` (view own, with line items and payments), `POST :id/checkout`
+(starts an online checkout for the outstanding balance — 403 if the
+invoice isn't the caller's own, 409 if `VOID`/already `PAID`/no
+outstanding balance — returns `{ authorizationUrl, reference }`, where
+`authorizationUrl` is where to redirect the browser), `POST
+:id/checkout/verify` (confirms the outcome once the browser returns —
+`{ reference }`; idempotent, safe to call again on a page refresh; 409 if
+the provider reports failure or an amount mismatch). Admin/finance
+equivalent under `/invoices`: `GET` (list all, optional
+`?customerId=&status=`, `invoice:read`), `GET :id` (view any,
+`invoice:read`), `POST :id/payments` (record a payment in person — `{
+amount, method: CASH|BANK_TRANSFER|POS|CARD|OTHER, note? }`,
+`payment:record`; 400 if `amount` exceeds the outstanding balance, 409
+against a `VOID` or already `PAID` invoice — `ONLINE` isn't a valid value
+here, since that method is only ever set by the checkout flow itself). An
+invoice is never created directly — one is generated automatically, with
+a single line item, the moment a flight booking is confirmed.
+
+**Payment gateway webhook** (`/webhooks/paystack`) — `POST` (public, but
+every request's `x-paystack-signature` header is checked against
+`PAYSTACK_SECRET_KEY` before anything else happens — an invalid or
+missing signature is a 401, not silently ignored). Only reacts to
+`charge.success` events; everything else is 200'd and ignored. Reuses the
+exact same finalization path as the customer-facing verify endpoint, so
+whichever one reaches a given payment first wins and the other is a
+no-op — see the architecture-decisions note above.
 
 **Notifications** (`/notifications`) — `GET ?type=&status=` (admin/finance
 list of every send attempt, `notification:read`). No admin send endpoint —
@@ -422,20 +469,21 @@ booking, a payment, or a public contact form submission.
 **Contact** (`/contact`) — `POST` (public, no auth — `{ name, email,
 subject, message }`), emails the agency and records a `CONTACT_MESSAGE`
 notification. The only unauthenticated write route in the API besides
-`auth/register`.
+`auth/register` and the Paystack webhook above.
 
 **Audit** (`/audit-logs`) — `GET ?entityType=&entityId=`.
 
 **Health** — `GET /health` (public).
 
-Every route other than `register`/`login`/`refresh`/`logout`/`contact`/`health`
+Every route other than
+`register`/`login`/`refresh`/`logout`/`contact`/`health`/`webhooks/paystack`
 requires a valid access token (`JwtAuthGuard`, global) and, where
 declared, specific permissions (`PermissionsGuard` + `@RequirePermissions`)
 or roles (`RolesGuard` + `@Roles`).
 
 ## 6. Tests written
 
-- **102 unit tests** (`pnpm test` in `apps/api`): `AuthService` (credential
+- **127 unit tests** (`pnpm test` in `apps/api`): `AuthService` (credential
   validation, lockout after repeated failures, registration conflicts,
   refresh token rejection paths, password change), `RbacService`
   (role CRUD guards, permission aggregation), `RolesGuard` /
@@ -471,8 +519,23 @@ or roles (`RolesGuard` + `@Roles`).
   booking-confirmation template with route/total, lists with optional
   type/status filters, and sends a contact-form submission to the
   configured agency inbox — not the visitor — with the visitor's own
-  email folded into the message body).
-- **114 e2e tests** across 8 spec files (`pnpm test:e2e` in `apps/api`,
+  email folded into the message body), `PaymentsService.initiateCheckout`/
+  `verifyCheckout`/`handleProviderWebhookEvent` (ownership and
+  invoice-status guards on starting a checkout, idempotent re-verification
+  of an already-SUCCEEDED intent without re-calling the provider, rejects
+  a provider-reported failure and a provider/intent amount mismatch — both
+  flipping the intent to FAILED without creating a `Payment` row — records
+  an `ONLINE` payment with `recordedByStaffId: null` and emails a receipt
+  on success, and the webhook path silently no-ops for an unrecognized
+  reference or an already-SUCCEEDED intent rather than throwing),
+  `MockPaymentProviderService` (builds the mock checkout URL correctly,
+  always reports success), `PaystackPaymentProviderService` (mocks the
+  HTTP layer to check the real request shape sent to Paystack — Naira
+  converted to kobo, headers, body — and that a response is parsed back
+  correctly in both directions, plus the HMAC-SHA512 webhook signature
+  check accepting a correctly-signed body and rejecting a wrong-key or
+  missing signature).
+- **122 e2e tests** across 9 spec files (`pnpm test:e2e` in `apps/api`,
   needs Docker running): full journeys against a real, dedicated
   `alnajoum_erp_test` Postgres database —
   - **auth-rbac-flow**: login, `/auth/me`, company/branch/staff creation,
@@ -529,6 +592,18 @@ or roles (`RolesGuard` + `@Roles`).
     list with the visitor's email present in the body, a submission
     missing required fields is rejected (400), and an invalid email is
     rejected (400).
+  - **payment-gateway**: against the mock provider — starting a checkout
+    returns a `/checkout/mock` URL carrying the reference/amount/callback,
+    a different customer is forbidden from starting checkout on someone
+    else's invoice (403), verifying confirms the checkout, records an
+    `ONLINE` payment, and marks the invoice `PAID`, re-verifying the same
+    reference is idempotent (no duplicate payment row), starting a new
+    checkout once there's no balance left is rejected (409); and against a
+    real HMAC-signed payload — a webhook with an invalid signature is
+    rejected (401), a correctly-signed `charge.success` webhook finalizes
+    the payment on its own with no customer-facing verify call at all
+    (covering the "browser never comes back" path), and an unrecognized
+    event type is 200'd and ignored rather than erroring.
   - Test data uses a per-run random suffix so the suite is safely
     re-runnable without ever needing a destructive database reset.
 - **Frontend**: manually verified in-browser (see below) — no frontend
@@ -743,6 +818,29 @@ review-before-production note, and every numbered section) rather than
 404ing or rendering empty. Re-ran `pnpm lint` and `pnpm build` afterward
 — both stayed clean with the two new routes included in the build output.
 
+Online payment checkout: a full, real browser walkthrough against the
+mock provider, not just curl/tests — registered a fresh customer, logged
+in through the actual `/login` form, searched and booked a flight, opened
+the resulting invoice on `/portal/invoices/[id]` and confirmed the "Pay
+online" button and balance-due amount render correctly. Clicked it,
+confirmed the browser actually redirected to `/checkout/mock` with the
+correct amount/currency/reference in the URL and rendered on the page,
+clicked "Simulate successful payment", and confirmed it landed back on
+the invoice page with the `checkout_reference` query param already
+stripped from the URL, a "Payment confirmed — thank you!" banner, status
+flipped to `PAID`, a payment row with method `ONLINE` and the matching
+reference/amount, and the "Pay online" button correctly gone now that the
+balance is zero. Cross-checked as the bootstrap Super Admin via the API
+that `/admin/notifications` (queried directly) recorded a matching `SENT`
+`PAYMENT_RECEIPT` for the same amount. The webhook-only path (browser
+never returns) and the various rejection cases (cross-customer, wrong
+signature, amount mismatch, double-checkout) were exercised through the
+e2e tests instead, which assert against the real API/database rather than
+a mock — the in-app browser preview pane wasn't compositing screenshots
+in this session, so those paths were confirmed via test assertions and
+direct API calls (checked response bodies and status codes) rather than
+visually.
+
 ## 9. Remaining tasks (explicitly out of scope so far)
 
 - Forced password change on first staff login; email/SMS delivery of
@@ -775,6 +873,14 @@ review-before-production note, and every numbered section) rather than
 - **Temporary staff passwords are returned once, in-band, with no
   delivery channel** — acceptable for admin testing today, but must not
   reach production before the Notifications module ships.
+- **`PaystackPaymentProviderService` has never been run against a live
+  Paystack account** — it's a genuine, complete implementation of
+  Paystack's documented API (not a `NotImplementedException` stub like
+  Duffel), and its request/response handling is unit-tested against a
+  mocked HTTP layer, but that's not the same as a real test-mode
+  transaction. `PAYMENT_PROVIDER` defaults to `mock` specifically so
+  nothing here is silently relying on untested code — see recommendation
+  #1 above before switching a real deployment to `paystack`.
 - **All documents (customer and family member) live on local disk**, not
   object storage — fine for one developer on localhost, but doesn't
   survive container restarts in a multi-instance deployment. Must move
@@ -809,40 +915,50 @@ review-before-production note, and every numbered section) rather than
 
 ## 11. Recommendations for what's next
 
-1. **Deploy to Oracle Cloud Free Tier** — explicitly requested next by
-   the project owner now that the public marketing site is live and
-   genuinely wired to the real backend (register/login from `/`, real
-   flight search, real contact form). An Always Free Ampere A1 compute
-   instance (4 OCPU/24GB, enough for Postgres + Redis + both Node apps)
-   is the natural target. Needs: a step-by-step provisioning guide
-   (instance shape, VCN/security-list rules for 80/443, a reverse proxy
-   in front of the Next.js and Nest processes, TLS via Let's Encrypt,
-   swapping local-disk document storage for Oracle Cloud Object Storage
-   per the risk noted above, and environment/secrets configuration for
-   production `DATABASE_URL`/`JWT`/`SMTP` values). Not started yet.
-2. Introduce Playwright for frontend e2e coverage once there are
+1. **Get real Paystack test credentials and run one live checkout** —
+   `PaymentProviderPort`/`MockPaymentProviderService`/
+   `PaystackPaymentProviderService`/`PaymentIntent` are all built and the
+   mock path is verified end-to-end (see Manual verification above), but
+   `PaystackPaymentProviderService` itself has only been checked against
+   mocked HTTP responses, never a real account — that needs a free
+   test-mode secret key from https://dashboard.paystack.com (only the
+   business owner can create the account). Once obtained: set
+   `PAYMENT_PROVIDER=paystack` + `PAYSTACK_SECRET_KEY`, run one real
+   test-mode checkout, and register the webhook URL
+   (`<origin>/api/v1/webhooks/paystack`) in the Paystack dashboard.
+2. **Deploy to Oracle Cloud Free Tier** — the infrastructure and
+   step-by-step guide are done ([`DEPLOYMENT.md`](DEPLOYMENT.md),
+   `docker-compose.prod.yml`, `apps/api/Dockerfile`,
+   `apps/web/Dockerfile`, `deploy/Caddyfile`, `deploy/deploy.sh`) —
+   what's left is actually walking through it against a real Oracle Cloud
+   account, which needs the project owner's own account (account creation
+   isn't something that can be done on their behalf). Local `docker
+   build` validation was inconclusive due to this session's own
+   network/Docker Desktop flakiness, not a known problem with the
+   Dockerfiles themselves — worth a clean build check as the first step
+   on the actual VM.
+3. Introduce Playwright for frontend e2e coverage once there are
    real portal features worth testing beyond CRUD forms.
-3. Integrate a real online payment gateway (Paystack/Flutterwave are the
-   standard choices for a Nigeria-based agency) behind a
-   `PaymentProviderPort`-style seam, mirroring how `FlightProviderPort`
-   decouples Duffel from the booking flow — today every payment is
-   staff-recorded (cash/bank transfer/POS/card typed in after the fact),
-   with no customer-initiated checkout.
-4. Add SMS/WhatsApp as a second `NotificationProviderPort` channel
+4. Add Flutterwave (or another gateway) as a second
+   `PaymentProviderPort` implementation once there's a reason to offer
+   more than one checkout option — the seam is already
+   provider-agnostic, just Paystack/mock in practice today.
+5. Add SMS/WhatsApp as a second `NotificationProviderPort` channel
    alongside email (Termii/Africa's Talking are the standard choices for
    a Nigeria-based agency) — the port is already channel-agnostic in
    spirit, just email-only in practice today.
-5. Begin the Hotel/Hajj/Umrah booking modules behind the existing
+6. Begin the Hotel/Hajj/Umrah booking modules behind the existing
    RBAC/permission system, reusing the same provider-abstraction and
    auto-invoice-on-confirmation patterns established for flights —
    `Customer` and `FamilyMember` are already in place as the traveler
-   records those bookings will reference. Add `hotel:*` / `hajj:*`
+   records those bookings will reference, and they can now be paid for
+   online the same way a flight invoice can. Add `hotel:*` / `hajj:*`
    permission keys following the established `<module>:<action>`
    convention.
-6. Add a document verification status (`PENDING`/`APPROVED`/`REJECTED`)
+7. Add a document verification status (`PENDING`/`APPROVED`/`REJECTED`)
    to `CustomerDocument`/`FamilyMemberDocument` once a KYC review
    workflow is needed — the current schema deliberately leaves this out
    until there's a concrete reviewer UI to attach it to.
-7. Expand the marketing site toward the originally-specced ~22 pages
+8. Expand the marketing site toward the originally-specced ~22 pages
    (per-destination landing pages, FAQ, blog/news, legal/privacy/terms)
    once there's real content to put on them.

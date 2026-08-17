@@ -84,6 +84,7 @@ model Customer {
   flightBookings         FlightBooking[]
   flightBookingPassenger FlightBookingPassenger[]
   invoices               Invoice[]
+  paymentIntents         PaymentIntent[]
 
   @@map("customers")
 }
@@ -466,6 +467,16 @@ enum PaymentMethod {
   POS
   CARD
   OTHER
+  // Customer-initiated checkout through PaymentProviderPort (Paystack in
+  // production, the mock provider by default) — the only method not
+  // recorded by a staff member.
+  ONLINE
+}
+
+enum PaymentIntentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
 }
 
 model Invoice {
@@ -494,8 +505,9 @@ model Invoice {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  lineItems InvoiceLineItem[]
-  payments  Payment[]
+  lineItems      InvoiceLineItem[]
+  payments       Payment[]
+  paymentIntents PaymentIntent[]
 
   @@index([customerId])
   @@index([status])
@@ -538,6 +550,42 @@ model Payment {
 
   @@index([invoiceId])
   @@map("payments")
+}
+
+/**
+ * One customer-initiated online checkout attempt against an invoice.
+ * Created PENDING before redirecting to the provider's hosted checkout
+ * page; flipped to SUCCEEDED (which also creates the matching Payment row)
+ * or FAILED once the provider confirms the outcome — via the browser
+ * returning to the verify endpoint, and/or the provider's webhook, since
+ * either can arrive first or the browser callback may never happen at all
+ * (tab closed mid-payment).
+ */
+model PaymentIntent {
+  id String @id @default(cuid())
+
+  invoiceId String
+  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+
+  // The provider's transaction reference — what ties an initiated checkout
+  // to the provider's later verify/webhook callback.
+  reference String @unique
+  provider  String // "mock" | "paystack"
+
+  amount   Int
+  currency String
+
+  status PaymentIntentStatus @default(PENDING)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([invoiceId])
+  @@index([status])
+  @@map("payment_intents")
 }
 
 enum NotificationType {

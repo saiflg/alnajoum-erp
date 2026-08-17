@@ -1,32 +1,123 @@
 'use client';
 
-import { useParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useCallback, useEffect, useState } from 'react';
 import { AppShell } from '@/components/AppShell';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
-import { apiRequest } from '@/lib/api';
+import { apiRequest, ApiError } from '@/lib/api';
 import { formatCurrency, formatDateTime } from '@/lib/format';
 import { PORTAL_NAV } from '@/lib/portal-nav';
 import { Invoice } from '@/lib/types';
 
-export default function InvoiceDetailPage() {
+function InvoiceDetailContent() {
   const params = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [payingOnline, setPayingOnline] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [paymentNotice, setPaymentNotice] = useState<
+    { kind: 'success' | 'error'; message: string } | null
+  >(null);
 
-  useEffect(() => {
-    apiRequest<Invoice>(`/invoices/me/${params.id}`)
+  const loadInvoice = useCallback(() => {
+    return apiRequest<Invoice>(`/invoices/me/${params.id}`)
       .then(setInvoice)
       .catch((err) => setError(err.message));
   }, [params.id]);
 
+  useEffect(() => {
+    void loadInvoice();
+  }, [loadInvoice]);
+
+  // Returning from the mock/real checkout page lands back here with
+  // ?checkout_reference=... — confirm it once, then strip the query param
+  // so a page refresh doesn't try to re-verify an already-settled payment.
+  useEffect(() => {
+    const reference = searchParams.get('checkout_reference');
+    if (!reference) {
+      return;
+    }
+    let ignore = false;
+    // This is the same "confirm on mount" idiom as auth-context.tsx's
+    // session check: a one-time verification that must run as soon as the
+    // browser lands back from checkout. react-hooks/set-state-in-effect
+    // wants Suspense/an external store for this, which isn't warranted
+    // here — the `ignore` guard below already prevents the real hazard (a
+    // stray update after unmount).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setVerifying(true);
+    apiRequest<Invoice>(`/invoices/me/${params.id}/checkout/verify`, {
+      method: 'POST',
+      body: { reference },
+    })
+      .then((updated) => {
+        if (ignore) return;
+        setInvoice(updated);
+        setPaymentNotice({ kind: 'success', message: 'Payment confirmed — thank you!' });
+      })
+      .catch((err) => {
+        if (ignore) return;
+        setPaymentNotice({
+          kind: 'error',
+          message:
+            err instanceof ApiError
+              ? err.message
+              : 'We could not confirm this payment. If you were charged, contact us and we will sort it out.',
+        });
+      })
+      .finally(() => {
+        if (ignore) return;
+        setVerifying(false);
+        router.replace(`/portal/invoices/${params.id}`);
+      });
+    return () => {
+      ignore = true;
+    };
+    // Only run once, off the reference present at mount — router.replace()
+    // above removes it from the URL, so this intentionally doesn't re-run
+    // as params/router identity changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function handlePayOnline() {
+    setPayingOnline(true);
+    setPaymentNotice(null);
+    try {
+      const result = await apiRequest<{ authorizationUrl: string }>(
+        `/invoices/me/${params.id}/checkout`,
+        { method: 'POST' },
+      );
+      window.location.href = result.authorizationUrl;
+    } catch (err) {
+      setPaymentNotice({
+        kind: 'error',
+        message: err instanceof ApiError ? err.message : 'Could not start checkout',
+      });
+      setPayingOnline(false);
+    }
+  }
+
   const paid = invoice?.payments.reduce((sum, p) => sum + p.amount, 0) ?? 0;
   const balance = invoice ? invoice.totalAmount - paid : 0;
+  const canPayOnline = invoice && balance > 0 && invoice.status !== 'VOID';
 
   return (
     <ProtectedRoute allowedRoles={['CUSTOMER']}>
       <AppShell title="Invoice Detail" navLinks={PORTAL_NAV}>
         {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
+        {verifying && (
+          <p className="mb-4 text-sm text-slate-500">Confirming your payment…</p>
+        )}
+        {paymentNotice && (
+          <p
+            className={`mb-4 text-sm ${paymentNotice.kind === 'success' ? 'text-emerald-600' : 'text-red-600'}`}
+          >
+            {paymentNotice.message}
+          </p>
+        )}
 
         {invoice && (
           <>
@@ -100,10 +191,29 @@ export default function InvoiceDetailPage() {
                 <span>Balance due</span>
                 <span>{formatCurrency(balance, invoice.currency)}</span>
               </div>
+
+              {canPayOnline && (
+                <button
+                  type="button"
+                  onClick={handlePayOnline}
+                  disabled={payingOnline}
+                  className="mt-4 w-full rounded-md bg-amber-500 px-4 py-2.5 text-sm font-semibold text-slate-900 transition-colors hover:bg-amber-400 disabled:opacity-50"
+                >
+                  {payingOnline ? 'Redirecting to checkout…' : 'Pay online'}
+                </button>
+              )}
             </div>
           </>
         )}
       </AppShell>
     </ProtectedRoute>
+  );
+}
+
+export default function InvoiceDetailPage() {
+  return (
+    <Suspense fallback={null}>
+      <InvoiceDetailContent />
+    </Suspense>
   );
 }

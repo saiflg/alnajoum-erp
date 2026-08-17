@@ -208,7 +208,7 @@ export interface FlightBooking {
 }
 
 export type InvoiceStatus = 'ISSUED' | 'PARTIALLY_PAID' | 'PAID' | 'VOID';
-export type PaymentMethod = 'CASH' | 'BANK_TRANSFER' | 'POS' | 'CARD' | 'OTHER';
+export type PaymentMethod = 'CASH' | 'BANK_TRANSFER' | 'POS' | 'CARD' | 'OTHER' | 'ONLINE';
 
 export interface InvoiceLineItem {
   id: string;

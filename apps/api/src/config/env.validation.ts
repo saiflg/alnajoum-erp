@@ -91,6 +91,22 @@ class EnvironmentVariables {
   @IsOptional()
   @IsString()
   CONTACT_RECIPIENT_EMAIL?: string;
+
+  @IsOptional()
+  @IsString()
+  PAYMENT_PROVIDER?: string; // 'mock' (default) | 'paystack'
+
+  @IsOptional()
+  @IsString()
+  PAYSTACK_SECRET_KEY?: string;
+
+  // The web app's own public origin — used to build the checkout callback
+  // URL the customer's browser is sent back to, and (for the mock
+  // provider) the mock checkout page's URL. Deliberately separate from
+  // CORS_ORIGIN, which may be a comma-separated allowlist.
+  @IsOptional()
+  @IsString()
+  PUBLIC_WEB_ORIGIN?: string;
 }
 
 export function validateEnv(config: Record<string, unknown>) {

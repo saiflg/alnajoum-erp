@@ -74,6 +74,12 @@ services:
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_FROM: ${SMTP_FROM:-}
       CONTACT_RECIPIENT_EMAIL: ${CONTACT_RECIPIENT_EMAIL:-alnajoumtravelagency@gmail.com}
+      PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-mock}
+      PAYSTACK_SECRET_KEY: ${PAYSTACK_SECRET_KEY:-}
+      # Same origin as the public site — this is a single-origin deployment
+      # (see deploy/Caddyfile), so the checkout callback URL is just
+      # PUBLIC_ORIGIN itself, not a separate value to configure.
+      PUBLIC_WEB_ORIGIN: ${PUBLIC_ORIGIN}
     volumes:
       - uploads_data:/repo/apps/api/uploads
     networks: [internal]
