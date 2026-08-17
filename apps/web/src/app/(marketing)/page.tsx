@@ -3,10 +3,12 @@
 import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { AnimatedCounter } from '@/components/marketing/AnimatedCounter';
+import { DestinationSlider } from '@/components/marketing/DestinationSlider';
 import { FlightSearchTeaser } from '@/components/marketing/FlightSearchTeaser';
 import { Marquee } from '@/components/marketing/Marquee';
 import { Reveal } from '@/components/marketing/Reveal';
 import { ServiceSlider } from '@/components/marketing/ServiceSlider';
+import { TransportBackdrop } from '@/components/marketing/TransportBackdrop';
 
 const TRUST_ITEMS = [
   'IATA Accredited',
@@ -91,12 +93,90 @@ const SERVICES = [
 ];
 
 const DESTINATIONS = [
-  { city: 'Lagos', country: 'Nigeria', gradient: 'from-amber-500 to-orange-600' },
-  { city: 'Abuja', country: 'Nigeria', gradient: 'from-emerald-500 to-teal-600' },
-  { city: 'Jeddah', country: 'Saudi Arabia', gradient: 'from-slate-600 to-slate-800' },
-  { city: 'Dubai', country: 'UAE', gradient: 'from-sky-500 to-blue-700' },
-  { city: 'London', country: 'United Kingdom', gradient: 'from-indigo-500 to-violet-700' },
-  { city: 'Cairo', country: 'Egypt', gradient: 'from-yellow-600 to-amber-800' },
+  {
+    city: 'Lagos',
+    country: 'Nigeria',
+    code: 'LOS',
+    gradient: 'from-amber-500 to-orange-600',
+    landmark: (
+      <>
+        <rect x="8" y="32" width="10" height="23" />
+        <rect x="20" y="20" width="10" height="35" />
+        <rect x="32" y="28" width="10" height="27" />
+        <rect x="44" y="15" width="10" height="40" />
+        <rect x="56" y="25" width="10" height="30" />
+        <rect x="68" y="33" width="10" height="22" />
+        <rect x="80" y="22" width="10" height="33" />
+      </>
+    ),
+  },
+  {
+    city: 'Abuja',
+    country: 'Nigeria',
+    code: 'ABV',
+    gradient: 'from-emerald-500 to-teal-600',
+    landmark: (
+      <>
+        <rect x="30" y="15" width="8" height="40" />
+        <rect x="62" y="15" width="8" height="40" />
+        <rect x="30" y="15" width="40" height="8" />
+      </>
+    ),
+  },
+  {
+    city: 'Jeddah',
+    country: 'Saudi Arabia',
+    code: 'JED',
+    gradient: 'from-slate-600 to-slate-800',
+    landmark: (
+      <>
+        <circle cx="50" cy="30" r="14" />
+        <rect x="44" y="30" width="12" height="25" />
+        <rect x="15" y="20" width="6" height="35" />
+        <polygon points="12,20 24,20 18,10" />
+        <rect x="79" y="20" width="6" height="35" />
+        <polygon points="76,20 88,20 82,10" />
+      </>
+    ),
+  },
+  {
+    city: 'Dubai',
+    country: 'UAE',
+    code: 'DXB',
+    gradient: 'from-sky-500 to-blue-700',
+    landmark: (
+      <>
+        <polygon points="46,55 54,55 52,10 48,10" />
+        <rect x="30" y="45" width="40" height="10" />
+      </>
+    ),
+  },
+  {
+    city: 'London',
+    country: 'United Kingdom',
+    code: 'LHR',
+    gradient: 'from-indigo-500 to-violet-700',
+    landmark: (
+      <>
+        <rect x="40" y="15" width="20" height="40" />
+        <circle cx="50" cy="25" r="6" fillOpacity="0.5" />
+        <polygon points="38,15 62,15 50,5" />
+      </>
+    ),
+  },
+  {
+    city: 'Cairo',
+    country: 'Egypt',
+    code: 'CAI',
+    gradient: 'from-yellow-600 to-amber-800',
+    landmark: (
+      <>
+        <polygon points="20,55 35,25 50,55" />
+        <polygon points="45,55 60,20 75,55" />
+        <polygon points="65,55 78,32 91,55" />
+      </>
+    ),
+  },
 ];
 
 const TESTIMONIALS = [
@@ -157,6 +237,7 @@ export default function MarketingHomePage() {
           animate={{ y: [0, -20, 0] }}
           transition={{ duration: 9, repeat: Infinity, ease: 'easeInOut' }}
         />
+        <TransportBackdrop />
 
         <div className="relative mx-auto max-w-4xl px-4 text-center sm:px-6 lg:px-8">
           <FadeIn>
@@ -347,14 +428,14 @@ export default function MarketingHomePage() {
           <div className="mt-14 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {DESTINATIONS.map((dest, i) => (
               <Reveal key={dest.city} delay={(i % 3) * 0.08}>
-                <motion.div
-                  whileHover={{ scale: 1.03 }}
-                  transition={{ duration: 0.25 }}
-                  className={`flex h-40 flex-col justify-end rounded-2xl bg-gradient-to-br ${dest.gradient} p-5 shadow-md`}
-                >
-                  <p className="text-lg font-semibold text-white">{dest.city}</p>
-                  <p className="text-sm text-white/80">{dest.country}</p>
-                </motion.div>
+                <DestinationSlider
+                  city={dest.city}
+                  country={dest.country}
+                  code={dest.code}
+                  gradient={dest.gradient}
+                  landmark={dest.landmark}
+                  delay={i * 400}
+                />
               </Reveal>
             ))}
           </div>
