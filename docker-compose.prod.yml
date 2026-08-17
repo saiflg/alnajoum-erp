@@ -1,0 +1,123 @@
+# Production stack for a single Oracle Cloud Free Tier VM. See DEPLOYMENT.md
+# for the full step-by-step guide this file is part of.
+#
+# Usage (from the repo root, on the server):
+#   docker compose -f docker-compose.prod.yml --env-file .env.prod build
+#   docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
+#
+# All five services run on one box: Postgres and Redis are containers with
+# their own persistent volumes (backed by the VM's block storage, which
+# survives reboots and container recreation — see DEPLOYMENT.md's note on
+# why a separate object-storage migration isn't a blocker for this
+# single-instance deployment). Caddy terminates TLS (or plain HTTP if you
+# haven't pointed a domain at the server yet) and reverse-proxies to the
+# api and web containers, which are not exposed to the host directly.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: alnajoum-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [internal]
+
+  redis:
+    image: redis:7-alpine
+    container_name: alnajoum-redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [internal]
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: alnajoum-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+      REDIS_URL: redis://redis:6379
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-15m}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
+      CORS_ORIGIN: ${PUBLIC_ORIGIN}
+      UPLOADS_DIR: /repo/apps/api/uploads
+      NOTIFICATION_PROVIDER: ${NOTIFICATION_PROVIDER:-mock}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-}
+      SMTP_SECURE: ${SMTP_SECURE:-}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      CONTACT_RECIPIENT_EMAIL: ${CONTACT_RECIPIENT_EMAIL:-alnajoumtravelagency@gmail.com}
+    volumes:
+      - uploads_data:/repo/apps/api/uploads
+    networks: [internal]
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        # Baked into the client bundle at build time — must be the public
+        # URL browsers will actually use (your domain, or http://<vm-ip>
+        # if you don't have a domain yet). Changing it later requires
+        # rebuilding this image, not just restarting the container.
+        NEXT_PUBLIC_API_URL: ${PUBLIC_ORIGIN}
+    container_name: alnajoum-web
+    restart: unless-stopped
+    depends_on: [api]
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+    networks: [internal]
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: alnajoum-caddy
+    restart: unless-stopped
+    depends_on: [api, web]
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [internal]
+
+networks:
+  internal:
+
+volumes:
+  postgres_data:
+  redis_data:
+  uploads_data:
+  caddy_data:
+  caddy_config:

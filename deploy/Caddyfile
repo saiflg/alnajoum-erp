@@ -1,0 +1,25 @@
+# Reverse proxy for the whole stack, on one origin: {$SITE_ADDRESS} decides
+# everything else. Set it in .env.prod:
+#   SITE_ADDRESS=:80              -> plain HTTP on the server's public IP,
+#                                     no domain needed (where DEPLOYMENT.md
+#                                     has you start)
+#   SITE_ADDRESS=yourdomain.com   -> Caddy automatically requests and
+#                                     renews a Let's Encrypt certificate
+#                                     and redirects HTTP -> HTTPS
+#
+# Everything under /api/* goes to the NestJS API (which already prefixes
+# its own routes with /api/v1); everything else goes to the Next.js app.
+# Keeping both behind one origin means the auth cookies (SameSite=Lax) work
+# without any cross-origin cookie/CORS configuration.
+
+{$SITE_ADDRESS}
+
+encode gzip
+
+handle /api/* {
+	reverse_proxy api:4000
+}
+
+handle {
+	reverse_proxy web:3000
+}
