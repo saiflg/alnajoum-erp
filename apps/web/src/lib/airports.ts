@@ -62,37 +62,76 @@ export const AIRPORTS: Airport[] = [
   { code: 'NBO', city: 'Nairobi', country: 'Kenya', name: 'Jomo Kenyatta International' },
   { code: 'ADD', city: 'Addis Ababa', country: 'Ethiopia', name: 'Bole International' },
   { code: 'CMN', city: 'Casablanca', country: 'Morocco', name: 'Mohammed V International' },
+
+  // --- West/Central African neighbors ---
+  { code: 'COO', city: 'Cotonou', country: 'Benin', name: 'Cadjehoun Airport' },
+  { code: 'NIM', city: 'Niamey', country: 'Niger', name: 'Diori Hamani International' },
+  { code: 'DLA', city: 'Douala', country: 'Cameroon', name: 'Douala International' },
+  { code: 'NDJ', city: "N'Djamena", country: 'Chad', name: "N'Djamena International" },
+  { code: 'DSS', city: 'Dakar', country: 'Senegal', name: 'Blaise Diagne International' },
+  { code: 'ABJ', city: 'Abidjan', country: "Côte d'Ivoire", name: 'Félix-Houphouët-Boigny International' },
+  { code: 'LFW', city: 'Lomé', country: 'Togo', name: 'Lomé–Tokoin International' },
+  { code: 'BKO', city: 'Bamako', country: 'Mali', name: 'Modibo Keïta International' },
+
+  // --- Middle East (beyond the Gulf hubs above) ---
+  { code: 'AMM', city: 'Amman', country: 'Jordan', name: 'Queen Alia International' },
+  { code: 'BEY', city: 'Beirut', country: 'Lebanon', name: 'Beirut–Rafic Hariri International' },
+  { code: 'KRT', city: 'Khartoum', country: 'Sudan', name: 'Khartoum International' },
+
+  // --- South & Southeast Asia ---
+  { code: 'DEL', city: 'Delhi', country: 'India', name: 'Indira Gandhi International' },
+  { code: 'BOM', city: 'Mumbai', country: 'India', name: 'Chhatrapati Shivaji Maharaj International' },
+  { code: 'KHI', city: 'Karachi', country: 'Pakistan', name: 'Jinnah International' },
+  { code: 'ISB', city: 'Islamabad', country: 'Pakistan', name: 'Islamabad International' },
+  { code: 'DAC', city: 'Dhaka', country: 'Bangladesh', name: 'Hazrat Shahjalal International' },
+  { code: 'KUL', city: 'Kuala Lumpur', country: 'Malaysia', name: 'Kuala Lumpur International' },
+  { code: 'CGK', city: 'Jakarta', country: 'Indonesia', name: 'Soekarno–Hatta International' },
+
+  // --- East Asia ---
+  { code: 'PEK', city: 'Beijing', country: 'China', name: 'Beijing Capital International' },
+  { code: 'CAN', city: 'Guangzhou', country: 'China', name: 'Baiyun International' },
+
+  // --- More of Europe ---
+  { code: 'AMS', city: 'Amsterdam', country: 'Netherlands', name: 'Schiphol' },
+  { code: 'MAD', city: 'Madrid', country: 'Spain', name: 'Adolfo Suárez Madrid–Barajas' },
+  { code: 'FCO', city: 'Rome', country: 'Italy', name: 'Leonardo da Vinci–Fiumicino' },
 ];
 
 /**
  * Matches on IATA code, city, country, or airport name — code/city
- * prefix matches rank above substring matches (typing "M" surfaces
- * Madinah/Maiduguri/Manchester before airports that merely mention "m"
- * somewhere in their name), capped at 8 results.
+ * prefix matches rank first (typing "M" surfaces Madinah/Maiduguri/
+ * Manchester before anything else), country-name prefix matches rank
+ * second (typing "Nigeria" or "Saudi" surfaces every airport in that
+ * country, ahead of unrelated airports that merely mention the word
+ * somewhere in their full name), then substring matches on the airport's
+ * full name/country last. Capped at 10 results — a broad query like
+ * "Nigeria" (18 domestic airports) will still truncate; narrow the query
+ * (city or code) to see the rest.
  */
-export function searchAirports(query: string, limit = 8): Airport[] {
+export function searchAirports(query: string, limit = 10): Airport[] {
   const q = query.trim().toLowerCase();
   if (!q) {
     return AIRPORTS.slice(0, limit);
   }
 
   const prefixMatches: Airport[] = [];
+  const countryMatches: Airport[] = [];
   const substringMatches: Airport[] = [];
 
   for (const airport of AIRPORTS) {
     const code = airport.code.toLowerCase();
     const city = airport.city.toLowerCase();
+    const country = airport.country.toLowerCase();
     if (code.startsWith(q) || city.startsWith(q)) {
       prefixMatches.push(airport);
-      continue;
-    }
-    const haystack = `${airport.name} ${airport.country}`.toLowerCase();
-    if (haystack.includes(q)) {
+    } else if (country.startsWith(q)) {
+      countryMatches.push(airport);
+    } else if (`${airport.name} ${airport.country}`.toLowerCase().includes(q)) {
       substringMatches.push(airport);
     }
   }
 
-  return [...prefixMatches, ...substringMatches].slice(0, limit);
+  return [...prefixMatches, ...countryMatches, ...substringMatches].slice(0, limit);
 }
 
 export function findAirport(code: string): Airport | undefined {
