@@ -2,6 +2,7 @@
 
 import { useRouter, useSearchParams } from 'next/navigation';
 import { FormEvent, Suspense, useState } from 'react';
+import { AirportInput } from '@/components/AirportInput';
 import { AppShell } from '@/components/AppShell';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { apiRequest, ApiError } from '@/lib/api';
@@ -140,29 +141,27 @@ function FlightSearchForm() {
             {legs.map((leg, index) => (
               <div key={index} className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700">
-                    {tripType === 'MULTI_CITY' ? `Flight ${index + 1}: From` : 'From'}
-                  </label>
-                  <input
-                    required
-                    maxLength={3}
+                  <AirportInput
+                    id={`leg-${index}-origin`}
+                    label={tripType === 'MULTI_CITY' ? `Flight ${index + 1}: From` : 'From'}
                     placeholder="LOS"
                     value={leg.origin}
-                    onChange={(e) => updateLeg(index, { origin: e.target.value.toUpperCase() })}
-                    className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm uppercase focus:border-slate-500 focus:outline-none"
+                    onChange={(code) => updateLeg(index, { origin: code })}
+                    required
+                    inputClassName="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm uppercase focus:border-slate-500 focus:outline-none"
+                    labelClassName="block text-sm font-medium text-slate-700"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700">To</label>
-                  <input
-                    required
-                    maxLength={3}
+                  <AirportInput
+                    id={`leg-${index}-destination`}
+                    label="To"
                     placeholder="ABV"
                     value={leg.destination}
-                    onChange={(e) =>
-                      updateLeg(index, { destination: e.target.value.toUpperCase() })
-                    }
-                    className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm uppercase focus:border-slate-500 focus:outline-none"
+                    onChange={(code) => updateLeg(index, { destination: code })}
+                    required
+                    inputClassName="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm uppercase focus:border-slate-500 focus:outline-none"
+                    labelClassName="block text-sm font-medium text-slate-700"
                   />
                 </div>
                 <div>

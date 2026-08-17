@@ -3,6 +3,7 @@
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { FormEvent, useState } from 'react';
+import { AirportInput } from '@/components/AirportInput';
 import { useAuth } from '@/lib/auth-context';
 
 export function FlightSearchTeaser() {
@@ -35,29 +36,23 @@ export function FlightSearchTeaser() {
       className="mx-auto mt-10 grid max-w-3xl grid-cols-2 gap-3 rounded-2xl border border-white/10 bg-white/95 p-4 shadow-2xl shadow-slate-900/20 backdrop-blur sm:grid-cols-4 sm:p-5"
     >
       <div className="col-span-1">
-        <label className="block text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-          From
-        </label>
-        <input
-          required
-          maxLength={3}
+        <AirportInput
+          id="teaser-origin"
+          label="From"
           placeholder="LOS"
           value={origin}
-          onChange={(e) => setOrigin(e.target.value.toUpperCase())}
-          className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm uppercase text-slate-900 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+          onChange={setOrigin}
+          required
         />
       </div>
       <div className="col-span-1">
-        <label className="block text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-          To
-        </label>
-        <input
-          required
-          maxLength={3}
+        <AirportInput
+          id="teaser-destination"
+          label="To"
           placeholder="ABV"
           value={destination}
-          onChange={(e) => setDestination(e.target.value.toUpperCase())}
-          className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm uppercase text-slate-900 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+          onChange={setDestination}
+          required
         />
       </div>
       <div className="col-span-1">

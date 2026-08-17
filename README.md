@@ -254,6 +254,18 @@ alnajoum-erp/
   redirect and won, sending new users to `/portal/dashboard` instead of
   their intended search — fixed with a ref that suppresses the generic
   redirect for the duration of an in-flight registration.
+- **Airport fields are a typeahead (`AirportInput`), not a bare 3-letter
+  text box**: typing "M" surfaces every airport whose code or city starts
+  with M (Madinah, Maiduguri, Manchester, ...) ranked above airports that
+  merely mention "m" somewhere in their full name, backed by a small
+  static dataset (`lib/airports.ts`, `apps/web`) covering every Nigerian
+  commercial airport plus the international routes a Nigeria-based agency
+  actually needs (Hajj/Umrah's Jeddah/Madinah/Riyadh, Gulf hubs, common
+  diaspora destinations). It's an assist, not a hard constraint — the
+  underlying field is still plain text, so a route not in the dataset can
+  still be typed and searched directly, same as before. Used on both the
+  homepage teaser and the real multi-leg search form; the same component
+  will cover hotel/car search location fields once those modules exist.
 - **The contact form is the one truly public write endpoint** in the API
   (`POST /contact`, `@Public()`), reusing `NotificationsService` to email
   the agency's inbox (not the visitor) and recording a `CONTACT_MESSAGE`
@@ -860,6 +872,29 @@ a mock — the in-app browser preview pane wasn't compositing screenshots
 in this session, so those paths were confirmed via test assertions and
 direct API calls (checked response bodies and status codes) rather than
 visually.
+
+Airport typeahead: on both the homepage teaser and the real multi-leg
+search form, typed "M" into the origin field and confirmed the dropdown
+surfaced Maiduguri, Madinah, and Manchester first (prefix matches),
+followed by the rest of the list as fallback substring matches — exactly
+the "type M, get every airport starting with M" behavior asked for.
+Selected Madinah and confirmed the field filled with `MED`. On the portal
+search form specifically, typed "J", confirmed Jos and Jeddah ranked
+first, selected Jeddah, set the destination to `MED` and a future date,
+and submitted — the search hit the real API and returned genuine
+JED → MED offers (Arik Air, Qatar Airways, Air Peace, British Airways,
+with real prices and seat counts), confirming the picker's selected value
+flows correctly into an actual search, not just into the input's display
+text.
+
+Note on how this was verified: the in-app browser preview pane's
+pointer-coordinate clicks were unreliable this session (the pane isn't
+compositing frames, a pre-existing limitation for this session noted
+elsewhere in this doc) — typing was confirmed via real keystroke
+simulation, and dropdown-option selection was confirmed by dispatching a
+genuine bubbling `click` event at the DOM level and checking the
+resulting input value and search results afterward, rather than by
+visually confirming a pointer-driven click landed correctly.
 
 ## 9. Remaining tasks (explicitly out of scope so far)
 
