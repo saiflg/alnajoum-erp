@@ -1,7 +1,8 @@
 'use client';
 
 import { KeyboardEvent, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Airport, searchAirports } from '@/lib/airports';
+import { loadWorldAirports, searchAirports } from '@/lib/airports';
+import type { Airport } from '@/lib/airports';
 
 interface AirportInputProps {
   id?: string;
@@ -47,6 +48,10 @@ export function AirportInput({
   const [lastSyncedValue, setLastSyncedValue] = useState(value);
   const [open, setOpen] = useState(false);
   const [highlighted, setHighlighted] = useState(0);
+  // Flips once the full ~6,000-airport world dataset has loaded, purely to
+  // trigger the `results` memo below to recompute against it — searchAirports
+  // itself reads a module-level cache that this state doesn't hold.
+  const [worldLoaded, setWorldLoaded] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Keep the displayed text in sync when the value changes from outside
@@ -59,7 +64,30 @@ export function AirportInput({
     setQuery(value);
   }
 
-  const results = useMemo(() => searchAirports(query), [query]);
+  // worldLoaded isn't read inside the callback — it's a trigger to
+  // recompute once lib/airports.ts's module-level cache has been
+  // populated, which searchAirports() reads as a side channel exhaustive-deps
+  // can't see. Needed, not accidental.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const results = useMemo(() => searchAirports(query), [query, worldLoaded]);
+
+  useEffect(() => {
+    let ignore = false;
+    // Standard "fetch on mount" idiom (same shape as auth-context.tsx's
+    // session check) — module-level caching in lib/airports.ts means only
+    // the first AirportInput on the page actually issues the fetch.
+    loadWorldAirports()
+      .then(() => {
+        if (!ignore) setWorldLoaded(true);
+      })
+      .catch(() => {
+        // Leave worldLoaded false — searchAirports() falls back to the
+        // curated popular list, so a failed fetch degrades gracefully.
+      });
+    return () => {
+      ignore = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!open) return;

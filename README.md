@@ -254,18 +254,29 @@ alnajoum-erp/
   redirect and won, sending new users to `/portal/dashboard` instead of
   their intended search — fixed with a ref that suppresses the generic
   redirect for the duration of an in-flight registration.
-- **Airport fields are a typeahead (`AirportInput`), not a bare 3-letter
-  text box**: typing "M" surfaces every airport whose code or city starts
-  with M (Madinah, Maiduguri, Manchester, ...) ranked above airports that
-  merely mention "m" somewhere in their full name, backed by a small
-  static dataset (`lib/airports.ts`, `apps/web`) covering every Nigerian
-  commercial airport plus the international routes a Nigeria-based agency
-  actually needs (Hajj/Umrah's Jeddah/Madinah/Riyadh, Gulf hubs, common
-  diaspora destinations). It's an assist, not a hard constraint — the
-  underlying field is still plain text, so a route not in the dataset can
-  still be typed and searched directly, same as before. Used on both the
-  homepage teaser and the real multi-leg search form; the same component
-  will cover hotel/car search location fields once those modules exist.
+- **Airport fields are a typeahead (`AirportInput`) searching every
+  real-world IATA airport, not a curated shortlist**: typing "M" surfaces
+  every airport whose code or city starts with M (Madinah, Maiduguri,
+  Manchester, ...) ranked above airports that merely mention "m"
+  somewhere in their full name. Backed by `apps/web/public/data/airports.json`
+  — ~6,000 airports with a valid 3-letter IATA code, built once from
+  [OpenFlights](https://github.com/jpatokal/openflights)'s open airport
+  database (see `scripts/build-airports.md`) rather than hand-typed, since
+  typing thousands of IATA codes from memory is exactly the kind of task
+  where an LLM quietly invents wrong ones at scale — a real, sourced
+  dataset avoids that risk entirely. Deliberately **not** bundled into the
+  JS: `lib/airports.ts` fetches it once from `/public` on first use
+  (module-level cache shared across every field on the page, so a
+  6-leg multi-city form doesn't trigger six fetches) rather than shipping
+  ~500KB in the initial page bundle for a page that might never open the
+  dropdown. A small curated list (`POPULAR_AIRPORTS` — Nigeria, Hajj/Umrah,
+  common diaspora routes) covers the empty-query default view and serves
+  as a fallback while the full dataset is still loading, so the dropdown
+  is never empty. Still an assist, not a hard constraint — the underlying
+  field is plain text, so any code can be typed directly even if a lookup
+  somehow misses it. Used on both the homepage teaser and the real
+  multi-leg search form; the same component will cover hotel/car search
+  location fields once those modules exist.
 - **The contact form is the one truly public write endpoint** in the API
   (`POST /contact`, `@Public()`), reusing `NotificationsService` to email
   the agency's inbox (not the visitor) and recording a `CONTACT_MESSAGE`
