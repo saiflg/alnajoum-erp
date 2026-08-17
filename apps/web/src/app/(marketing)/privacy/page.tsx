@@ -66,7 +66,7 @@ const SECTIONS = [
   {
     title: '8. Contact us',
     body: [
-      'For any question about this policy, or to exercise your data protection rights, contact us at info@alnajoum.travel or through the contact form on this site.',
+      'For any question about this policy, or to exercise your data protection rights, contact us at alnajoumtravelagency@gmail.com or through the contact form on this site.',
     ],
   },
 ];

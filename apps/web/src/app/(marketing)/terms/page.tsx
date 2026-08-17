@@ -69,7 +69,7 @@ const SECTIONS = [
   {
     title: '11. Contact us',
     body: [
-      'Questions about these terms can be sent to info@alnajoum.travel or through the contact form on this site.',
+      'Questions about these terms can be sent to alnajoumtravelagency@gmail.com or through the contact form on this site.',
     ],
   },
 ];

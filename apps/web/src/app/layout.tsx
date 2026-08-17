@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Alnajoum Travel ERP",
-  description: "Alnajoum Travel ERP Platform",
+  title: "Alnajoum Travel Agency",
+  description: "Alnajoum Travel Agency Limited — Your Journey, Our Priority.",
 };
 
 export default function RootLayout({

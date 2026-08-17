@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { BrandMark } from '@/components/BrandMark';
 
 const SERVICE_LINKS = [
   { href: '/services#flights', label: 'Flight Booking' },
@@ -24,9 +25,10 @@ const LEGAL_LINKS = [
   { href: '/terms', label: 'Terms of Service' },
 ];
 
-// Placeholder destinations — swap in the agency's real social profile URLs
-// once they exist. Left as "#" rather than removed, so the footer layout
-// and icons are ready to go the moment real links are available.
+// Facebook/Instagram/X aren't confirmed yet — left as "#" placeholders so
+// the icons and layout are ready the moment those profiles exist. TikTok
+// and WhatsApp are real: @alnajoumtravelagencyltd and the agency's own
+// phone number, taken from the agency's flyers.
 const SOCIAL_LINKS = [
   {
     href: '#',
@@ -47,12 +49,14 @@ const SOCIAL_LINKS = [
     ),
   },
   {
-    href: '#',
-    label: 'X (Twitter)',
-    icon: <path d="M4 4l16 16M20 4L4 20" strokeLinecap="round" />,
+    href: 'https://www.tiktok.com/@alnajoumtravelagencyltd',
+    label: 'TikTok',
+    icon: (
+      <path d="M16.5 3.5c.4 2 1.8 3.4 3.8 3.7v2.9c-1.4 0-2.7-.4-3.8-1.2v6.4a5.6 5.6 0 1 1-4.8-5.5v3a2.6 2.6 0 1 0 1.8 2.5V3.5h3Z" />
+    ),
   },
   {
-    href: '#',
+    href: 'https://wa.me/2348141906416',
     label: 'WhatsApp',
     icon: (
       <path d="M12 4a8 8 0 0 0-6.9 12.03L4 20l4.1-1.07A8 8 0 1 0 12 4Zm0 14.4a6.36 6.36 0 0 1-3.24-.89l-.23-.14-2.42.63.65-2.36-.15-.24A6.4 6.4 0 1 1 12 18.4Z" />
@@ -72,14 +76,16 @@ export function MarketingFooter() {
       <div className="mx-auto grid max-w-7xl gap-10 px-4 py-14 sm:px-6 md:grid-cols-2 lg:grid-cols-5 lg:px-8">
         <div className="lg:col-span-1">
           <div className="flex items-center gap-2">
-            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-white text-sm font-bold text-slate-900">
-              AT
-            </span>
-            <span className="text-lg font-semibold text-white">Alnajoum Travel</span>
+            <BrandMark size={36} />
+            <span className="text-lg font-semibold text-white">Alnajoum Travel Agency</span>
           </div>
+          <p className="mt-2 text-xs font-medium uppercase tracking-wide text-amber-400">
+            Your Journey, Our Priority
+          </p>
           <p className="mt-4 max-w-xs text-sm text-slate-400">
-            Flights, family travel, and (soon) hotels, visas, and Hajj &amp; Umrah packages —
-            all in one place, built for travelers in Nigeria and beyond.
+            Flight tickets on all major airlines, Hajj &amp; Umrah visa processing, hotels,
+            travel insurance, and tours — accredited by IATA and TAAN, now bringing that same
+            service online with real accounts, bookings, and invoices.
           </p>
           <ul className="mt-5 flex items-center gap-3">
             {SOCIAL_LINKS.map((social) => (
@@ -144,16 +150,16 @@ export function MarketingFooter() {
           <h3 className="text-sm font-semibold text-white">Get in touch</h3>
           <ul className="mt-4 space-y-3 text-sm text-slate-400">
             <li>
-              <a href="mailto:info@alnajoum.travel" className="hover:text-white">
-                info@alnajoum.travel
+              <a href="mailto:alnajoumtravelagency@gmail.com" className="hover:text-white">
+                alnajoumtravelagency@gmail.com
               </a>
             </li>
             <li>
-              <a href="tel:+2348000000000" className="hover:text-white">
-                +234 (0) 800 000 0000
+              <a href="tel:+2348141906416" className="hover:text-white">
+                0814 190 6416
               </a>
             </li>
-            <li>Lagos, Nigeria</li>
+            <li>Kankia Street, Unguwar Sarki, Kaduna, Kaduna State</li>
           </ul>
         </div>
 
@@ -172,7 +178,10 @@ export function MarketingFooter() {
 
       <div className="border-t border-slate-800 px-4 py-6 sm:px-6 lg:px-8">
         <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 text-xs text-slate-500 sm:flex-row">
-          <p>© {new Date().getFullYear()} Alnajoum Travel. All rights reserved.</p>
+          <p>
+            © {new Date().getFullYear()} Alnajoum Travel Agency Limited (RC: 6860328). All
+            rights reserved.
+          </p>
           <div className="flex gap-5">
             {LEGAL_LINKS.map((link) => (
               <Link key={link.href} href={link.href} className="hover:text-slate-300">

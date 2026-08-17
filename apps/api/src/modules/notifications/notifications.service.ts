@@ -77,11 +77,11 @@ export class NotificationsService {
     firstName: string,
     tempPassword: string,
   ): Promise<void> {
-    const subject = 'Your Alnajoum Travel staff account';
+    const subject = 'Your Alnajoum Travel Agency staff account';
     const body = [
       `Hi ${firstName},`,
       '',
-      'An account has been created for you on the Alnajoum Travel ERP platform.',
+      'An account has been created for you on the Alnajoum Travel Agency platform.',
       '',
       `Temporary password: ${tempPassword}`,
       '',
@@ -130,7 +130,7 @@ export class NotificationsService {
   async sendContactMessage(details: ContactMessageDetails): Promise<void> {
     const recipient = this.configService.get<string>(
       'CONTACT_RECIPIENT_EMAIL',
-      'info@alnajoum.travel',
+      'alnajoumtravelagency@gmail.com',
     );
     const subject = `Website contact: ${details.subject}`;
     const body = [

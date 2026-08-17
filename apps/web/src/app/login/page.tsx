@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { FormEvent, useEffect, useState } from 'react';
+import { BrandMark } from '@/components/BrandMark';
 import { ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 
@@ -36,7 +37,10 @@ export default function LoginPage() {
   return (
     <div className="flex flex-1 items-center justify-center bg-slate-50 px-4">
       <div className="w-full max-w-sm rounded-lg border border-slate-200 bg-white p-8 shadow-sm">
-        <h1 className="text-xl font-semibold text-slate-900">Alnajoum Travel ERP</h1>
+        <div className="flex items-center gap-2">
+          <BrandMark size={32} />
+          <h1 className="text-xl font-semibold text-slate-900">Alnajoum Travel Agency</h1>
+        </div>
         <p className="mt-1 text-sm text-slate-500">Sign in to your account</p>
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">

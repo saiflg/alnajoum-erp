@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
+import { BrandMark } from '@/components/BrandMark';
 import { useAuth } from '@/lib/auth-context';
 
 const NAV_LINKS = [
@@ -19,11 +20,9 @@ export function MarketingHeader() {
     <header className="sticky top-0 z-50 border-b border-slate-200/80 bg-white/80 backdrop-blur-md">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
         <Link href="/" className="flex items-center gap-2">
-          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-900 text-sm font-bold text-amber-400">
-            AT
-          </span>
+          <BrandMark size={36} />
           <span className="text-lg font-semibold tracking-tight text-slate-900">
-            Alnajoum Travel
+            Alnajoum Travel Agency
           </span>
         </Link>
 

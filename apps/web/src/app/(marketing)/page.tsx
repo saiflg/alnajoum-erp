@@ -4,7 +4,21 @@ import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { AnimatedCounter } from '@/components/marketing/AnimatedCounter';
 import { FlightSearchTeaser } from '@/components/marketing/FlightSearchTeaser';
+import { Marquee } from '@/components/marketing/Marquee';
 import { Reveal } from '@/components/marketing/Reveal';
+import { ServiceSlider } from '@/components/marketing/ServiceSlider';
+
+const TRUST_ITEMS = [
+  'IATA Accredited',
+  'TAAN Member',
+  'RC: 6860328',
+  'All Airlines Ticketing',
+  'Hajj & Umrah Visas',
+  'Hotels',
+  'Tours',
+  'Travel Insurance',
+  'Kaduna, Nigeria',
+];
 
 const STATS = [
   { target: 4, suffix: '', label: 'Core modules live today' },
@@ -147,7 +161,7 @@ export default function MarketingHomePage() {
         <div className="relative mx-auto max-w-4xl px-4 text-center sm:px-6 lg:px-8">
           <FadeIn>
             <span className="inline-flex items-center gap-2 rounded-full border border-amber-400/30 bg-amber-400/10 px-4 py-1.5 text-xs font-medium text-amber-300">
-              Built for Nigerian travelers
+              IATA &amp; TAAN accredited · Kaduna, Nigeria
             </span>
           </FadeIn>
           <motion.h1
@@ -156,8 +170,8 @@ export default function MarketingHomePage() {
             transition={{ duration: 0.7, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
             className="mt-6 text-4xl font-bold tracking-tight text-white sm:text-6xl"
           >
-            Travel, booked and billed
-            <span className="text-amber-400"> the right way.</span>
+            Your journey,
+            <span className="text-amber-400"> our priority.</span>
           </motion.h1>
           <motion.p
             initial={{ opacity: 0, y: 24 }}
@@ -165,8 +179,9 @@ export default function MarketingHomePage() {
             transition={{ duration: 0.7, delay: 0.2, ease: [0.22, 1, 0.36, 1] }}
             className="mx-auto mt-6 max-w-2xl text-lg text-slate-300"
           >
-            Alnajoum Travel brings flights, family travel, invoicing, and payments into
-            one platform — real accounts, real bookings, real invoices, not a demo.
+            Alnajoum Travel Agency brings flights, family travel, invoicing, and
+            payments into one platform — real accounts, real bookings, real invoices,
+            not a demo.
           </motion.p>
           <motion.div
             initial={{ opacity: 0, y: 24 }}
@@ -189,6 +204,25 @@ export default function MarketingHomePage() {
           </motion.div>
 
           <FlightSearchTeaser />
+        </div>
+      </section>
+
+      {/* Trust marquee */}
+      <section className="border-b border-slate-800 bg-slate-900 py-4">
+        <Marquee
+          items={TRUST_ITEMS.map((item) => (
+            <span key={item} className="flex items-center gap-3 text-sm font-medium text-slate-400">
+              <span aria-hidden className="h-1 w-1 rounded-full bg-amber-400" />
+              {item}
+            </span>
+          ))}
+        />
+      </section>
+
+      {/* Service slider */}
+      <section className="bg-white py-16">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+          <ServiceSlider />
         </div>
       </section>
 

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { FormEvent, Suspense, useEffect, useRef, useState } from 'react';
+import { BrandMark } from '@/components/BrandMark';
 import { ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 
@@ -59,10 +60,8 @@ function RegisterForm() {
     <div className="flex flex-1 items-center justify-center bg-slate-50 px-4 py-12">
       <div className="w-full max-w-sm rounded-lg border border-slate-200 bg-white p-8 shadow-sm">
         <Link href="/" className="flex items-center gap-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900 text-xs font-bold text-amber-400">
-            AT
-          </span>
-          <span className="text-base font-semibold text-slate-900">Alnajoum Travel</span>
+          <BrandMark size={32} />
+          <span className="text-base font-semibold text-slate-900">Alnajoum Travel Agency</span>
         </Link>
         <h1 className="mt-6 text-xl font-semibold text-slate-900">Create your account</h1>
         <p className="mt-1 text-sm text-slate-500">

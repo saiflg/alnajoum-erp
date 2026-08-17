@@ -51,9 +51,9 @@ export default function ContactPage() {
           <div className="sm:col-span-2">
             <h2 className="text-sm font-semibold text-slate-900">Contact details</h2>
             <ul className="mt-4 space-y-3 text-sm text-slate-600">
-              <li>info@alnajoum.travel</li>
-              <li>+234 (0) 800 000 0000</li>
-              <li>Lagos, Nigeria</li>
+              <li>alnajoumtravelagency@gmail.com</li>
+              <li>0814 190 6416</li>
+              <li>Kankia Street, Unguwar Sarki, Kaduna, Kaduna State</li>
             </ul>
           </div>
 

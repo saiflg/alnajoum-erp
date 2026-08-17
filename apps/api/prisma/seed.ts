@@ -69,12 +69,14 @@ async function seedBootstrapCompany() {
   }
 
   const company = await prisma.company.upsert({
-    where: { registrationNumber: 'ALNAJOUM-HQ-0001' },
+    where: { registrationNumber: 'RC-6860328' },
     create: {
-      name: 'Alnajoum Travel',
-      legalName: 'Alnajoum Travel Limited',
-      registrationNumber: 'ALNAJOUM-HQ-0001',
-      email: 'info@alnajoum.travel',
+      name: 'Alnajoum Travel Agency',
+      legalName: 'Alnajoum Travel Agency Limited',
+      registrationNumber: 'RC-6860328',
+      email: 'alnajoumtravelagency@gmail.com',
+      phone: '+2348141906416',
+      address: 'Kankia Street, Unguwar Sarki, Kaduna, Kaduna State',
     },
     update: {},
   });
@@ -85,7 +87,7 @@ async function seedBootstrapCompany() {
       companyId: company.id,
       name: 'Head Office',
       code: 'HQ',
-      city: 'Lagos',
+      city: 'Kaduna',
       country: 'Nigeria',
       isHeadOffice: true,
     },

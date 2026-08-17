@@ -35,15 +35,20 @@ export class SmtpNotificationProviderService
       return;
     }
 
+    const user = this.configService.get<string>('SMTP_USER');
+    // Falling back to the authenticated SMTP account itself (rather than a
+    // made-up domain) matches how most providers actually behave — Gmail in
+    // particular rejects or silently rewrites a From address that doesn't
+    // match the authenticated account unless "Send As" is explicitly set up.
     this.fromAddress =
-      this.configService.get<string>('SMTP_FROM') ?? 'no-reply@alnajoum.travel';
+      this.configService.get<string>('SMTP_FROM') ?? user ?? '';
     this.transporter = nodemailer.createTransport({
       host,
       port: this.configService.get<number>('SMTP_PORT', 587),
       secure: this.configService.get<string>('SMTP_SECURE') === 'true',
-      auth: this.configService.get<string>('SMTP_USER')
+      auth: user
         ? {
-            user: this.configService.get<string>('SMTP_USER'),
+            user,
             pass: this.configService.get<string>('SMTP_PASSWORD'),
           }
         : undefined,
