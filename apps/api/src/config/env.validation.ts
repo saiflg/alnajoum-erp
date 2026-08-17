@@ -94,11 +94,19 @@ class EnvironmentVariables {
 
   @IsOptional()
   @IsString()
-  PAYMENT_PROVIDER?: string; // 'mock' (default) | 'paystack'
+  PAYMENT_PROVIDER?: string; // 'mock' (default) | 'paystack' | 'opay'
 
   @IsOptional()
   @IsString()
   PAYSTACK_SECRET_KEY?: string;
+
+  @IsOptional()
+  @IsString()
+  OPAY_SECRET_KEY?: string;
+
+  @IsOptional()
+  @IsString()
+  OPAY_MERCHANT_ID?: string;
 
   // The web app's own public origin — used to build the checkout callback
   // URL the customer's browser is sent back to, and (for the mock

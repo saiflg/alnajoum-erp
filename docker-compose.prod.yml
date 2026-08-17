@@ -76,6 +76,8 @@ services:
       CONTACT_RECIPIENT_EMAIL: ${CONTACT_RECIPIENT_EMAIL:-alnajoumtravelagency@gmail.com}
       PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-mock}
       PAYSTACK_SECRET_KEY: ${PAYSTACK_SECRET_KEY:-}
+      OPAY_SECRET_KEY: ${OPAY_SECRET_KEY:-}
+      OPAY_MERCHANT_ID: ${OPAY_MERCHANT_ID:-}
       # Same origin as the public site — this is a single-origin deployment
       # (see deploy/Caddyfile), so the checkout callback URL is just
       # PUBLIC_ORIGIN itself, not a separate value to configure.

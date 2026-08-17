@@ -9,6 +9,7 @@ import { InvoicesService } from './invoices.service';
 import { PaymentsService } from './payments.service';
 import { PaystackWebhookController } from './paystack-webhook.controller';
 import { MockPaymentProviderService } from './providers/mock-payment-provider.service';
+import { OpayPaymentProviderService } from './providers/opay-payment-provider.service';
 import { PAYMENT_PROVIDER } from './providers/payment-provider.port';
 import { PaystackPaymentProviderService } from './providers/paystack-payment-provider.service';
 
@@ -27,21 +28,30 @@ import { PaystackPaymentProviderService } from './providers/paystack-payment-pro
     PaymentsService,
     MockPaymentProviderService,
     PaystackPaymentProviderService,
+    OpayPaymentProviderService,
     {
       provide: PAYMENT_PROVIDER,
       inject: [
         ConfigService,
         MockPaymentProviderService,
         PaystackPaymentProviderService,
+        OpayPaymentProviderService,
       ],
       useFactory: (
         configService: ConfigService,
         mockProvider: MockPaymentProviderService,
         paystackProvider: PaystackPaymentProviderService,
-      ) =>
-        configService.get<string>('PAYMENT_PROVIDER', 'mock') === 'paystack'
-          ? paystackProvider
-          : mockProvider,
+        opayProvider: OpayPaymentProviderService,
+      ) => {
+        switch (configService.get<string>('PAYMENT_PROVIDER', 'mock')) {
+          case 'paystack':
+            return paystackProvider;
+          case 'opay':
+            return opayProvider;
+          default:
+            return mockProvider;
+        }
+      },
     },
   ],
   exports: [InvoicesService],

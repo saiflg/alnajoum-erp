@@ -298,6 +298,22 @@ alnajoum-erp/
   funnel through one private `finalizeIntent`, which is idempotent —
   whichever path reaches a PENDING intent first wins, and the other is a
   silent no-op.
+- **`OpayPaymentProviderService` is a second, genuinely selectable
+  `PaymentProviderPort` implementation** (`PAYMENT_PROVIDER=opay`, needs
+  `OPAY_SECRET_KEY` + `OPAY_MERCHANT_ID`), built the same way as
+  Paystack's — real code against OPay's documented Cashier API (create
+  order, query status), not a stub — but with a **more cautious**
+  confidence note than Paystack's: OPay's API is meaningfully less
+  universally standardized than Paystack's in general circulation, so
+  treat the exact field names as "implemented to the documented contract,
+  not independently confirmed" rather than "just needs a live test like
+  Paystack does." It deliberately has no webhook — OPay's callback
+  signature scheme isn't reproduced here with the same confidence as
+  Paystack's well-known HMAC-SHA512-over-the-raw-body one, and a
+  plausible-looking but wrong signature check is worse than none (a
+  forged callback could fake a payment success); `verifyCheckout`
+  (customer-facing, polls the provider directly) is the only confirmation
+  path for OPay until that's confirmed against OPay's current docs.
 
 ## 3. Getting started (localhost)
 
@@ -483,7 +499,7 @@ or roles (`RolesGuard` + `@Roles`).
 
 ## 6. Tests written
 
-- **127 unit tests** (`pnpm test` in `apps/api`): `AuthService` (credential
+- **132 unit tests** (`pnpm test` in `apps/api`): `AuthService` (credential
   validation, lockout after repeated failures, registration conflicts,
   refresh token rejection paths, password change), `RbacService`
   (role CRUD guards, permission aggregation), `RolesGuard` /
@@ -534,7 +550,11 @@ or roles (`RolesGuard` + `@Roles`).
   converted to kobo, headers, body — and that a response is parsed back
   correctly in both directions, plus the HMAC-SHA512 webhook signature
   check accepting a correctly-signed body and rejecting a wrong-key or
-  missing signature).
+  missing signature), `OpayPaymentProviderService` (same shape of coverage
+  as Paystack's — Naira converted to kobo and wrapped in `amount.total`,
+  the `code: "00000"` success sentinel checked correctly on both
+  create-order and query-status, a non-success code rejected, and a
+  missing `OPAY_MERCHANT_ID` rejected before ever calling out).
 - **122 e2e tests** across 9 spec files (`pnpm test:e2e` in `apps/api`,
   needs Docker running): full journeys against a real, dedicated
   `alnajoum_erp_test` Postgres database —
@@ -881,6 +901,18 @@ visually.
   transaction. `PAYMENT_PROVIDER` defaults to `mock` specifically so
   nothing here is silently relying on untested code — see recommendation
   #1 above before switching a real deployment to `paystack`.
+- **`OpayPaymentProviderService` carries the same untested-against-a-live-
+  account caveat as Paystack, plus one more**: its request/response
+  shapes are implemented from OPay's public Cashier API documentation as
+  best recalled, without the same near-certainty as Paystack's far more
+  standardized, widely-integrated API — field names, the exact success
+  sentinel, and the amount-wrapping shape should all be re-checked against
+  OPay's current docs (https://documentation.opaycheckout.com) before a
+  real test transaction, not just before production. It also has no
+  webhook yet (see the architecture-decisions note above) — only the
+  customer-facing return path confirms an OPay payment today, so a
+  customer who closes the tab mid-payment has no automatic fallback
+  confirmation the way a Paystack payment does.
 - **All documents (customer and family member) live on local disk**, not
   object storage — fine for one developer on localhost, but doesn't
   survive container restarts in a multi-instance deployment. Must move
@@ -915,17 +947,27 @@ visually.
 
 ## 11. Recommendations for what's next
 
-1. **Get real Paystack test credentials and run one live checkout** —
-   `PaymentProviderPort`/`MockPaymentProviderService`/
-   `PaystackPaymentProviderService`/`PaymentIntent` are all built and the
-   mock path is verified end-to-end (see Manual verification above), but
-   `PaystackPaymentProviderService` itself has only been checked against
-   mocked HTTP responses, never a real account — that needs a free
-   test-mode secret key from https://dashboard.paystack.com (only the
-   business owner can create the account). Once obtained: set
-   `PAYMENT_PROVIDER=paystack` + `PAYSTACK_SECRET_KEY`, run one real
-   test-mode checkout, and register the webhook URL
-   (`<origin>/api/v1/webhooks/paystack`) in the Paystack dashboard.
+1. **Get real Paystack (and/or OPay) test credentials and run one live
+   checkout** — `PaymentProviderPort`/`MockPaymentProviderService`/
+   `PaystackPaymentProviderService`/`OpayPaymentProviderService`/
+   `PaymentIntent` are all built and the mock path is verified end-to-end
+   (see Manual verification above), but the two real providers have only
+   been checked against mocked HTTP responses, never a real account — that
+   needs credentials only the business owner can create (account
+   creation/sign-up isn't something that can be done on their behalf):
+   - Paystack: a free test-mode secret key from
+     https://dashboard.paystack.com (Settings → API Keys & Webhooks).
+   - OPay: a merchant account from https://merchant.opayweb.com, plus a
+     careful re-check of `OpayPaymentProviderService`'s exact
+     request/response field names against OPay's current docs — this one
+     carries a real "verify before use" caveat, not just "untested",
+     since my confidence in the exact contract is lower than Paystack's.
+
+   Once obtained: paste the key(s) here and I'll wire them into
+   `apps/api/.env`, set `PAYMENT_PROVIDER=paystack` (or `opay`), and run a
+   real test-mode checkout end-to-end the same way the mock path was
+   verified. For Paystack specifically, also register the webhook URL
+   (`<origin>/api/v1/webhooks/paystack`) in the dashboard once it's live.
 2. **Deploy to Oracle Cloud Free Tier** — the infrastructure and
    step-by-step guide are done ([`DEPLOYMENT.md`](DEPLOYMENT.md),
    `docker-compose.prod.yml`, `apps/api/Dockerfile`,
