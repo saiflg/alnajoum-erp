@@ -17,6 +17,8 @@ function InvoiceDetailContent() {
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [payingOnline, setPayingOnline] = useState(false);
+  const [payingWithWallet, setPayingWithWallet] = useState(false);
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [verifying, setVerifying] = useState(false);
   const [paymentNotice, setPaymentNotice] = useState<
     { kind: 'success' | 'error'; message: string } | null
@@ -31,6 +33,12 @@ function InvoiceDetailContent() {
   useEffect(() => {
     void loadInvoice();
   }, [loadInvoice]);
+
+  useEffect(() => {
+    apiRequest<{ balance: number }>('/wallet/me')
+      .then((data) => setWalletBalance(data.balance))
+      .catch(() => undefined);
+  }, []);
 
   // Returning from the mock/real checkout page lands back here with
   // ?checkout_reference=... — confirm it once, then strip the query param
@@ -100,9 +108,33 @@ function InvoiceDetailContent() {
     }
   }
 
+  async function handlePayWithWallet() {
+    if (!invoice) return;
+    setPayingWithWallet(true);
+    setPaymentNotice(null);
+    try {
+      const updated = await apiRequest<Invoice>('/wallet/me/pay-invoice', {
+        method: 'POST',
+        body: { invoiceId: invoice.id, amount: balance },
+      });
+      setInvoice(updated);
+      setPaymentNotice({ kind: 'success', message: 'Paid from your wallet balance — thank you!' });
+      const wallet = await apiRequest<{ balance: number }>('/wallet/me');
+      setWalletBalance(wallet.balance);
+    } catch (err) {
+      setPaymentNotice({
+        kind: 'error',
+        message: err instanceof ApiError ? err.message : 'Could not pay with wallet balance',
+      });
+    } finally {
+      setPayingWithWallet(false);
+    }
+  }
+
   const paid = invoice?.payments.reduce((sum, p) => sum + p.amount, 0) ?? 0;
   const balance = invoice ? invoice.totalAmount - paid : 0;
   const canPayOnline = invoice && balance > 0 && invoice.status !== 'VOID';
+  const canPayWithWallet = canPayOnline && walletBalance !== null && walletBalance >= balance;
 
   return (
     <ProtectedRoute allowedRoles={['CUSTOMER']}>
@@ -200,6 +232,23 @@ function InvoiceDetailContent() {
                   className="mt-4 w-full rounded-md bg-amber-500 px-4 py-2.5 text-sm font-semibold text-slate-900 transition-colors hover:bg-amber-400 disabled:opacity-50"
                 >
                   {payingOnline ? 'Redirecting to checkout…' : 'Pay online'}
+                </button>
+              )}
+              {canPayOnline && (
+                <button
+                  type="button"
+                  onClick={handlePayWithWallet}
+                  disabled={payingWithWallet || !canPayWithWallet}
+                  title={
+                    !canPayWithWallet && walletBalance !== null
+                      ? `Wallet balance (${walletBalance.toLocaleString()}) is less than the balance due`
+                      : undefined
+                  }
+                  className="mt-2 w-full rounded-md border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-800 transition-colors hover:bg-slate-100 disabled:opacity-50"
+                >
+                  {payingWithWallet
+                    ? 'Paying from wallet…'
+                    : `Pay with wallet balance${walletBalance !== null ? ` (${formatCurrency(walletBalance, invoice.currency)})` : ''}`}
                 </button>
               )}
             </div>

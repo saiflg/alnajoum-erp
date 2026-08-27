@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { NotificationsController } from './notifications.controller';
+import { NotificationsOwnController } from './notifications-own.controller';
 import { NotificationsService } from './notifications.service';
 import { MockNotificationProviderService } from './providers/mock-notification-provider.service';
 import { NOTIFICATION_PROVIDER } from './providers/notification-provider.port';
@@ -8,7 +9,7 @@ import { SmtpNotificationProviderService } from './providers/smtp-notification-p
 
 @Module({
   imports: [ConfigModule],
-  controllers: [NotificationsController],
+  controllers: [NotificationsOwnController, NotificationsController],
   providers: [
     NotificationsService,
     MockNotificationProviderService,

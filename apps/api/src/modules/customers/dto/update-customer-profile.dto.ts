@@ -1,5 +1,6 @@
 import { IsDateString, IsOptional, IsString, MaxLength } from 'class-validator';
 
+/** Self-service profile fields — anything a customer may edit about themself. */
 export class UpdateCustomerProfileDto {
   @IsOptional()
   @IsString()
@@ -27,6 +28,11 @@ export class UpdateCustomerProfileDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(30)
+  whatsapp?: string;
+
+  @IsOptional()
+  @IsString()
   @MaxLength(255)
   address?: string;
 
@@ -34,6 +40,11 @@ export class UpdateCustomerProfileDto {
   @IsString()
   @MaxLength(100)
   city?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  state?: string;
 
   @IsOptional()
   @IsString()
@@ -48,4 +59,14 @@ export class UpdateCustomerProfileDto {
   @IsOptional()
   @IsDateString()
   passportExpiryDate?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  emergencyContactName?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  emergencyContactPhone?: string;
 }

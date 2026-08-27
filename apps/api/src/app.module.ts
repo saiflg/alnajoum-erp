@@ -20,6 +20,11 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { PaymentsModule } from './modules/payments/payments.module';
 import { RbacModule } from './modules/rbac/rbac.module';
 import { UsersModule } from './modules/users/users.module';
+import { WalletModule } from './modules/wallet/wallet.module';
+import { HajjModule } from './modules/hajj/hajj.module';
+import { UmrahModule } from './modules/umrah/umrah.module';
+import { ManualPaymentsModule } from './modules/manual-payments/manual-payments.module';
+import { RemindersModule } from './modules/reminders/reminders.module';
 
 @Module({
   imports: [
@@ -40,6 +45,11 @@ import { UsersModule } from './modules/users/users.module';
     PaymentsModule,
     FlightsModule,
     ContactModule,
+    WalletModule,
+    HajjModule,
+    UmrahModule,
+    ManualPaymentsModule,
+    RemindersModule,
   ],
   controllers: [AppController],
   providers: [

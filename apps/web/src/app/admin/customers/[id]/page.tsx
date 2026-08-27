@@ -10,10 +10,13 @@ import { apiFileUrl, apiRequest, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { DOCUMENT_TYPE_LABELS } from '@/lib/document-types';
 import {
+  Branch,
   CustomerProfile,
+  CustomerType,
   FamilyMember,
   FamilyMemberDocument,
   FamilyRelationship,
+  StaffMember,
 } from '@/lib/types';
 
 const RELATIONSHIPS: FamilyRelationship[] = [
@@ -24,6 +27,8 @@ const RELATIONSHIPS: FamilyRelationship[] = [
   'GUARDIAN',
   'OTHER',
 ];
+
+const CUSTOMER_TYPES: CustomerType[] = ['INDIVIDUAL', 'CORPORATE', 'VIP', 'GROUP'];
 
 export default function CustomerDetailPage() {
   const params = useParams<{ id: string }>();
@@ -41,6 +46,12 @@ export default function CustomerDetailPage() {
   const [city, setCity] = useState('');
   const [country, setCountry] = useState('');
   const [passportNumber, setPassportNumber] = useState('');
+  const [customerType, setCustomerType] = useState<CustomerType>('INDIVIDUAL');
+  const [assignedStaffId, setAssignedStaffId] = useState('');
+  const [assignedBranchId, setAssignedBranchId] = useState('');
+
+  const [staffList, setStaffList] = useState<StaffMember[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
 
   const [showAddMember, setShowAddMember] = useState(false);
   const [newMember, setNewMember] = useState({
@@ -63,11 +74,19 @@ export default function CustomerDetailPage() {
         setCity(data.city ?? '');
         setCountry(data.country ?? '');
         setPassportNumber(data.passportNumber ?? '');
+        setCustomerType(data.customerType);
+        setAssignedStaffId(data.assignedStaffId ?? '');
+        setAssignedBranchId(data.assignedBranchId ?? '');
       })
       .catch((err) => setError(err.message));
   }
 
   useEffect(load, [params.id]);
+
+  useEffect(() => {
+    apiRequest<StaffMember[]>('/staff').then(setStaffList).catch(() => undefined);
+    apiRequest<Branch[]>('/branches').then(setBranches).catch(() => undefined);
+  }, []);
 
   async function handleSave(e: FormEvent) {
     e.preventDefault();
@@ -76,7 +95,15 @@ export default function CustomerDetailPage() {
     try {
       await apiRequest(`/customers/${params.id}`, {
         method: 'PATCH',
-        body: { nationality, city, country, passportNumber },
+        body: {
+          nationality,
+          city,
+          country,
+          passportNumber,
+          customerType,
+          assignedStaffId: assignedStaffId || null,
+          assignedBranchId: assignedBranchId || null,
+        },
       });
       load();
     } catch (err) {
@@ -208,6 +235,53 @@ export default function CustomerDetailPage() {
                   onChange={setCountry}
                   className="mt-1 w-full"
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700">Customer type</label>
+                <select
+                  disabled={!canUpdate}
+                  value={customerType}
+                  onChange={(e) => setCustomerType(e.target.value as CustomerType)}
+                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100"
+                >
+                  {CUSTOMER_TYPES.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700">Assigned staff</label>
+                <select
+                  disabled={!canUpdate}
+                  value={assignedStaffId}
+                  onChange={(e) => setAssignedStaffId(e.target.value)}
+                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100"
+                >
+                  <option value="">— Unassigned —</option>
+                  {staffList.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.firstName} {s.lastName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700">Assigned branch</label>
+                <select
+                  disabled={!canUpdate}
+                  value={assignedBranchId}
+                  onChange={(e) => setAssignedBranchId(e.target.value)}
+                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100"
+                >
+                  <option value="">— Unassigned —</option>
+                  {branches.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               {canUpdate && (

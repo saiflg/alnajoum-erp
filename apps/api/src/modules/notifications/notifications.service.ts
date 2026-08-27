@@ -28,6 +28,34 @@ interface ContactMessageDetails {
   message: string;
 }
 
+interface WalletUpdateDetails {
+  type: 'DEPOSIT' | 'DEBIT';
+  amount: number;
+  currency: string;
+  description: string;
+}
+
+interface InstallmentReminderDetails {
+  registrationNumber: string;
+  packageName: string;
+  totalAmount: number;
+  balance: number;
+  currency: string;
+  overdue: boolean;
+}
+
+interface DocumentMissingDetails {
+  missingDocumentTypes: string[];
+}
+
+interface ManualPaymentStatusDetails {
+  invoiceNumber: string;
+  amount: number;
+  currency: string;
+  status: 'APPROVED' | 'REJECTED' | 'CLARIFICATION_REQUESTED';
+  reviewNote?: string;
+}
+
 @Injectable()
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
@@ -49,6 +77,7 @@ export class NotificationsService {
     to: string,
     subject: string,
     textBody: string,
+    identityId?: string,
   ): Promise<void> {
     try {
       const result = await this.provider.sendEmail({ to, subject, textBody });
@@ -62,6 +91,7 @@ export class NotificationsService {
             ? NotificationStatus.SENT
             : NotificationStatus.FAILED,
           errorMessage: result.error,
+          identityId,
         },
       });
     } catch (error) {
@@ -141,10 +171,155 @@ export class NotificationsService {
     await this.send(NotificationType.CONTACT_MESSAGE, recipient, subject, body);
   }
 
+  /** Shared by Hajj and Umrah registration confirmations — same shape as a
+   * booking confirmation, just for a package instead of a flight. */
+  async sendPilgrimageRegistrationConfirmation(
+    email: string,
+    details: {
+      kind: 'Hajj' | 'Umrah';
+      registrationNumber: string;
+      packageName: string;
+      totalAmount: number;
+      currency: string;
+      pilgrimCount: number;
+    },
+  ): Promise<void> {
+    const subject = `${details.kind} registration confirmed: ${details.registrationNumber}`;
+    const body = [
+      `Your ${details.kind} registration is confirmed.`,
+      '',
+      `Registration: ${details.registrationNumber}`,
+      `Package: ${details.packageName}`,
+      `Pilgrims: ${details.pilgrimCount}`,
+      `Total: ${details.currency} ${details.totalAmount}`,
+    ].join('\n');
+    await this.send(
+      NotificationType.BOOKING_CONFIRMATION,
+      email,
+      subject,
+      body,
+    );
+  }
+
+  async sendWalletUpdate(
+    email: string,
+    identityId: string,
+    update: WalletUpdateDetails,
+  ): Promise<void> {
+    const verb = update.type === 'DEPOSIT' ? 'credited' : 'debited';
+    const subject = `Wallet ${verb}: ${update.currency} ${update.amount}`;
+    const body = [
+      `Your wallet was ${verb}.`,
+      '',
+      `Amount: ${update.currency} ${update.amount}`,
+      `Description: ${update.description}`,
+    ].join('\n');
+    await this.send(
+      update.type === 'DEPOSIT'
+        ? NotificationType.WALLET_DEPOSIT
+        : NotificationType.WALLET_DEBIT,
+      email,
+      subject,
+      body,
+      identityId,
+    );
+  }
+
+  async sendInstallmentReminder(
+    email: string,
+    identityId: string,
+    reminder: InstallmentReminderDetails,
+  ): Promise<void> {
+    const subject = reminder.overdue
+      ? `Payment overdue: ${reminder.registrationNumber}`
+      : `Installment reminder: ${reminder.registrationNumber}`;
+    const body = [
+      reminder.overdue
+        ? 'A payment on your registration is overdue.'
+        : "Here's a reminder of your remaining balance.",
+      '',
+      `Package: ${reminder.packageName}`,
+      `Registration: ${reminder.registrationNumber}`,
+      `Total: ${reminder.currency} ${reminder.totalAmount}`,
+      `Remaining balance: ${reminder.currency} ${reminder.balance}`,
+    ].join('\n');
+    await this.send(
+      reminder.overdue
+        ? NotificationType.PAYMENT_OVERDUE
+        : NotificationType.INSTALLMENT_REMINDER,
+      email,
+      subject,
+      body,
+      identityId,
+    );
+  }
+
+  async sendDocumentMissingReminder(
+    email: string,
+    identityId: string,
+    details: DocumentMissingDetails,
+  ): Promise<void> {
+    const subject = 'Missing documents on your profile';
+    const body = [
+      'The following documents are still missing from your profile:',
+      '',
+      ...details.missingDocumentTypes.map((type) => `- ${type}`),
+      '',
+      'Please upload them to avoid delays with your applications.',
+    ].join('\n');
+    await this.send(
+      NotificationType.DOCUMENT_MISSING,
+      email,
+      subject,
+      body,
+      identityId,
+    );
+  }
+
+  async sendManualPaymentStatus(
+    email: string,
+    identityId: string,
+    details: ManualPaymentStatusDetails,
+  ): Promise<void> {
+    const type =
+      details.status === 'APPROVED'
+        ? NotificationType.MANUAL_PAYMENT_APPROVED
+        : NotificationType.MANUAL_PAYMENT_REJECTED;
+    const subject = `Manual payment ${details.status.toLowerCase().replace('_', ' ')}: ${details.invoiceNumber}`;
+    const body = [
+      `Your submitted payment of ${details.currency} ${details.amount} against invoice ${details.invoiceNumber} was ${details.status.toLowerCase().replace('_', ' ')}.`,
+      details.reviewNote ? `\nNote from finance: ${details.reviewNote}` : '',
+    ].join('\n');
+    await this.send(type, email, subject, body, identityId);
+  }
+
   listAll(filters: { type?: NotificationType; status?: NotificationStatus }) {
     return this.prisma.notification.findMany({
       where: filters,
       orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  /** In-app feed for the calling identity's dashboard widget. */
+  listForIdentity(identityId: string) {
+    return this.prisma.notification.findMany({
+      where: { identityId },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+  }
+
+  async markRead(id: string, identityId: string): Promise<void> {
+    await this.prisma.notification.updateMany({
+      where: { id, identityId },
+      data: { isRead: true },
+    });
+  }
+
+  async markAllRead(identityId: string): Promise<void> {
+    await this.prisma.notification.updateMany({
+      where: { identityId, isRead: false },
+      data: { isRead: true },
     });
   }
 }

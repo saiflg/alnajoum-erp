@@ -4,15 +4,23 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../infrastructure/prisma/prisma.service';
+import { AuditService } from '../../audit/audit.service';
 import { CreateFamilyMemberDto } from './dto/create-family-member.dto';
 import { UpdateFamilyMemberDto } from './dto/update-family-member.dto';
 
 @Injectable()
 export class FamilyMembersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditService: AuditService,
+  ) {}
 
-  create(customerId: string, dto: CreateFamilyMemberDto) {
-    return this.prisma.familyMember.create({
+  async create(
+    customerId: string,
+    dto: CreateFamilyMemberDto,
+    actorIdentityId?: string,
+  ) {
+    const member = await this.prisma.familyMember.create({
       data: {
         customerId,
         ...dto,
@@ -22,6 +30,14 @@ export class FamilyMembersService {
           : undefined,
       },
     });
+    await this.auditService.record({
+      identityId: actorIdentityId,
+      action: 'family_member.added',
+      entityType: 'FamilyMember',
+      entityId: member.id,
+      metadata: { customerId, relationship: member.relationship },
+    });
+    return member;
   }
 
   listForCustomer(customerId: string) {

@@ -16,6 +16,7 @@ import {
 } from '@prisma/client';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
+import { IncentivesService } from '../incentives/incentives.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { RecordPaymentDto } from './dto/record-payment.dto';
 import { InvoicesService } from './invoices.service';
@@ -47,6 +48,7 @@ export class PaymentsService {
     private readonly invoicesService: InvoicesService,
     private readonly notificationsService: NotificationsService,
     private readonly configService: ConfigService,
+    private readonly incentivesService: IncentivesService,
     @Inject(PAYMENT_PROVIDER)
     private readonly paymentProvider: PaymentProviderPort,
   ) {}
@@ -110,6 +112,8 @@ export class PaymentsService {
         },
       );
     }
+
+    await this.incentivesService.applyForInvoicePayment(invoiceId, dto.amount);
 
     return updatedInvoice;
   }
@@ -330,6 +334,11 @@ export class PaymentsService {
         },
       );
     }
+
+    await this.incentivesService.applyForInvoicePayment(
+      intent.invoiceId,
+      intent.amount,
+    );
 
     return { ok: true };
   }

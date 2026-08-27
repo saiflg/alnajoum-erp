@@ -17,9 +17,13 @@ export default function CustomerProfilePage() {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [nationality, setNationality] = useState('');
+  const [whatsapp, setWhatsapp] = useState('');
   const [city, setCity] = useState('');
+  const [state, setState] = useState('');
   const [country, setCountry] = useState('');
   const [passportNumber, setPassportNumber] = useState('');
+  const [emergencyContactName, setEmergencyContactName] = useState('');
+  const [emergencyContactPhone, setEmergencyContactPhone] = useState('');
 
   const [docType, setDocType] = useState<DocumentType>('PASSPORT');
   const [uploading, setUploading] = useState(false);
@@ -32,9 +36,13 @@ export default function CustomerProfilePage() {
         setFirstName(data.firstName);
         setLastName(data.lastName);
         setNationality(data.nationality ?? '');
+        setWhatsapp(data.whatsapp ?? '');
         setCity(data.city ?? '');
+        setState(data.state ?? '');
         setCountry(data.country ?? '');
         setPassportNumber(data.passportNumber ?? '');
+        setEmergencyContactName(data.emergencyContactName ?? '');
+        setEmergencyContactPhone(data.emergencyContactPhone ?? '');
       })
       .catch((err) => setError(err.message));
   }
@@ -48,7 +56,18 @@ export default function CustomerProfilePage() {
     try {
       await apiRequest('/customers/me', {
         method: 'PATCH',
-        body: { firstName, lastName, nationality, city, country, passportNumber },
+        body: {
+          firstName,
+          lastName,
+          nationality,
+          whatsapp,
+          city,
+          state,
+          country,
+          passportNumber,
+          emergencyContactName,
+          emergencyContactPhone,
+        },
       });
       load();
     } catch (err) {
@@ -134,8 +153,40 @@ export default function CustomerProfilePage() {
                 />
               </div>
               <div>
+                <label className="block text-sm font-medium text-slate-700">State</label>
+                <input
+                  value={state}
+                  onChange={(e) => setState(e.target.value)}
+                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
+                />
+              </div>
+              <div>
                 <label className="block text-sm font-medium text-slate-700">Country</label>
                 <CountrySelect value={country} onChange={setCountry} className="mt-1 w-full" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700">WhatsApp number</label>
+                <input
+                  value={whatsapp}
+                  onChange={(e) => setWhatsapp(e.target.value)}
+                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700">Emergency contact name</label>
+                <input
+                  value={emergencyContactName}
+                  onChange={(e) => setEmergencyContactName(e.target.value)}
+                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700">Emergency contact phone</label>
+                <input
+                  value={emergencyContactPhone}
+                  onChange={(e) => setEmergencyContactPhone(e.target.value)}
+                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
+                />
               </div>
 
               <button

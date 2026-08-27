@@ -1,10 +1,20 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Res,
+  StreamableFile,
+} from '@nestjs/common';
+import type { Response } from 'express';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthContext } from '../../common/interfaces/auth-context.interface';
 import { CustomersService } from '../customers/customers.service';
 import { VerifyCheckoutDto } from './dto/verify-checkout.dto';
 import { InvoicesService } from './invoices.service';
 import { PaymentsService } from './payments.service';
+import { ReceiptsService } from './receipts.service';
 
 @Controller('invoices/me')
 export class InvoicesOwnController {
@@ -12,6 +22,7 @@ export class InvoicesOwnController {
     private readonly invoicesService: InvoicesService,
     private readonly customersService: CustomersService,
     private readonly paymentsService: PaymentsService,
+    private readonly receiptsService: ReceiptsService,
   ) {}
 
   @Get()
@@ -53,5 +64,26 @@ export class InvoicesOwnController {
       user.sub,
     );
     return this.paymentsService.verifyCheckout(customerId, id, dto.reference);
+  }
+
+  /** Streams a PDF receipt for one of the customer's own payments. */
+  @Get('payments/:paymentId/receipt.pdf')
+  async downloadReceipt(
+    @CurrentUser() user: AuthContext,
+    @Param('paymentId') paymentId: string,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<StreamableFile> {
+    const customerId = await this.customersService.getCustomerIdForIdentity(
+      user.sub,
+    );
+    const { stream, filename } = await this.receiptsService.renderPaymentReceipt(
+      paymentId,
+      customerId,
+    );
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="${filename}"`,
+    });
+    return new StreamableFile(stream);
   }
 }

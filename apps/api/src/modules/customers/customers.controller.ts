@@ -1,19 +1,36 @@
-import { Body, Controller, Delete, Get, Param, Patch } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Query } from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import type { AuthContext } from '../../common/interfaces/auth-context.interface';
 import { PERMISSIONS } from '../rbac/constants/permissions.constant';
+import { UsersService } from '../users/users.service';
 import { CustomersService } from './customers.service';
+import { AdminUpdateCustomerDto } from './dto/admin-update-customer.dto';
 import { UpdateCustomerProfileDto } from './dto/update-customer-profile.dto';
 
 @Controller('customers')
 export class CustomersController {
-  constructor(private readonly customersService: CustomersService) {}
+  constructor(
+    private readonly customersService: CustomersService,
+    private readonly usersService: UsersService,
+  ) {}
 
   @Get()
   @RequirePermissions(PERMISSIONS.CUSTOMER.READ)
-  findAll() {
-    return this.customersService.findAll();
+  findAll(
+    @Query('assignedStaffId') assignedStaffId?: string,
+    @Query('assignedBranchId') assignedBranchId?: string,
+  ) {
+    return this.customersService.findAll({ assignedStaffId, assignedBranchId });
+  }
+
+  /** Every customer assigned to the calling staff member — "my customers". */
+  @Get('assigned-to-me')
+  @RequirePermissions(PERMISSIONS.STAFF_ASSIGNMENT.READ)
+  async findAssignedToMe(@CurrentUser() user: AuthContext) {
+    const staffId = await this.usersService.getStaffIdForIdentity(user.sub);
+    if (!staffId) return [];
+    return this.customersService.listForStaff(staffId);
   }
 
   @Get('me')
@@ -37,7 +54,7 @@ export class CustomersController {
 
   @Patch(':id')
   @RequirePermissions(PERMISSIONS.CUSTOMER.UPDATE)
-  update(@Param('id') id: string, @Body() dto: UpdateCustomerProfileDto) {
+  update(@Param('id') id: string, @Body() dto: AdminUpdateCustomerDto) {
     return this.customersService.update(id, dto);
   }
 

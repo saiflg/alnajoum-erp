@@ -48,7 +48,7 @@ export class CustomerOwnFamilyMembersController {
     const customerId = await this.customersService.getCustomerIdForIdentity(
       user.sub,
     );
-    return this.familyMembersService.create(customerId, dto);
+    return this.familyMembersService.create(customerId, dto, user.sub);
   }
 
   @Get()

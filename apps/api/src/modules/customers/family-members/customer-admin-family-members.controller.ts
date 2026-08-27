@@ -15,12 +15,14 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import * as fs from 'fs';
+import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../../common/decorators/permissions.decorator';
 import {
   createDocumentMulterOptions,
   documentFilePath,
 } from '../../../common/documents/document-storage.util';
 import { assertImageIsReadableOrCleanup } from '../../../common/documents/image-quality.util';
+import type { AuthContext } from '../../../common/interfaces/auth-context.interface';
 import { PERMISSIONS } from '../../rbac/constants/permissions.constant';
 import { UploadDocumentQueryDto } from '../documents/dto/upload-document-query.dto';
 import {
@@ -41,10 +43,11 @@ export class CustomerAdminFamilyMembersController {
   @Post()
   @RequirePermissions(PERMISSIONS.CUSTOMER.UPDATE)
   create(
+    @CurrentUser() user: AuthContext,
     @Param('customerId') customerId: string,
     @Body() dto: CreateFamilyMemberDto,
   ) {
-    return this.familyMembersService.create(customerId, dto);
+    return this.familyMembersService.create(customerId, dto, user.sub);
   }
 
   @Get()

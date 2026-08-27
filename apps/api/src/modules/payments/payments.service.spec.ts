@@ -12,6 +12,7 @@ import {
   PaymentMethod,
 } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
+import { IncentivesService } from '../incentives/incentives.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { InvoicesService } from './invoices.service';
 import { PaymentsService } from './payments.service';
@@ -22,6 +23,7 @@ describe('PaymentsService', () => {
   let prisma: Record<string, Record<string, jest.Mock>>;
   let invoicesService: { recomputeStatus: jest.Mock; getInvoice: jest.Mock };
   let notificationsService: { sendPaymentReceipt: jest.Mock };
+  let incentivesService: { applyForInvoicePayment: jest.Mock };
   let paymentProvider: {
     initiateCheckout: jest.Mock;
     verifyCheckout: jest.Mock;
@@ -44,6 +46,7 @@ describe('PaymentsService', () => {
       getInvoice: jest.fn(),
     };
     notificationsService = { sendPaymentReceipt: jest.fn() };
+    incentivesService = { applyForInvoicePayment: jest.fn() };
     paymentProvider = {
       initiateCheckout: jest.fn(),
       verifyCheckout: jest.fn(),
@@ -58,6 +61,7 @@ describe('PaymentsService', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: InvoicesService, useValue: invoicesService },
         { provide: NotificationsService, useValue: notificationsService },
+        { provide: IncentivesService, useValue: incentivesService },
         { provide: ConfigService, useValue: configService },
         { provide: PAYMENT_PROVIDER, useValue: paymentProvider },
       ],

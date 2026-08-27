@@ -1,0 +1,419 @@
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import {
+  InvoiceStatus,
+  PaymentMethod,
+  Wallet,
+  WalletTransactionStatus,
+  WalletTransactionType,
+} from '@prisma/client';
+import { randomBytes } from 'crypto';
+import { AuditService } from '../audit/audit.service';
+import { PrismaService } from '../../infrastructure/prisma/prisma.service';
+import { IncentivesService } from '../incentives/incentives.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { InvoicesService } from '../payments/invoices.service';
+import {
+  PAYMENT_PROVIDER,
+  VerifyCheckoutResult,
+} from '../payments/providers/payment-provider.port';
+import type { PaymentProviderPort } from '../payments/providers/payment-provider.port';
+
+function generateWalletReference(prefix: string): string {
+  return `${prefix}-${randomBytes(5).toString('hex').toUpperCase()}`;
+}
+
+@Injectable()
+export class WalletService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly configService: ConfigService,
+    private readonly invoicesService: InvoicesService,
+    private readonly notificationsService: NotificationsService,
+    private readonly auditService: AuditService,
+    private readonly incentivesService: IncentivesService,
+    @Inject(PAYMENT_PROVIDER)
+    private readonly paymentProvider: PaymentProviderPort,
+  ) {}
+
+  async getOrCreateWallet(customerId: string): Promise<Wallet> {
+    const existing = await this.prisma.wallet.findUnique({
+      where: { customerId },
+    });
+    if (existing) return existing;
+    return this.prisma.wallet.create({ data: { customerId } });
+  }
+
+  /** Sum of COMPLETED transactions only — PENDING deposits and REVERSED/FAILED entries never count. */
+  async computeBalance(walletId: string): Promise<number> {
+    const result = await this.prisma.walletTransaction.aggregate({
+      where: { walletId, status: WalletTransactionStatus.COMPLETED },
+      _sum: { amount: true },
+    });
+    return result._sum.amount ?? 0;
+  }
+
+  async getWalletWithBalance(customerId: string) {
+    const wallet = await this.getOrCreateWallet(customerId);
+    const [balance, transactions] = await Promise.all([
+      this.computeBalance(wallet.id),
+      this.prisma.walletTransaction.findMany({
+        where: { walletId: wallet.id },
+        orderBy: { createdAt: 'desc' },
+      }),
+    ]);
+    return { wallet, balance, transactions };
+  }
+
+  async listAllWallets() {
+    const wallets = await this.prisma.wallet.findMany({
+      include: {
+        customer: { select: { firstName: true, lastName: true, id: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    return Promise.all(
+      wallets.map(async (wallet) => ({
+        ...wallet,
+        balance: await this.computeBalance(wallet.id),
+      })),
+    );
+  }
+
+  /**
+   * Starts a customer-initiated online top-up. Mirrors
+   * PaymentsService.initiateCheckout, but against a PENDING WalletTransaction
+   * instead of a PaymentIntent — the wallet has no invoice to attach to.
+   */
+  async initiateDeposit(customerId: string, amount: number) {
+    const wallet = await this.getOrCreateWallet(customerId);
+    const customer = await this.prisma.customer.findUnique({
+      where: { id: customerId },
+      include: { identity: { select: { email: true } } },
+    });
+    if (!customer) {
+      throw new NotFoundException('Customer profile not found');
+    }
+
+    const reference = generateWalletReference('WDEP');
+    const transaction = await this.prisma.walletTransaction.create({
+      data: {
+        walletId: wallet.id,
+        type: WalletTransactionType.DEPOSIT,
+        status: WalletTransactionStatus.PENDING,
+        amount,
+        currency: wallet.currency,
+        description: 'Online wallet top-up',
+        reference,
+      },
+    });
+
+    const webOrigin = this.configService.get<string>(
+      'PUBLIC_WEB_ORIGIN',
+      'http://localhost:3000',
+    );
+    const callbackUrl = `${webOrigin}/portal/wallet?checkout_reference=${reference}`;
+
+    const result = await this.paymentProvider.initiateCheckout({
+      reference,
+      amount,
+      currency: wallet.currency,
+      customerEmail: customer.identity.email,
+      callbackUrl,
+    });
+
+    return { authorizationUrl: result.authorizationUrl, reference: transaction.reference };
+  }
+
+  /** Called when the browser returns from the provider's hosted checkout page. */
+  async verifyDeposit(customerId: string, reference: string) {
+    const transaction = await this.prisma.walletTransaction.findUnique({
+      where: { reference },
+      include: { wallet: true },
+    });
+    if (!transaction) {
+      throw new NotFoundException('No wallet deposit found for this reference');
+    }
+    if (transaction.wallet.customerId !== customerId) {
+      throw new ForbiddenException('This deposit does not belong to this customer');
+    }
+    if (transaction.type !== WalletTransactionType.DEPOSIT) {
+      throw new BadRequestException('This reference is not a wallet deposit');
+    }
+
+    if (transaction.status === WalletTransactionStatus.COMPLETED) {
+      return this.getWalletWithBalance(customerId);
+    }
+
+    const result = await this.paymentProvider.verifyCheckout(reference);
+    await this.finalizeDeposit(transaction.id, result);
+    return this.getWalletWithBalance(customerId);
+  }
+
+  private async finalizeDeposit(
+    transactionId: string,
+    result: VerifyCheckoutResult,
+  ): Promise<void> {
+    const transaction = await this.prisma.walletTransaction.findUniqueOrThrow({
+      where: { id: transactionId },
+      include: { wallet: { include: { customer: { include: { identity: true } } } } },
+    });
+    if (transaction.status === WalletTransactionStatus.COMPLETED) return;
+
+    if (!result.success) {
+      await this.prisma.walletTransaction.update({
+        where: { id: transactionId },
+        data: { status: WalletTransactionStatus.FAILED },
+      });
+      return;
+    }
+
+    // Defense in depth, same as PaymentsService.finalizeIntent: the mock
+    // provider reports amount 0 (nothing independently to check against),
+    // a real gateway always reports a real confirmed amount.
+    if (result.amount > 0 && result.amount !== transaction.amount) {
+      await this.prisma.walletTransaction.update({
+        where: { id: transactionId },
+        data: { status: WalletTransactionStatus.FAILED },
+      });
+      return;
+    }
+
+    await this.prisma.walletTransaction.update({
+      where: { id: transactionId },
+      data: { status: WalletTransactionStatus.COMPLETED },
+    });
+
+    await this.notificationsService.sendWalletUpdate(
+      transaction.wallet.customer.identity.email,
+      transaction.wallet.customer.identityId,
+      {
+        type: 'DEPOSIT',
+        amount: transaction.amount,
+        currency: transaction.currency,
+        description: transaction.description,
+      },
+    );
+
+    await this.auditService.record({
+      identityId: transaction.wallet.customer.identityId,
+      action: 'wallet.deposit.completed',
+      entityType: 'Wallet',
+      entityId: transaction.walletId,
+      metadata: { amount: transaction.amount, reference: transaction.reference },
+    });
+  }
+
+  /**
+   * Pays some or all of an invoice's outstanding balance from the
+   * customer's own wallet. Both the debit and the resulting Payment row are
+   * created inside one DB transaction — a wallet payment can never leave
+   * the ledger and the invoice out of sync with each other.
+   */
+  async payInvoiceWithWallet(
+    customerId: string,
+    invoiceId: string,
+    amount: number,
+  ) {
+    const wallet = await this.getOrCreateWallet(customerId);
+    const balance = await this.computeBalance(wallet.id);
+    if (amount > balance) {
+      throw new BadRequestException(
+        `Wallet balance (${balance}) is less than the requested payment (${amount})`,
+      );
+    }
+
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      include: { payments: true },
+    });
+    if (!invoice) {
+      throw new NotFoundException('Invoice not found');
+    }
+    if (invoice.customerId !== customerId) {
+      throw new ForbiddenException('This invoice does not belong to this customer');
+    }
+    if (invoice.status === InvoiceStatus.VOID) {
+      throw new ConflictException('Cannot pay a voided invoice');
+    }
+    if (invoice.status === InvoiceStatus.PAID) {
+      throw new ConflictException('This invoice is already fully paid');
+    }
+    const totalPaid = invoice.payments.reduce((sum, p) => sum + p.amount, 0);
+    const outstanding = invoice.totalAmount - totalPaid;
+    if (amount > outstanding) {
+      throw new BadRequestException(
+        `Payment amount (${amount}) exceeds the outstanding balance (${outstanding})`,
+      );
+    }
+
+    const reference = generateWalletReference('WPAY');
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.walletTransaction.create({
+        data: {
+          walletId: wallet.id,
+          type: WalletTransactionType.PAYMENT,
+          status: WalletTransactionStatus.COMPLETED,
+          amount: -amount,
+          currency: wallet.currency,
+          description: `Payment towards invoice ${invoice.invoiceNumber}`,
+          reference,
+          invoiceId: invoice.id,
+        },
+      });
+      await tx.payment.create({
+        data: {
+          paymentReference: reference,
+          invoiceId: invoice.id,
+          amount,
+          method: PaymentMethod.WALLET,
+          note: 'Paid from wallet balance',
+        },
+      });
+    });
+
+    const updatedInvoice = await this.invoicesService.recomputeStatus(invoiceId);
+
+    const customer = await this.prisma.customer.findUnique({
+      where: { id: customerId },
+      include: { identity: { select: { email: true, id: true } } },
+    });
+    if (customer) {
+      const newTotalPaid = totalPaid + amount;
+      await this.notificationsService.sendPaymentReceipt(customer.identity.email, {
+        invoiceNumber: invoice.invoiceNumber,
+        amount,
+        balance: invoice.totalAmount - newTotalPaid,
+        currency: invoice.currency,
+      });
+    }
+
+    await this.auditService.record({
+      identityId: customer?.identity.id,
+      action: 'wallet.payment.completed',
+      entityType: 'Invoice',
+      entityId: invoiceId,
+      metadata: { amount, reference },
+    });
+
+    await this.incentivesService.applyForInvoicePayment(invoiceId, amount);
+
+    return updatedInvoice;
+  }
+
+  /** Finance-recorded manual top-up (bank transfer/cash into the wallet) — immediate, always audited. */
+  async creditManual(
+    customerId: string,
+    amount: number,
+    description: string | undefined,
+    staffId: string | undefined,
+    actorIdentityId: string | undefined,
+  ) {
+    const wallet = await this.getOrCreateWallet(customerId);
+    const reference = generateWalletReference('WMDEP');
+
+    await this.prisma.walletTransaction.create({
+      data: {
+        walletId: wallet.id,
+        type: WalletTransactionType.DEPOSIT,
+        status: WalletTransactionStatus.COMPLETED,
+        amount,
+        currency: wallet.currency,
+        description: description ?? 'Manual wallet credit',
+        reference,
+        createdByStaffId: staffId,
+      },
+    });
+
+    const customer = await this.prisma.customer.findUnique({
+      where: { id: customerId },
+      include: { identity: true },
+    });
+    if (customer) {
+      await this.notificationsService.sendWalletUpdate(
+        customer.identity.email,
+        customer.identityId,
+        {
+          type: 'DEPOSIT',
+          amount,
+          currency: wallet.currency,
+          description: description ?? 'Manual wallet credit',
+        },
+      );
+    }
+
+    await this.auditService.record({
+      identityId: actorIdentityId,
+      action: 'wallet.credited',
+      entityType: 'Wallet',
+      entityId: wallet.id,
+      metadata: { amount, reference, staffId, customerId },
+    });
+
+    return this.getWalletWithBalance(customerId);
+  }
+
+  /** Signed correction (refund/withdrawal/adjustment) by Finance — always audited. */
+  async adjust(
+    customerId: string,
+    amount: number,
+    type: WalletTransactionType,
+    description: string,
+    staffId: string | undefined,
+    actorIdentityId: string | undefined,
+  ) {
+    const wallet = await this.getOrCreateWallet(customerId);
+    if (amount < 0) {
+      const balance = await this.computeBalance(wallet.id);
+      if (balance + amount < 0) {
+        throw new BadRequestException(
+          `This adjustment would take the wallet balance negative (current balance: ${balance})`,
+        );
+      }
+    }
+
+    const reference = generateWalletReference('WADJ');
+    await this.prisma.walletTransaction.create({
+      data: {
+        walletId: wallet.id,
+        type,
+        status: WalletTransactionStatus.COMPLETED,
+        amount,
+        currency: wallet.currency,
+        description,
+        reference,
+        createdByStaffId: staffId,
+      },
+    });
+
+    const customer = await this.prisma.customer.findUnique({
+      where: { id: customerId },
+      include: { identity: true },
+    });
+    if (customer) {
+      await this.notificationsService.sendWalletUpdate(
+        customer.identity.email,
+        customer.identityId,
+        { type: amount >= 0 ? 'DEPOSIT' : 'DEBIT', amount: Math.abs(amount), currency: wallet.currency, description },
+      );
+    }
+
+    await this.auditService.record({
+      identityId: actorIdentityId,
+      action: 'wallet.adjusted',
+      entityType: 'Wallet',
+      entityId: wallet.id,
+      metadata: { amount, type, reference, staffId, customerId },
+    });
+
+    return this.getWalletWithBalance(customerId);
+  }
+}

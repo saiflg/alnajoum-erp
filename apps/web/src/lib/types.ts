@@ -76,6 +76,8 @@ export interface CustomerDocument {
   uploadedAt: string;
 }
 
+export type CustomerType = 'INDIVIDUAL' | 'CORPORATE' | 'VIP' | 'GROUP';
+
 export interface CustomerProfile {
   id: string;
   identityId: string;
@@ -84,15 +86,24 @@ export interface CustomerProfile {
   dateOfBirth: string | null;
   nationality: string | null;
   gender: string | null;
+  whatsapp: string | null;
   address: string | null;
   city: string | null;
+  state: string | null;
   country: string | null;
   passportNumber: string | null;
   passportExpiryDate: string | null;
+  emergencyContactName: string | null;
+  emergencyContactPhone: string | null;
+  customerType: CustomerType;
+  assignedStaffId: string | null;
+  assignedBranchId: string | null;
   createdAt: string;
   identity?: { email: string; phone: string | null; status: string };
   documents?: CustomerDocument[];
   familyMembers?: FamilyMember[];
+  assignedStaff?: { id?: string; firstName: string; lastName: string } | null;
+  assignedBranch?: { id?: string; name: string } | null;
 }
 
 export type FamilyRelationship =
@@ -208,7 +219,14 @@ export interface FlightBooking {
 }
 
 export type InvoiceStatus = 'ISSUED' | 'PARTIALLY_PAID' | 'PAID' | 'VOID';
-export type PaymentMethod = 'CASH' | 'BANK_TRANSFER' | 'POS' | 'CARD' | 'OTHER' | 'ONLINE';
+export type PaymentMethod =
+  | 'CASH'
+  | 'BANK_TRANSFER'
+  | 'POS'
+  | 'CARD'
+  | 'OTHER'
+  | 'ONLINE'
+  | 'WALLET';
 
 export interface InvoiceLineItem {
   id: string;
@@ -247,7 +265,16 @@ export type NotificationType =
   | 'STAFF_TEMP_PASSWORD'
   | 'BOOKING_CONFIRMATION'
   | 'PAYMENT_RECEIPT'
-  | 'CONTACT_MESSAGE';
+  | 'CONTACT_MESSAGE'
+  | 'WALLET_DEPOSIT'
+  | 'WALLET_DEBIT'
+  | 'INSTALLMENT_REMINDER'
+  | 'PAYMENT_OVERDUE'
+  | 'HAJJ_UMRAH_DEADLINE'
+  | 'DOCUMENT_MISSING'
+  | 'MANUAL_PAYMENT_SUBMITTED'
+  | 'MANUAL_PAYMENT_APPROVED'
+  | 'MANUAL_PAYMENT_REJECTED';
 export type NotificationStatus = 'SENT' | 'FAILED';
 
 export interface Notification {
@@ -258,5 +285,200 @@ export interface Notification {
   body: string;
   status: NotificationStatus;
   errorMessage: string | null;
+  isRead?: boolean;
+  createdAt: string;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2 — Wallet
+// ---------------------------------------------------------------------------
+
+export type WalletTransactionType =
+  | 'DEPOSIT'
+  | 'PAYMENT'
+  | 'REFUND'
+  | 'ADJUSTMENT'
+  | 'WITHDRAWAL'
+  | 'TRANSFER_IN'
+  | 'TRANSFER_OUT';
+export type WalletTransactionStatus = 'PENDING' | 'COMPLETED' | 'REVERSED' | 'FAILED';
+
+export interface WalletTransaction {
+  id: string;
+  walletId: string;
+  type: WalletTransactionType;
+  status: WalletTransactionStatus;
+  amount: number;
+  currency: string;
+  description: string;
+  reference: string;
+  invoiceId: string | null;
+  createdByStaffId: string | null;
+  createdAt: string;
+}
+
+export interface Wallet {
+  id: string;
+  customerId: string;
+  currency: string;
+  createdAt: string;
+  customer?: { id: string; firstName: string; lastName: string };
+}
+
+export interface WalletWithBalance {
+  wallet: Wallet;
+  balance: number;
+  transactions: WalletTransaction[];
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2 — Hajj & Umrah
+// ---------------------------------------------------------------------------
+
+export type PackageStatus = 'DRAFT' | 'PUBLISHED' | 'FULLY_BOOKED' | 'CLOSED' | 'CANCELLED';
+export type RegistrationStatus = 'PENDING' | 'CONFIRMED' | 'CANCELLED' | 'COMPLETED';
+export type UmrahPackageType = 'GROUP' | 'FAMILY' | 'VIP' | 'ECONOMY' | 'CUSTOM';
+
+export interface HajjPackage {
+  id: string;
+  name: string;
+  description: string | null;
+  price: number;
+  internalCost?: number | null;
+  currency: string;
+  durationDays: number | null;
+  departureDate: string | null;
+  returnDate: string | null;
+  airline: string | null;
+  hotel: string | null;
+  accommodation: string | null;
+  transport: string | null;
+  meals: string | null;
+  visaIncluded: boolean;
+  ziyaratIncluded: boolean;
+  guideIncluded: boolean;
+  maxPilgrims: number;
+  seatsAvailable: number;
+  paymentPlan: string | null;
+  termsAndConditions: string | null;
+  requiredDocuments: string | null;
+  status: PackageStatus;
+  createdAt: string;
+}
+
+export interface HajjRegistrationPilgrim {
+  id: string;
+  registrationId: string;
+  customerId: string | null;
+  familyMemberId: string | null;
+  firstName: string;
+  lastName: string;
+  passportNumber: string | null;
+}
+
+export interface HajjRegistration {
+  id: string;
+  registrationNumber: string;
+  packageId: string;
+  customerId: string;
+  registeredByStaffId: string | null;
+  status: RegistrationStatus;
+  currency: string;
+  totalAmount: number;
+  createdAt: string;
+  pilgrims: HajjRegistrationPilgrim[];
+  package: HajjPackage;
+  invoice: Invoice | null;
+  customer?: { firstName: string; lastName: string };
+}
+
+export interface UmrahPackage {
+  id: string;
+  name: string;
+  description: string | null;
+  packageType: UmrahPackageType;
+  costPrice?: number;
+  sellingPrice: number;
+  currency: string;
+  incentiveRule?: { percent: number } | null;
+  hotel: string | null;
+  flight: string | null;
+  transport: string | null;
+  visaIncluded: boolean;
+  durationDays: number | null;
+  departureDate: string | null;
+  returnDate: string | null;
+  maxPilgrims: number;
+  seatsAvailable: number;
+  status: PackageStatus;
+  createdAt: string;
+}
+
+export interface UmrahRegistrationPilgrim {
+  id: string;
+  registrationId: string;
+  customerId: string | null;
+  familyMemberId: string | null;
+  firstName: string;
+  lastName: string;
+  passportNumber: string | null;
+}
+
+export interface UmrahRegistration {
+  id: string;
+  registrationNumber: string;
+  packageId: string;
+  customerId: string;
+  registeredByStaffId: string | null;
+  status: RegistrationStatus;
+  currency: string;
+  totalAmount: number;
+  createdAt: string;
+  pilgrims: UmrahRegistrationPilgrim[];
+  package: UmrahPackage;
+  invoice: Invoice | null;
+  customer?: { firstName: string; lastName: string };
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2 — Manual payments & staff incentives
+// ---------------------------------------------------------------------------
+
+export type ManualPaymentStatus =
+  | 'PENDING_VERIFICATION'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'CLARIFICATION_REQUESTED';
+
+export interface ManualPaymentSubmission {
+  id: string;
+  invoiceId: string;
+  customerId: string;
+  amount: number;
+  method: PaymentMethod;
+  bankName: string | null;
+  transactionReference: string | null;
+  description: string | null;
+  receiptDocumentPath: string | null;
+  status: ManualPaymentStatus;
+  submittedByStaffId: string | null;
+  reviewedByStaffId: string | null;
+  reviewNote: string | null;
+  reviewedAt: string | null;
+  createdAt: string;
+  invoice?: { invoiceNumber: string };
+  customer?: { firstName: string; lastName: string };
+  submittedByStaff?: { firstName: string; lastName: string } | null;
+  reviewedByStaff?: { firstName: string; lastName: string } | null;
+}
+
+export interface StaffIncentive {
+  id: string;
+  staffId: string;
+  sourceType: string;
+  sourceId: string;
+  amount: number;
+  currency: string;
+  description: string;
   createdAt: string;
 }

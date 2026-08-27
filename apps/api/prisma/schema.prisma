@@ -53,9 +53,17 @@ model Identity {
   roles         IdentityRole[]
   refreshTokens RefreshToken[]
   auditLogs     AuditLog[]
+  notifications Notification[]
 
   @@index([type])
   @@map("identities")
+}
+
+enum CustomerType {
+  INDIVIDUAL
+  CORPORATE
+  VIP
+  GROUP
 }
 
 model Customer {
@@ -69,23 +77,47 @@ model Customer {
   nationality String?
   gender      String?
 
+  whatsapp String?
+
   address String?
   city    String?
+  state   String?
   country String?
 
   passportNumber     String?
   passportExpiryDate DateTime?
 
+  emergencyContactName  String?
+  emergencyContactPhone String?
+
+  customerType CustomerType @default(INDIVIDUAL)
+
+  // Staff/branch this customer's relationship is managed by. Both optional —
+  // most customers are self-registered and unassigned until a manager picks
+  // them up (see StaffModule's "my customers" view).
+  assignedStaffId  String?
+  assignedStaff    Staff?  @relation(fields: [assignedStaffId], references: [id], onDelete: SetNull)
+  assignedBranchId String?
+  assignedBranch   Branch? @relation(fields: [assignedBranchId], references: [id], onDelete: SetNull)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  documents              CustomerDocument[]
-  familyMembers          FamilyMember[]
-  flightBookings         FlightBooking[]
-  flightBookingPassenger FlightBookingPassenger[]
-  invoices               Invoice[]
-  paymentIntents         PaymentIntent[]
+  documents                CustomerDocument[]
+  familyMembers            FamilyMember[]
+  flightBookings           FlightBooking[]
+  flightBookingPassenger   FlightBookingPassenger[]
+  invoices                 Invoice[]
+  paymentIntents           PaymentIntent[]
+  wallet                   Wallet?
+  hajjRegistrations        HajjRegistration[]
+  hajjRegistrationPilgrim  HajjRegistrationPilgrim[]
+  umrahRegistrations       UmrahRegistration[]
+  umrahRegistrationPilgrim UmrahRegistrationPilgrim[]
+  manualPaymentSubmissions ManualPaymentSubmission[]
 
+  @@index([assignedStaffId])
+  @@index([assignedBranchId])
   @@map("customers")
 }
 
@@ -145,8 +177,10 @@ model FamilyMember {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  documents              FamilyMemberDocument[]
-  flightBookingPassenger FlightBookingPassenger[]
+  documents                FamilyMemberDocument[]
+  flightBookingPassenger   FlightBookingPassenger[]
+  hajjRegistrationPilgrim  HajjRegistrationPilgrim[]
+  umrahRegistrationPilgrim UmrahRegistrationPilgrim[]
 
   @@index([customerId])
   @@map("family_members")
@@ -190,9 +224,16 @@ model Staff {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  bookedFlightBookings FlightBooking[]
-  issuedInvoices       Invoice[]
-  recordedPayments     Payment[]
+  bookedFlightBookings    FlightBooking[]
+  issuedInvoices          Invoice[]
+  recordedPayments        Payment[]
+  assignedCustomers       Customer[]
+  hajjRegistrations       HajjRegistration[]
+  umrahRegistrations      UmrahRegistration[]
+  walletTransactions      WalletTransaction[]
+  incentives              StaffIncentive[]
+  submittedManualPayments ManualPaymentSubmission[] @relation("SubmittedManualPayments")
+  reviewedManualPayments  ManualPaymentSubmission[] @relation("ReviewedManualPayments")
 
   @@index([companyId])
   @@index([branchId])
@@ -239,7 +280,8 @@ model Branch {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  staff Staff[]
+  staff             Staff[]
+  assignedCustomers Customer[]
 
   @@unique([companyId, code])
   @@index([companyId])
@@ -471,6 +513,8 @@ enum PaymentMethod {
   // production, the mock provider by default) — the only method not
   // recorded by a staff member.
   ONLINE
+  // Debited from the customer's wallet balance (see Wallet/WalletTransaction).
+  WALLET
 }
 
 enum PaymentIntentStatus {
@@ -492,6 +536,13 @@ model Invoice {
   flightBookingId String?        @unique
   flightBooking   FlightBooking? @relation(fields: [flightBookingId], references: [id], onDelete: SetNull)
 
+  // Same nullable/unique shape as flightBookingId — an invoice generated
+  // from a Hajj or Umrah registration instead of a flight booking.
+  hajjRegistrationId  String?            @unique
+  hajjRegistration    HajjRegistration?  @relation(fields: [hajjRegistrationId], references: [id], onDelete: SetNull)
+  umrahRegistrationId String?            @unique
+  umrahRegistration   UmrahRegistration? @relation(fields: [umrahRegistrationId], references: [id], onDelete: SetNull)
+
   status InvoiceStatus @default(ISSUED)
 
   currency    String
@@ -505,9 +556,10 @@ model Invoice {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  lineItems      InvoiceLineItem[]
-  payments       Payment[]
-  paymentIntents PaymentIntent[]
+  lineItems                InvoiceLineItem[]
+  payments                 Payment[]
+  paymentIntents           PaymentIntent[]
+  manualPaymentSubmissions ManualPaymentSubmission[]
 
   @@index([customerId])
   @@index([status])
@@ -547,6 +599,10 @@ model Payment {
 
   paidAt    DateTime @default(now())
   createdAt DateTime @default(now())
+
+  // Set only when this Payment was created by approving a manual payment
+  // submission (see ManualPaymentSubmission) — the reverse of its paymentId.
+  manualPaymentSubmission ManualPaymentSubmission?
 
   @@index([invoiceId])
   @@map("payments")
@@ -593,6 +649,15 @@ enum NotificationType {
   BOOKING_CONFIRMATION
   PAYMENT_RECEIPT
   CONTACT_MESSAGE
+  WALLET_DEPOSIT
+  WALLET_DEBIT
+  INSTALLMENT_REMINDER
+  PAYMENT_OVERDUE
+  HAJJ_UMRAH_DEADLINE
+  DOCUMENT_MISSING
+  MANUAL_PAYMENT_SUBMITTED
+  MANUAL_PAYMENT_APPROVED
+  MANUAL_PAYMENT_REJECTED
 }
 
 enum NotificationStatus {
@@ -617,10 +682,391 @@ model Notification {
 
   errorMessage String?
 
+  // Set when this notification also belongs in an identity's in-app feed
+  // (dashboard "Notifications" widget) — the append-only send log above is
+  // reused as the in-app store rather than duplicating rows into a second
+  // table. Null for notifications that only ever left the system by email
+  // (e.g. the public contact form).
+  identityId String?
+  identity   Identity? @relation(fields: [identityId], references: [id], onDelete: SetNull)
+  isRead     Boolean   @default(false)
+
   createdAt DateTime @default(now())
 
   @@index([type])
   @@index([status])
   @@index([createdAt])
+  @@index([identityId])
   @@map("notifications")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2 — Wallet
+// ---------------------------------------------------------------------------
+
+enum WalletTransactionType {
+  DEPOSIT
+  PAYMENT
+  REFUND
+  ADJUSTMENT
+  WITHDRAWAL
+  TRANSFER_IN
+  TRANSFER_OUT
+}
+
+enum WalletTransactionStatus {
+  PENDING
+  COMPLETED
+  REVERSED
+  FAILED
+}
+
+model Wallet {
+  id         String   @id @default(cuid())
+  customerId String   @unique
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  currency String @default("NGN")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  transactions WalletTransaction[]
+
+  @@map("wallets")
+}
+
+/**
+ * Ledger-safe: the wallet never carries a stored balance column. Balance is
+ * always the sum of `amount` (signed — positive credits, negative debits)
+ * across this wallet's COMPLETED transactions, computed on read. This makes
+ * an incorrect balance structurally impossible — there is nothing to drift
+ * out of sync with the transaction history, because the history *is* the
+ * balance. See WalletService.getBalance().
+ */
+model WalletTransaction {
+  id       String @id @default(cuid())
+  walletId String
+  wallet   Wallet @relation(fields: [walletId], references: [id], onDelete: Restrict)
+
+  type   WalletTransactionType
+  status WalletTransactionStatus @default(COMPLETED)
+
+  // Signed whole-currency-unit amount: positive credits the wallet
+  // (DEPOSIT, REFUND, TRANSFER_IN), negative debits it (PAYMENT, WITHDRAWAL,
+  // TRANSFER_OUT). ADJUSTMENT can be either sign, for a manual correction.
+  amount      Int
+  currency    String
+  description String
+  reference   String @unique
+
+  // What this transaction paid for / originated from, when applicable —
+  // e.g. the invoice a wallet PAYMENT settled, or the PaymentIntent
+  // reference for an online DEPOSIT. Free-form on purpose: a wallet
+  // transaction can point at very different kinds of source records.
+  invoiceId String?
+
+  // Set for staff-initiated transactions (manual deposit/adjustment/
+  // withdrawal by Finance); null for customer self-service deposits/payments.
+  createdByStaffId String?
+  createdByStaff   Staff?  @relation(fields: [createdByStaffId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([walletId])
+  @@index([status])
+  @@map("wallet_transactions")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2 — Hajj & Umrah package management
+// ---------------------------------------------------------------------------
+
+enum PackageStatus {
+  DRAFT
+  PUBLISHED
+  FULLY_BOOKED
+  CLOSED
+  CANCELLED
+}
+
+enum RegistrationStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+model HajjPackage {
+  id          String  @id @default(cuid())
+  name        String
+  description String?
+
+  price        Int // selling price per pilgrim, whole currency units
+  internalCost Int? // cost price per pilgrim — never exposed on customer-facing routes
+  currency     String @default("NGN")
+
+  durationDays  Int?
+  departureDate DateTime?
+  returnDate    DateTime?
+
+  airline         String?
+  hotel           String?
+  accommodation   String?
+  transport       String?
+  meals           String?
+  visaIncluded    Boolean @default(true)
+  ziyaratIncluded Boolean @default(true)
+  guideIncluded   Boolean @default(true)
+
+  maxPilgrims    Int
+  seatsAvailable Int
+
+  paymentPlan        String? // free-text description of the installment structure
+  termsAndConditions String?
+  requiredDocuments  String? // free-text list, e.g. "Passport, Yellow Card, 2 photos"
+
+  status PackageStatus @default(DRAFT)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  registrations HajjRegistration[]
+
+  @@map("hajj_packages")
+}
+
+/**
+ * One family head's registration against a package — may cover several
+ * pilgrims (see HajjRegistrationPilgrim), mirroring how FlightBooking covers
+ * several FlightBookingPassenger rows. Generates exactly one Invoice, whose
+ * existing partial-payment machinery (Payment/PaymentIntent, PARTIALLY_PAID
+ * status) is what implements Hajj installment payments — no separate
+ * installment ledger needed.
+ */
+model HajjRegistration {
+  id                 String @id @default(cuid())
+  registrationNumber String @unique
+
+  packageId String
+  package   HajjPackage @relation(fields: [packageId], references: [id], onDelete: Restrict)
+
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+
+  registeredByStaffId String?
+  registeredByStaff   Staff?  @relation(fields: [registeredByStaffId], references: [id], onDelete: SetNull)
+
+  status RegistrationStatus @default(PENDING)
+
+  currency    String
+  totalAmount Int // package.price × pilgrim count, snapshotted at registration time
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  pilgrims HajjRegistrationPilgrim[]
+  invoice  Invoice?
+
+  @@index([packageId])
+  @@index([customerId])
+  @@map("hajj_registrations")
+}
+
+model HajjRegistrationPilgrim {
+  id             String           @id @default(cuid())
+  registrationId String
+  registration   HajjRegistration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+
+  // Exactly one of these is set, identifying who this pilgrim is (same
+  // shape as FlightBookingPassenger).
+  customerId     String?
+  customer       Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  familyMemberId String?
+  familyMember   FamilyMember? @relation(fields: [familyMemberId], references: [id], onDelete: SetNull)
+
+  firstName      String
+  lastName       String
+  passportNumber String?
+
+  createdAt DateTime @default(now())
+
+  @@index([registrationId])
+  @@map("hajj_registration_pilgrims")
+}
+
+enum UmrahPackageType {
+  GROUP
+  FAMILY
+  VIP
+  ECONOMY
+  CUSTOM
+}
+
+model UmrahPackage {
+  id          String           @id @default(cuid())
+  name        String
+  description String?
+  packageType UmrahPackageType @default(GROUP)
+
+  costPrice     Int // internal cost per pilgrim — never exposed on customer-facing routes
+  sellingPrice  Int
+  currency      String @default("NGN")
+  // Staff incentive rule evaluated on each approved payment against a
+  // registration for this package, e.g. { "percent": 2 } = 2% of the amount
+  // paid credited to the registering staff member as a StaffIncentive.
+  incentiveRule Json?
+
+  hotel        String?
+  flight       String?
+  transport    String?
+  visaIncluded Boolean @default(true)
+
+  durationDays  Int?
+  departureDate DateTime?
+  returnDate    DateTime?
+
+  maxPilgrims    Int
+  seatsAvailable Int
+
+  status PackageStatus @default(DRAFT)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  registrations UmrahRegistration[]
+
+  @@map("umrah_packages")
+}
+
+model UmrahRegistration {
+  id                 String @id @default(cuid())
+  registrationNumber String @unique
+
+  packageId String
+  package   UmrahPackage @relation(fields: [packageId], references: [id], onDelete: Restrict)
+
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+
+  registeredByStaffId String?
+  registeredByStaff   Staff?  @relation(fields: [registeredByStaffId], references: [id], onDelete: SetNull)
+
+  status RegistrationStatus @default(PENDING)
+
+  currency    String
+  totalAmount Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  pilgrims UmrahRegistrationPilgrim[]
+  invoice  Invoice?
+
+  @@index([packageId])
+  @@index([customerId])
+  @@map("umrah_registrations")
+}
+
+model UmrahRegistrationPilgrim {
+  id             String            @id @default(cuid())
+  registrationId String
+  registration   UmrahRegistration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+
+  customerId     String?
+  customer       Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  familyMemberId String?
+  familyMember   FamilyMember? @relation(fields: [familyMemberId], references: [id], onDelete: SetNull)
+
+  firstName      String
+  lastName       String
+  passportNumber String?
+
+  createdAt DateTime @default(now())
+
+  @@index([registrationId])
+  @@map("umrah_registration_pilgrims")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2 — Manual (offline) payments requiring finance approval
+// ---------------------------------------------------------------------------
+
+enum ManualPaymentStatus {
+  PENDING_VERIFICATION
+  APPROVED
+  REJECTED
+  CLARIFICATION_REQUESTED
+}
+
+/**
+ * A staff-submitted claim that a customer paid by cash or bank transfer.
+ * Deliberately separate from Payment: submitting one has NO effect on the
+ * invoice or any ledger — only approving it (PaymentsService creates the
+ * real Payment row atomically with the status flip) does. This is what
+ * "never affect the official financial ledger before approval" means in
+ * code: the ledger-affecting row simply doesn't exist yet.
+ */
+model ManualPaymentSubmission {
+  id String @id @default(cuid())
+
+  invoiceId String
+  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+
+  amount               Int
+  method               PaymentMethod // CASH | BANK_TRANSFER, enforced in the DTO
+  bankName             String?
+  transactionReference String?
+  description          String?
+  receiptDocumentPath  String? // stored filename under uploads/manual-payment-receipts
+
+  status ManualPaymentStatus @default(PENDING_VERIFICATION)
+
+  submittedByStaffId String?
+  submittedByStaff   Staff?  @relation("SubmittedManualPayments", fields: [submittedByStaffId], references: [id], onDelete: SetNull)
+
+  reviewedByStaffId String?
+  reviewedByStaff   Staff?    @relation("ReviewedManualPayments", fields: [reviewedByStaffId], references: [id], onDelete: SetNull)
+  reviewNote        String?
+  reviewedAt        DateTime?
+
+  // Set once approved: the resulting real Payment row this submission became.
+  paymentId String?  @unique
+  payment   Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([invoiceId])
+  @@index([customerId])
+  @@index([status])
+  @@map("manual_payment_submissions")
+}
+
+/**
+ * A staff incentive earned from an approved payment against a Hajj/Umrah
+ * registration, computed from the package's incentiveRule. Informational
+ * ledger only — paying out incentives is a payroll concern outside this
+ * system's scope.
+ */
+model StaffIncentive {
+  id String @id @default(cuid())
+
+  staffId String
+  staff   Staff  @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  sourceType  String // "HAJJ_REGISTRATION" | "UMRAH_REGISTRATION"
+  sourceId    String
+  amount      Int
+  currency    String
+  description String
+
+  createdAt DateTime @default(now())
+
+  @@index([staffId])
+  @@index([sourceType, sourceId])
+  @@map("staff_incentives")
 }

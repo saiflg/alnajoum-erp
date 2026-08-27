@@ -5,7 +5,11 @@ export const ADMIN_NAV = [
   { href: '/admin/staff', label: 'Staff' },
   { href: '/admin/customers', label: 'Customers' },
   { href: '/admin/flights', label: 'Flight Bookings' },
+  { href: '/admin/hajj-packages', label: 'Hajj Packages' },
+  { href: '/admin/umrah-packages', label: 'Umrah Packages' },
   { href: '/admin/invoices', label: 'Invoices' },
+  { href: '/admin/manual-payments', label: 'Manual Payments' },
+  { href: '/admin/wallets', label: 'Wallets' },
   { href: '/admin/notifications', label: 'Notifications' },
   { href: '/admin/roles', label: 'Roles' },
 ];
@@ -14,5 +18,7 @@ export const ADMIN_NAV = [
 export const FINANCE_NAV = [
   { href: '/finance/dashboard', label: 'Dashboard' },
   { href: '/admin/invoices', label: 'Invoices' },
+  { href: '/admin/manual-payments', label: 'Manual Payments' },
+  { href: '/admin/wallets', label: 'Wallets' },
   { href: '/admin/notifications', label: 'Notifications' },
 ];

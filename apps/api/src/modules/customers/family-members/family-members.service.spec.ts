@@ -1,11 +1,13 @@
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../../../infrastructure/prisma/prisma.service';
+import { AuditService } from '../../audit/audit.service';
 import { FamilyMembersService } from './family-members.service';
 
 describe('FamilyMembersService', () => {
   let service: FamilyMembersService;
   let prisma: Record<string, Record<string, jest.Mock>>;
+  let auditService: { record: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
@@ -17,11 +19,13 @@ describe('FamilyMembersService', () => {
         delete: jest.fn(),
       },
     };
+    auditService = { record: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         FamilyMembersService,
         { provide: PrismaService, useValue: prisma },
+        { provide: AuditService, useValue: auditService },
       ],
     }).compile();
 

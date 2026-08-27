@@ -3,7 +3,13 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { FlightBooking, InvoiceStatus, Prisma } from '@prisma/client';
+import {
+  FlightBooking,
+  HajjRegistration,
+  InvoiceStatus,
+  Prisma,
+  UmrahRegistration,
+} from '@prisma/client';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 
@@ -33,6 +39,60 @@ export class InvoicesService {
             {
               description: `Flight ${booking.bookingReference}: ${booking.origin} → ${booking.destination}`,
               amount: booking.totalAmount,
+            },
+          ],
+        },
+      },
+    });
+  }
+
+  /** Called from HajjService.register inside the same transaction as the registration insert. */
+  createForHajjRegistration(
+    registration: HajjRegistration & { package: { name: string } },
+    pilgrimCount: number,
+    tx: PrismaTransactionClient,
+  ) {
+    return tx.invoice.create({
+      data: {
+        invoiceNumber: generateInvoiceNumber(),
+        customerId: registration.customerId,
+        hajjRegistrationId: registration.id,
+        status: InvoiceStatus.ISSUED,
+        currency: registration.currency,
+        totalAmount: registration.totalAmount,
+        issuedByStaffId: registration.registeredByStaffId,
+        lineItems: {
+          create: [
+            {
+              description: `Hajj package ${registration.package.name} (${registration.registrationNumber}) — ${pilgrimCount} pilgrim${pilgrimCount === 1 ? '' : 's'}`,
+              amount: registration.totalAmount,
+            },
+          ],
+        },
+      },
+    });
+  }
+
+  /** Called from UmrahService.register inside the same transaction as the registration insert. */
+  createForUmrahRegistration(
+    registration: UmrahRegistration & { package: { name: string } },
+    pilgrimCount: number,
+    tx: PrismaTransactionClient,
+  ) {
+    return tx.invoice.create({
+      data: {
+        invoiceNumber: generateInvoiceNumber(),
+        customerId: registration.customerId,
+        umrahRegistrationId: registration.id,
+        status: InvoiceStatus.ISSUED,
+        currency: registration.currency,
+        totalAmount: registration.totalAmount,
+        issuedByStaffId: registration.registeredByStaffId,
+        lineItems: {
+          create: [
+            {
+              description: `Umrah package ${registration.package.name} (${registration.registrationNumber}) — ${pilgrimCount} pilgrim${pilgrimCount === 1 ? '' : 's'}`,
+              amount: registration.totalAmount,
             },
           ],
         },
