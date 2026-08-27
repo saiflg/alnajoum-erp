@@ -165,31 +165,35 @@ export class WalletService {
       where: { id: transactionId },
       include: { wallet: { include: { customer: { include: { identity: true } } } } },
     });
-    if (transaction.status === WalletTransactionStatus.COMPLETED) return;
-
-    if (!result.success) {
-      await this.prisma.walletTransaction.update({
-        where: { id: transactionId },
-        data: { status: WalletTransactionStatus.FAILED },
-      });
-      return;
-    }
+    if (transaction.status !== WalletTransactionStatus.PENDING) return;
 
     // Defense in depth, same as PaymentsService.finalizeIntent: the mock
     // provider reports amount 0 (nothing independently to check against),
     // a real gateway always reports a real confirmed amount.
-    if (result.amount > 0 && result.amount !== transaction.amount) {
-      await this.prisma.walletTransaction.update({
-        where: { id: transactionId },
-        data: { status: WalletTransactionStatus.FAILED },
-      });
-      return;
-    }
+    const succeeded =
+      result.success &&
+      !(result.amount > 0 && result.amount !== transaction.amount);
 
-    await this.prisma.walletTransaction.update({
-      where: { id: transactionId },
-      data: { status: WalletTransactionStatus.COMPLETED },
+    // Atomically claims the PENDING -> final-status transition, gated on
+    // still being PENDING. This is what makes two concurrent verify calls
+    // for the same transaction safe — a real possibility: React Strict
+    // Mode double-invokes effects in dev, and a network retry or a user
+    // double-click before the button disables can do the same in
+    // production. Without this, both calls can read PENDING before
+    // either writes, both pass the check above, and both go on to send a
+    // duplicate notification (observed live) — or worse, duplicate a real
+    // ledger-affecting write elsewhere. Only the caller whose update
+    // actually changes a row (count 1) proceeds; a concurrent loser sees
+    // count 0 and quietly backs off.
+    const claim = await this.prisma.walletTransaction.updateMany({
+      where: { id: transactionId, status: WalletTransactionStatus.PENDING },
+      data: {
+        status: succeeded
+          ? WalletTransactionStatus.COMPLETED
+          : WalletTransactionStatus.FAILED,
+      },
     });
+    if (claim.count === 0 || !succeeded) return;
 
     await this.notificationsService.sendWalletUpdate(
       transaction.wallet.customer.identity.email,

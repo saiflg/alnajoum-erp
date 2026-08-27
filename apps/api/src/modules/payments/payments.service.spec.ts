@@ -38,6 +38,7 @@ describe('PaymentsService', () => {
         create: jest.fn(),
         findUnique: jest.fn(),
         update: jest.fn(),
+        updateMany: jest.fn(),
       },
       customer: { findUnique: jest.fn() },
     };
@@ -414,11 +415,13 @@ describe('PaymentsService', () => {
         payments: [{ amount: 20_000 }, { amount: 30_000 }],
       });
       invoicesService.getInvoice.mockResolvedValue({ id: 'invoice-1' });
+      prisma.paymentIntent.updateMany.mockResolvedValue({ count: 1 });
 
       await service.verifyCheckout('customer-1', 'invoice-1', 'CHK-ABC123');
 
-      expect(prisma.paymentIntent.update).toHaveBeenCalledWith(
+      expect(prisma.paymentIntent.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
+          where: { id: 'intent-1', status: PaymentIntentStatus.PENDING },
           data: { status: PaymentIntentStatus.SUCCEEDED },
         }),
       );
@@ -457,6 +460,7 @@ describe('PaymentsService', () => {
         payments: [{ amount: 50_000 }],
       });
       invoicesService.getInvoice.mockResolvedValue({ id: 'invoice-1' });
+      prisma.paymentIntent.updateMany.mockResolvedValue({ count: 1 });
 
       await service.verifyCheckout('customer-1', 'invoice-1', 'CHK-ABC123');
 
@@ -525,6 +529,7 @@ describe('PaymentsService', () => {
         currency: 'NGN',
         payments: [{ amount: 30_000 }],
       });
+      prisma.paymentIntent.updateMany.mockResolvedValue({ count: 1 });
 
       await service.handleProviderWebhookEvent('CHK-ABC123', {
         reference: 'CHK-ABC123',
@@ -538,6 +543,34 @@ describe('PaymentsService', () => {
           data: expect.objectContaining({ method: PaymentMethod.ONLINE }),
         }),
       );
+    });
+
+    it('never creates a duplicate Payment when a concurrent call already claimed the intent', async () => {
+      // Simulates the customer-facing verify and the webhook racing each
+      // other for the same PENDING intent: both read PENDING, but only one
+      // wins the atomic claim (updateMany count 1) — the other must see
+      // count 0 and back off without ever calling payment.create.
+      prisma.paymentIntent.findUnique.mockResolvedValue({
+        id: 'intent-1',
+        invoiceId: 'invoice-1',
+        customerId: 'customer-1',
+        reference: 'CHK-ABC123',
+        provider: 'paystack',
+        amount: 30_000,
+        currency: 'NGN',
+        status: PaymentIntentStatus.PENDING,
+      });
+      prisma.paymentIntent.updateMany.mockResolvedValue({ count: 0 });
+
+      await service.handleProviderWebhookEvent('CHK-ABC123', {
+        reference: 'CHK-ABC123',
+        success: true,
+        amount: 30_000,
+        currency: 'NGN',
+      });
+
+      expect(prisma.payment.create).not.toHaveBeenCalled();
+      expect(notificationsService.sendPaymentReceipt).not.toHaveBeenCalled();
     });
   });
 });

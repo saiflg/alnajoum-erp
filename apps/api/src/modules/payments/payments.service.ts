@@ -295,10 +295,25 @@ export class PaymentsService {
       };
     }
 
-    await this.prisma.paymentIntent.update({
-      where: { id: intent.id },
+    // Atomically claims the PENDING -> SUCCEEDED transition, gated on
+    // still being PENDING. This is what makes two concurrent verify calls
+    // for the same intent safe — a real possibility: React Strict Mode
+    // double-invokes effects in dev, and a network retry or a user
+    // double-click before the button disables can do the same in
+    // production. Without this, both calls can read PENDING before either
+    // writes (the `intent` passed in is a snapshot from before this
+    // method ran) and both go on to create a Payment row below — the
+    // paymentReference unique constraint would reject the second insert,
+    // but only after doing real work and surfacing as an unhandled error
+    // instead of a clean, silent no-op. Only the caller whose update
+    // actually changes a row (count 1) proceeds.
+    const claim = await this.prisma.paymentIntent.updateMany({
+      where: { id: intent.id, status: PaymentIntentStatus.PENDING },
       data: { status: PaymentIntentStatus.SUCCEEDED },
     });
+    if (claim.count === 0) {
+      return { ok: true };
+    }
 
     await this.prisma.payment.create({
       data: {

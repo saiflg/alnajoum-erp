@@ -38,6 +38,7 @@ describe('WalletService', () => {
         findUnique: jest.fn(),
         findUniqueOrThrow: jest.fn(),
         update: jest.fn(),
+        updateMany: jest.fn(),
       },
       customer: { findUnique: jest.fn() },
       invoice: { findUnique: jest.fn() },
@@ -285,12 +286,40 @@ describe('WalletService', () => {
       prisma.wallet.findUnique.mockResolvedValue({ id: 'wallet-1', customerId: 'customer-1', currency: 'NGN' });
       prisma.walletTransaction.aggregate.mockResolvedValue({ _sum: { amount: 0 } });
       prisma.walletTransaction.findMany.mockResolvedValue([]);
+      prisma.walletTransaction.updateMany.mockResolvedValue({ count: 1 });
 
       await service.verifyDeposit('customer-1', 'WDEP-ABC123');
 
-      expect(prisma.walletTransaction.update).toHaveBeenCalledWith(
-        expect.objectContaining({ data: { status: WalletTransactionStatus.FAILED } }),
+      expect(prisma.walletTransaction.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'txn-1', status: WalletTransactionStatus.PENDING },
+          data: { status: WalletTransactionStatus.FAILED },
+        }),
       );
+      expect(notificationsService.sendWalletUpdate).not.toHaveBeenCalled();
+    });
+
+    it('does nothing when a concurrent call already claimed the transaction (updateMany count 0)', async () => {
+      prisma.walletTransaction.findUnique.mockResolvedValue(pendingTransaction);
+      prisma.walletTransaction.findUniqueOrThrow.mockResolvedValue({
+        ...pendingTransaction,
+        wallet: { customer: { identityId: 'identity-1', identity: { email: 'a@example.com' } } },
+      });
+      paymentProvider.verifyCheckout.mockResolvedValue({
+        reference: 'WDEP-ABC123',
+        success: true,
+        amount: 0,
+        currency: '',
+      });
+      prisma.wallet.findUnique.mockResolvedValue({ id: 'wallet-1', customerId: 'customer-1', currency: 'NGN' });
+      prisma.walletTransaction.aggregate.mockResolvedValue({ _sum: { amount: 20_000 } });
+      prisma.walletTransaction.findMany.mockResolvedValue([]);
+      prisma.walletTransaction.updateMany.mockResolvedValue({ count: 0 });
+
+      await service.verifyDeposit('customer-1', 'WDEP-ABC123');
+
+      expect(notificationsService.sendWalletUpdate).not.toHaveBeenCalled();
+      expect(auditService.record).not.toHaveBeenCalled();
     });
 
     it('completes the transaction and notifies the customer on success', async () => {
@@ -313,11 +342,15 @@ describe('WalletService', () => {
       prisma.wallet.findUnique.mockResolvedValue({ id: 'wallet-1', customerId: 'customer-1', currency: 'NGN' });
       prisma.walletTransaction.aggregate.mockResolvedValue({ _sum: { amount: 20_000 } });
       prisma.walletTransaction.findMany.mockResolvedValue([]);
+      prisma.walletTransaction.updateMany.mockResolvedValue({ count: 1 });
 
       const result = await service.verifyDeposit('customer-1', 'WDEP-ABC123');
 
-      expect(prisma.walletTransaction.update).toHaveBeenCalledWith(
-        expect.objectContaining({ data: { status: WalletTransactionStatus.COMPLETED } }),
+      expect(prisma.walletTransaction.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'txn-1', status: WalletTransactionStatus.PENDING },
+          data: { status: WalletTransactionStatus.COMPLETED },
+        }),
       );
       expect(notificationsService.sendWalletUpdate).toHaveBeenCalledWith(
         'amina@example.com',
