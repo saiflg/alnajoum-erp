@@ -28,8 +28,14 @@ function WalletPageContent() {
   }, []);
 
   useEffect(() => {
+    // Skip the initial fetch when a checkout is about to be verified below
+    // — that effect sets the freshest wallet state itself. Firing both
+    // here would race: whichever response resolves last wins, and this
+    // plain GET can land after the verify and silently overwrite the
+    // just-confirmed balance with the stale pre-deposit snapshot.
+    if (searchParams.get('checkout_reference')) return;
     void load();
-  }, [load]);
+  }, [load, searchParams]);
 
   useEffect(() => {
     const reference = searchParams.get('checkout_reference');

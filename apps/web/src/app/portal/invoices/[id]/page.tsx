@@ -31,8 +31,16 @@ function InvoiceDetailContent() {
   }, [params.id]);
 
   useEffect(() => {
+    // Skip the initial fetch when we're about to verify a just-completed
+    // checkout below — that effect sets the freshest invoice itself once
+    // verification resolves. Firing both here would race: whichever
+    // response (this plain GET or the verify POST) resolves last wins,
+    // and the GET can easily land after the verify and silently overwrite
+    // the confirmed PAID state with the stale pre-payment snapshot it
+    // fetched before the payment was ever recorded.
+    if (searchParams.get('checkout_reference')) return;
     void loadInvoice();
-  }, [loadInvoice]);
+  }, [loadInvoice, searchParams]);
 
   useEffect(() => {
     apiRequest<{ balance: number }>('/wallet/me')
