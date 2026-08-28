@@ -68,6 +68,73 @@ describe('InvoicesService', () => {
     });
   });
 
+  describe('createForHajjRegistration', () => {
+    const registration = {
+      id: 'reg-1',
+      registrationNumber: 'HAJJ-ABC123',
+      customerId: 'customer-1',
+      registeredByStaffId: null,
+      currency: 'NGN',
+      totalAmount: 12_000_000,
+      package: { name: 'Standard Hajj 2027' },
+    };
+
+    it('creates one line item per pilgrim, each named and evenly amounted', () => {
+      const tx = { invoice: { create: jest.fn() } };
+      const pilgrims = [
+        { firstName: 'Amina', lastName: 'Bello' },
+        { firstName: 'Musa', lastName: 'Bello' },
+      ] as never;
+
+      void service.createForHajjRegistration(
+        registration as never,
+        pilgrims,
+        tx as never,
+      );
+
+      expect(tx.invoice.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            hajjRegistrationId: 'reg-1',
+            totalAmount: 12_000_000,
+            lineItems: {
+              create: [
+                expect.objectContaining({
+                  description: expect.stringContaining('Amina Bello'),
+                  amount: 6_000_000,
+                }),
+                expect.objectContaining({
+                  description: expect.stringContaining('Musa Bello'),
+                  amount: 6_000_000,
+                }),
+              ],
+            },
+          }),
+        }),
+      );
+    });
+
+    it('rounds the remainder into the last pilgrim so shares always sum to the total exactly', () => {
+      const tx = { invoice: { create: jest.fn() } };
+      const pilgrims = [
+        { firstName: 'A', lastName: 'One' },
+        { firstName: 'B', lastName: 'Two' },
+        { firstName: 'C', lastName: 'Three' },
+      ] as never;
+
+      void service.createForHajjRegistration(
+        { ...registration, totalAmount: 10_000_000 } as never,
+        pilgrims,
+        tx as never,
+      );
+
+      const created = tx.invoice.create.mock.calls[0][0].data.lineItems.create;
+      const amounts = created.map((item: { amount: number }) => item.amount);
+      expect(amounts).toEqual([3_333_333, 3_333_333, 3_333_334]);
+      expect(amounts.reduce((a: number, b: number) => a + b, 0)).toBe(10_000_000);
+    });
+  });
+
   describe('getInvoice', () => {
     it('throws NotFound when the invoice does not exist', async () => {
       prisma.invoice.findUnique.mockResolvedValue(null);

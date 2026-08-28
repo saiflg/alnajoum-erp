@@ -6,9 +6,11 @@ import {
 import {
   FlightBooking,
   HajjRegistration,
+  HajjRegistrationPilgrim,
   InvoiceStatus,
   Prisma,
   UmrahRegistration,
+  UmrahRegistrationPilgrim,
 } from '@prisma/client';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
@@ -17,6 +19,19 @@ type PrismaTransactionClient = Prisma.TransactionClient;
 
 function generateInvoiceNumber(): string {
   return `INV-${randomBytes(4).toString('hex').toUpperCase()}`;
+}
+
+/**
+ * Splits a total into one whole-unit amount per pilgrim, remainder rounded
+ * into the last share so the parts always sum back to exactly `total` —
+ * the same "no fractional currency, no drift" constraint every amount in
+ * this codebase already follows (see FlightBooking.totalAmount's comment).
+ */
+function splitEvenly(total: number, count: number): number[] {
+  const base = Math.floor(total / count);
+  const shares = new Array(count).fill(base);
+  shares[count - 1] += total - base * count;
+  return shares;
 }
 
 @Injectable()
@@ -46,12 +61,24 @@ export class InvoicesService {
     });
   }
 
-  /** Called from HajjService.register inside the same transaction as the registration insert. */
+  /**
+   * Called from HajjService.register inside the same transaction as the
+   * registration insert. One combined invoice/payment ledger per
+   * registration (family payment, individual payment, and paying from a
+   * shared wallet all work against it already) — but the line items are
+   * per pilgrim, one row each for their even share of the total, so a
+   * family registration's invoice reads as "who owes what" rather than
+   * one opaque lump sum. That per-pilgrim breakdown is what "separate
+   * payment schedules" means in practice here: nothing stops the family
+   * head from paying one pilgrim's share today and another's next month,
+   * each payment just isn't tied to a specific line item in the ledger.
+   */
   createForHajjRegistration(
     registration: HajjRegistration & { package: { name: string } },
-    pilgrimCount: number,
+    pilgrims: HajjRegistrationPilgrim[],
     tx: PrismaTransactionClient,
   ) {
+    const shares = splitEvenly(registration.totalAmount, pilgrims.length);
     return tx.invoice.create({
       data: {
         invoiceNumber: generateInvoiceNumber(),
@@ -62,23 +89,22 @@ export class InvoicesService {
         totalAmount: registration.totalAmount,
         issuedByStaffId: registration.registeredByStaffId,
         lineItems: {
-          create: [
-            {
-              description: `Hajj package ${registration.package.name} (${registration.registrationNumber}) — ${pilgrimCount} pilgrim${pilgrimCount === 1 ? '' : 's'}`,
-              amount: registration.totalAmount,
-            },
-          ],
+          create: pilgrims.map((pilgrim, i) => ({
+            description: `Hajj package ${registration.package.name} (${registration.registrationNumber}) — ${pilgrim.firstName} ${pilgrim.lastName}`,
+            amount: shares[i],
+          })),
         },
       },
     });
   }
 
-  /** Called from UmrahService.register inside the same transaction as the registration insert. */
+  /** Same per-pilgrim line-item breakdown as createForHajjRegistration, for Umrah. */
   createForUmrahRegistration(
     registration: UmrahRegistration & { package: { name: string } },
-    pilgrimCount: number,
+    pilgrims: UmrahRegistrationPilgrim[],
     tx: PrismaTransactionClient,
   ) {
+    const shares = splitEvenly(registration.totalAmount, pilgrims.length);
     return tx.invoice.create({
       data: {
         invoiceNumber: generateInvoiceNumber(),
@@ -89,12 +115,10 @@ export class InvoicesService {
         totalAmount: registration.totalAmount,
         issuedByStaffId: registration.registeredByStaffId,
         lineItems: {
-          create: [
-            {
-              description: `Umrah package ${registration.package.name} (${registration.registrationNumber}) — ${pilgrimCount} pilgrim${pilgrimCount === 1 ? '' : 's'}`,
-              amount: registration.totalAmount,
-            },
-          ],
+          create: pilgrims.map((pilgrim, i) => ({
+            description: `Umrah package ${registration.package.name} (${registration.registrationNumber}) — ${pilgrim.firstName} ${pilgrim.lastName}`,
+            amount: shares[i],
+          })),
         },
       },
     });

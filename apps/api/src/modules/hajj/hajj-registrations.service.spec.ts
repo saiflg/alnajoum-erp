@@ -112,7 +112,10 @@ describe('HajjRegistrationsService', () => {
       totalAmount: 12_000_000,
       currency: 'NGN',
       package: publishedPackage,
-      pilgrims: [],
+      pilgrims: [
+        { firstName: 'Amina', lastName: 'Bello' },
+        { firstName: 'Musa', lastName: 'Bello' },
+      ],
     });
     prisma.customer.findUnique
       .mockResolvedValueOnce({
@@ -146,7 +149,14 @@ describe('HajjRegistrationsService', () => {
         data: expect.objectContaining({ seatsAvailable: 1 }), // 3 - 2
       }),
     );
-    expect(invoicesService.createForHajjRegistration).toHaveBeenCalled();
+    expect(invoicesService.createForHajjRegistration).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'reg-1' }),
+      [
+        { firstName: 'Amina', lastName: 'Bello' },
+        { firstName: 'Musa', lastName: 'Bello' },
+      ],
+      expect.anything(),
+    );
     expect(notificationsService.sendPilgrimageRegistrationConfirmation).toHaveBeenCalledWith(
       'amina@example.com',
       expect.objectContaining({ kind: 'Hajj', pilgrimCount: 2 }),

@@ -140,7 +140,7 @@ export class UmrahRegistrationsService {
 
       await this.invoicesService.createForUmrahRegistration(
         created,
-        snapshots.length,
+        created.pilgrims,
         tx,
       );
 
