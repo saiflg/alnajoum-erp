@@ -8,8 +8,10 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 import * as fs from 'fs';
+import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../../common/decorators/permissions.decorator';
 import { documentFilePath } from '../../../common/documents/document-storage.util';
+import type { AuthContext } from '../../../common/interfaces/auth-context.interface';
 import { PERMISSIONS } from '../../rbac/constants/permissions.constant';
 import { CustomerDocumentsService } from './customer-documents.service';
 
@@ -48,10 +50,11 @@ export class CustomerAdminDocumentsController {
   @Delete(':documentId')
   @RequirePermissions(PERMISSIONS.CUSTOMER.DELETE)
   async remove(
+    @CurrentUser() user: AuthContext,
     @Param('customerId') customerId: string,
     @Param('documentId') documentId: string,
   ) {
-    await this.documentsService.deleteDocument(documentId, customerId);
+    await this.documentsService.deleteDocument(documentId, customerId, user.sub);
     return { deleted: true };
   }
 }

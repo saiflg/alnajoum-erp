@@ -1,11 +1,16 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
+import { AuditService } from '../audit/audit.service';
 import { AdminUpdateCustomerDto } from './dto/admin-update-customer.dto';
 import { UpdateCustomerProfileDto } from './dto/update-customer-profile.dto';
 
 @Injectable()
 export class CustomersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditService: AuditService,
+  ) {}
 
   findAll(filters: { assignedStaffId?: string; assignedBranchId?: string } = {}) {
     return this.prisma.customer.findMany({
@@ -67,8 +72,12 @@ export class CustomersService {
     return customer;
   }
 
-  async update(id: string, dto: AdminUpdateCustomerDto) {
-    await this.findOne(id);
+  async update(
+    id: string,
+    dto: AdminUpdateCustomerDto,
+    actorIdentityId?: string,
+  ) {
+    const existing = await this.findOne(id);
 
     if (dto.assignedStaffId) {
       const staff = await this.prisma.staff.findUnique({
@@ -87,7 +96,7 @@ export class CustomersService {
       }
     }
 
-    return this.prisma.customer.update({
+    const updated = await this.prisma.customer.update({
       where: { id },
       data: {
         ...dto,
@@ -102,18 +111,57 @@ export class CustomersService {
           dto.assignedBranchId === null ? null : dto.assignedBranchId,
       },
     });
+
+    await this.auditService.record({
+      identityId: actorIdentityId,
+      action: 'customer.updated',
+      entityType: 'Customer',
+      entityId: id,
+      metadata: { changes: dto as unknown as Prisma.InputJsonValue },
+    });
+
+    // Called out separately per the audit trail spec's own "staff
+    // assignment changed" bullet, distinct from a general profile edit.
+    const staffChanged =
+      dto.assignedStaffId !== undefined &&
+      dto.assignedStaffId !== existing.assignedStaffId;
+    const branchChanged =
+      dto.assignedBranchId !== undefined &&
+      dto.assignedBranchId !== existing.assignedBranchId;
+    if (staffChanged || branchChanged) {
+      await this.auditService.record({
+        identityId: actorIdentityId,
+        action: 'customer.staff_assignment_changed',
+        entityType: 'Customer',
+        entityId: id,
+        metadata: {
+          previousStaffId: existing.assignedStaffId,
+          newStaffId: updated.assignedStaffId,
+          previousBranchId: existing.assignedBranchId,
+          newBranchId: updated.assignedBranchId,
+        },
+      });
+    }
+
+    return updated;
   }
 
   async updateByIdentityId(identityId: string, dto: UpdateCustomerProfileDto) {
     const customer = await this.findByIdentityId(identityId);
-    return this.update(customer.id, dto);
+    return this.update(customer.id, dto, identityId);
   }
 
-  async deactivate(id: string) {
+  async deactivate(id: string, actorIdentityId?: string) {
     const customer = await this.findOne(id);
     await this.prisma.identity.update({
       where: { id: customer.identityId },
       data: { status: 'DEACTIVATED' },
+    });
+    await this.auditService.record({
+      identityId: actorIdentityId,
+      action: 'customer.deactivated',
+      entityType: 'Customer',
+      entityId: id,
     });
   }
 }

@@ -1,11 +1,13 @@
 import { NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
+import { AuditService } from '../audit/audit.service';
 import { CustomersService } from './customers.service';
 
 describe('CustomersService', () => {
   let service: CustomersService;
   let prisma: Record<string, Record<string, jest.Mock>>;
+  let auditService: { record: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
@@ -18,11 +20,13 @@ describe('CustomersService', () => {
         update: jest.fn(),
       },
     };
+    auditService = { record: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         CustomersService,
         { provide: PrismaService, useValue: prisma },
+        { provide: AuditService, useValue: auditService },
       ],
     }).compile();
 
@@ -84,6 +88,55 @@ describe('CustomersService', () => {
           passportExpiryDate: new Date('2030-01-01'),
         }),
       });
+      expect(auditService.record).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'customer.updated', entityId: 'customer-1' }),
+      );
+    });
+
+    it('records a separate staff_assignment_changed audit entry when the assigned staff changes', async () => {
+      prisma.customer.findUnique.mockResolvedValue({
+        id: 'customer-1',
+        assignedStaffId: 'staff-old',
+      });
+      prisma.customer.update.mockResolvedValue({
+        id: 'customer-1',
+        assignedStaffId: 'staff-new',
+      });
+      prisma.staff = { findUnique: jest.fn().mockResolvedValue({ id: 'staff-new' }) };
+
+      await service.update(
+        'customer-1',
+        { assignedStaffId: 'staff-new' },
+        'actor-identity',
+      );
+
+      expect(auditService.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          identityId: 'actor-identity',
+          action: 'customer.staff_assignment_changed',
+          metadata: expect.objectContaining({
+            previousStaffId: 'staff-old',
+            newStaffId: 'staff-new',
+          }),
+        }),
+      );
+    });
+
+    it('does not record a staff_assignment_changed entry when the assignment is untouched', async () => {
+      prisma.customer.findUnique.mockResolvedValue({
+        id: 'customer-1',
+        assignedStaffId: 'staff-old',
+      });
+      prisma.customer.update.mockResolvedValue({
+        id: 'customer-1',
+        assignedStaffId: 'staff-old',
+      });
+
+      await service.update('customer-1', { firstName: 'Amina' });
+
+      expect(auditService.record).not.toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'customer.staff_assignment_changed' }),
+      );
     });
   });
 
@@ -94,12 +147,19 @@ describe('CustomersService', () => {
         identityId: 'identity-1',
       });
 
-      await service.deactivate('customer-1');
+      await service.deactivate('customer-1', 'actor-identity');
 
       expect(prisma.identity.update).toHaveBeenCalledWith({
         where: { id: 'identity-1' },
         data: { status: 'DEACTIVATED' },
       });
+      expect(auditService.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          identityId: 'actor-identity',
+          action: 'customer.deactivated',
+          entityId: 'customer-1',
+        }),
+      );
     });
   });
 });

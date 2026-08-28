@@ -18,6 +18,13 @@ export default function AdminWalletsPage() {
   const [description, setDescription] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  const [showTransfer, setShowTransfer] = useState(false);
+  const [fromCustomerId, setFromCustomerId] = useState('');
+  const [toCustomerId, setToCustomerId] = useState('');
+  const [transferAmount, setTransferAmount] = useState('');
+  const [transferDescription, setTransferDescription] = useState('');
+  const [transferring, setTransferring] = useState(false);
+
   function load() {
     apiRequest<WalletRow[]>('/wallet')
       .then(setWallets)
@@ -50,15 +57,114 @@ export default function AdminWalletsPage() {
     }
   }
 
+  async function handleTransfer(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setTransferring(true);
+    try {
+      await apiRequest('/wallet/transfer', {
+        method: 'POST',
+        body: {
+          fromCustomerId,
+          toCustomerId,
+          amount: Number(transferAmount),
+          description: transferDescription,
+        },
+      });
+      setShowTransfer(false);
+      setFromCustomerId('');
+      setToCustomerId('');
+      setTransferAmount('');
+      setTransferDescription('');
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to transfer between wallets');
+    } finally {
+      setTransferring(false);
+    }
+  }
+
   return (
     <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'COMPANY_ADMIN', 'FINANCE_OFFICER']}>
       <AppShell title="Wallets" navLinks={ADMIN_NAV}>
         {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
 
-        <h2 className="text-lg font-semibold text-slate-900">Customer Wallets</h2>
-        <p className="mt-1 text-sm text-slate-500">
-          Manually credit a wallet for a cash/bank-transfer deposit made at the branch.
-        </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">Customer Wallets</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Manually credit a wallet for a cash/bank-transfer deposit made at the branch.
+            </p>
+          </div>
+          <button
+            onClick={() => setShowTransfer((v) => !v)}
+            className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+          >
+            {showTransfer ? 'Cancel' : 'Transfer between wallets'}
+          </button>
+        </div>
+
+        {showTransfer && (
+          <form
+            onSubmit={handleTransfer}
+            className="mt-4 grid grid-cols-2 gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:grid-cols-4"
+          >
+            <select
+              required
+              value={fromCustomerId}
+              onChange={(e) => setFromCustomerId(e.target.value)}
+              className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+            >
+              <option value="">— From customer —</option>
+              {wallets?.map((w) => (
+                <option key={w.customerId} value={w.customerId}>
+                  {w.customer?.firstName} {w.customer?.lastName} ({formatCurrency(w.balance, w.currency)})
+                </option>
+              ))}
+            </select>
+            <select
+              required
+              value={toCustomerId}
+              onChange={(e) => setToCustomerId(e.target.value)}
+              className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+            >
+              <option value="">— To customer —</option>
+              {wallets?.map((w) => (
+                <option key={w.customerId} value={w.customerId}>
+                  {w.customer?.firstName} {w.customer?.lastName}
+                </option>
+              ))}
+            </select>
+            <input
+              required
+              type="number"
+              min={1}
+              placeholder="Amount (₦)"
+              value={transferAmount}
+              onChange={(e) => setTransferAmount(e.target.value)}
+              className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+            />
+            <input
+              required
+              placeholder="Reason for transfer"
+              value={transferDescription}
+              onChange={(e) => setTransferDescription(e.target.value)}
+              className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+            />
+            <button
+              type="submit"
+              disabled={transferring || fromCustomerId === toCustomerId}
+              className="col-span-2 w-fit rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50 sm:col-span-4"
+            >
+              {transferring ? 'Transferring…' : 'Transfer'}
+            </button>
+            {fromCustomerId && fromCustomerId === toCustomerId && (
+              <p className="col-span-2 text-xs text-red-600 sm:col-span-4">
+                Source and destination must be different customers.
+              </p>
+            )}
+          </form>
+        )}
 
         <div className="mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white">
           <table className="min-w-full divide-y divide-slate-200 text-sm">

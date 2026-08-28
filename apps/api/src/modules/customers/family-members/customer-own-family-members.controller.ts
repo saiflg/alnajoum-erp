@@ -117,7 +117,7 @@ export class CustomerOwnFamilyMembersController {
         file.mimetype,
       );
     }
-    return this.documentsService.recordUpload(memberId, file, query.type);
+    return this.documentsService.recordUpload(memberId, file, query.type, user.sub);
   }
 
   @Get(':memberId/documents')
@@ -171,7 +171,7 @@ export class CustomerOwnFamilyMembersController {
       user.sub,
     );
     await this.familyMembersService.getMember(memberId, customerId);
-    await this.documentsService.deleteDocument(documentId, memberId);
+    await this.documentsService.deleteDocument(documentId, memberId, user.sub);
     return { deleted: true };
   }
 }

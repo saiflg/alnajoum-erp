@@ -1,6 +1,10 @@
 import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotificationStatus, NotificationType } from '@prisma/client';
+import {
+  NotificationChannel,
+  NotificationStatus,
+  NotificationType,
+} from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { NotificationsService } from './notifications.service';
 import { NOTIFICATION_PROVIDER } from './providers/notification-provider.port';
@@ -8,14 +12,18 @@ import { NOTIFICATION_PROVIDER } from './providers/notification-provider.port';
 describe('NotificationsService', () => {
   let service: NotificationsService;
   let prisma: { notification: { create: jest.Mock; findMany: jest.Mock } };
-  let provider: { sendEmail: jest.Mock };
+  let provider: { sendEmail: jest.Mock; sendSms: jest.Mock; sendWhatsApp: jest.Mock };
   let configService: { get: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
       notification: { create: jest.fn(), findMany: jest.fn() },
     };
-    provider = { sendEmail: jest.fn() };
+    provider = {
+      sendEmail: jest.fn(),
+      sendSms: jest.fn(),
+      sendWhatsApp: jest.fn(),
+    };
     configService = {
       get: jest.fn((_key: string, fallback?: unknown) => fallback),
     };
@@ -152,5 +160,91 @@ describe('NotificationsService', () => {
         }),
       }),
     );
+  });
+
+  describe('sendInstallmentReminder', () => {
+    const reminder = {
+      registrationNumber: 'HAJJ-ABC123',
+      packageName: 'Standard Hajj 2027',
+      totalAmount: 6_000_000,
+      balance: 3_000_000,
+      currency: 'NGN',
+      overdue: false,
+    };
+
+    it('sends over email only when no phone/whatsapp number is on file', async () => {
+      provider.sendEmail.mockResolvedValue({ success: true });
+
+      await service.sendInstallmentReminder(
+        'amina@example.com',
+        'identity-1',
+        reminder,
+      );
+
+      expect(provider.sendEmail).toHaveBeenCalled();
+      expect(provider.sendSms).not.toHaveBeenCalled();
+      expect(provider.sendWhatsApp).not.toHaveBeenCalled();
+      expect(prisma.notification.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('also sends SMS and WhatsApp when both numbers are on file, each recorded with its own channel', async () => {
+      provider.sendEmail.mockResolvedValue({ success: true });
+      provider.sendSms.mockResolvedValue({ success: true });
+      provider.sendWhatsApp.mockResolvedValue({ success: true });
+
+      await service.sendInstallmentReminder(
+        'amina@example.com',
+        'identity-1',
+        reminder,
+        '+2348000000101',
+        '+2348000000101',
+      );
+
+      expect(provider.sendSms).toHaveBeenCalledWith(
+        expect.objectContaining({ to: '+2348000000101' }),
+      );
+      expect(provider.sendWhatsApp).toHaveBeenCalledWith(
+        expect.objectContaining({ to: '+2348000000101' }),
+      );
+      expect(prisma.notification.create).toHaveBeenCalledTimes(3);
+      expect(prisma.notification.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ channel: NotificationChannel.SMS }),
+        }),
+      );
+      expect(prisma.notification.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ channel: NotificationChannel.WHATSAPP }),
+        }),
+      );
+    });
+
+    it('records a FAILED row for a channel the provider reports as not configured, without throwing', async () => {
+      provider.sendEmail.mockResolvedValue({ success: true });
+      provider.sendSms.mockResolvedValue({
+        success: false,
+        error: 'SMS is not configured for this deployment',
+      });
+
+      await expect(
+        service.sendInstallmentReminder(
+          'amina@example.com',
+          'identity-1',
+          reminder,
+          '+2348000000101',
+          undefined,
+        ),
+      ).resolves.toBeUndefined();
+
+      expect(prisma.notification.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            channel: NotificationChannel.SMS,
+            status: NotificationStatus.FAILED,
+            errorMessage: 'SMS is not configured for this deployment',
+          }),
+        }),
+      );
+    });
   });
 });

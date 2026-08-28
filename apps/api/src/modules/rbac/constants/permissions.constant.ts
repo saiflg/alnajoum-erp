@@ -59,6 +59,7 @@ export const PERMISSIONS = {
     READ_ALL: 'wallet:read_all',
     CREDIT: 'wallet:credit',
     ADJUST: 'wallet:adjust',
+    TRANSFER: 'wallet:transfer',
   },
   HAJJ_PACKAGE: {
     CREATE: 'hajj_package:create',

@@ -420,4 +420,109 @@ export class WalletService {
 
     return this.getWalletWithBalance(customerId);
   }
+
+  /**
+   * Finance-authorized transfer of funds from one customer's wallet
+   * balance to another's — the "Transfers where authorized" requirement.
+   * Both legs (TRANSFER_OUT on the source, TRANSFER_IN on the
+   * destination) are written inside one DB transaction, sharing a common
+   * reference prefix so they're recognizable as one transfer in either
+   * wallet's history, exactly like payInvoiceWithWallet keeps its debit
+   * and the resulting Payment row atomically in sync.
+   */
+  async transferBetweenWallets(
+    fromCustomerId: string,
+    toCustomerId: string,
+    amount: number,
+    description: string,
+    staffId: string | undefined,
+    actorIdentityId: string | undefined,
+  ) {
+    if (fromCustomerId === toCustomerId) {
+      throw new BadRequestException(
+        'Cannot transfer a wallet balance to the same customer',
+      );
+    }
+
+    const fromWallet = await this.getOrCreateWallet(fromCustomerId);
+    const toWallet = await this.getOrCreateWallet(toCustomerId);
+    const fromBalance = await this.computeBalance(fromWallet.id);
+    if (amount > fromBalance) {
+      throw new BadRequestException(
+        `Source wallet balance (${fromBalance}) is less than the requested transfer (${amount})`,
+      );
+    }
+
+    const batchReference = generateWalletReference('WTRF');
+    await this.prisma.$transaction([
+      this.prisma.walletTransaction.create({
+        data: {
+          walletId: fromWallet.id,
+          type: WalletTransactionType.TRANSFER_OUT,
+          status: WalletTransactionStatus.COMPLETED,
+          amount: -amount,
+          currency: fromWallet.currency,
+          description: `Transfer to ${toCustomerId}: ${description}`,
+          reference: `${batchReference}-OUT`,
+          createdByStaffId: staffId,
+        },
+      }),
+      this.prisma.walletTransaction.create({
+        data: {
+          walletId: toWallet.id,
+          type: WalletTransactionType.TRANSFER_IN,
+          status: WalletTransactionStatus.COMPLETED,
+          amount,
+          currency: toWallet.currency,
+          description: `Transfer from ${fromCustomerId}: ${description}`,
+          reference: `${batchReference}-IN`,
+          createdByStaffId: staffId,
+        },
+      }),
+    ]);
+
+    const [fromCustomer, toCustomer] = await Promise.all([
+      this.prisma.customer.findUnique({
+        where: { id: fromCustomerId },
+        include: { identity: true },
+      }),
+      this.prisma.customer.findUnique({
+        where: { id: toCustomerId },
+        include: { identity: true },
+      }),
+    ]);
+    if (fromCustomer) {
+      await this.notificationsService.sendWalletUpdate(
+        fromCustomer.identity.email,
+        fromCustomer.identityId,
+        { type: 'DEBIT', amount, currency: fromWallet.currency, description },
+      );
+    }
+    if (toCustomer) {
+      await this.notificationsService.sendWalletUpdate(
+        toCustomer.identity.email,
+        toCustomer.identityId,
+        { type: 'DEPOSIT', amount, currency: toWallet.currency, description },
+      );
+    }
+
+    await this.auditService.record({
+      identityId: actorIdentityId,
+      action: 'wallet.transferred',
+      entityType: 'Wallet',
+      entityId: fromWallet.id,
+      metadata: {
+        fromCustomerId,
+        toCustomerId,
+        amount,
+        reference: batchReference,
+        staffId,
+      },
+    });
+
+    return {
+      from: await this.getWalletWithBalance(fromCustomerId),
+      to: await this.getWalletWithBalance(toCustomerId),
+    };
+  }
 }

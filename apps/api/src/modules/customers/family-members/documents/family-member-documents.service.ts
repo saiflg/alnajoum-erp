@@ -7,19 +7,24 @@ import { DocumentType } from '@prisma/client';
 import * as fs from 'fs';
 import { documentFilePath } from '../../../../common/documents/document-storage.util';
 import { PrismaService } from '../../../../infrastructure/prisma/prisma.service';
+import { AuditService } from '../../../audit/audit.service';
 
 export const FAMILY_MEMBER_DOCUMENTS_NAMESPACE = 'family-member-documents';
 
 @Injectable()
 export class FamilyMemberDocumentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditService: AuditService,
+  ) {}
 
   async recordUpload(
     familyMemberId: string,
     file: Express.Multer.File,
     type: DocumentType,
+    actorIdentityId?: string,
   ) {
-    return this.prisma.familyMemberDocument.create({
+    const document = await this.prisma.familyMemberDocument.create({
       data: {
         familyMemberId,
         type,
@@ -29,6 +34,14 @@ export class FamilyMemberDocumentsService {
         sizeBytes: file.size,
       },
     });
+    await this.auditService.record({
+      identityId: actorIdentityId,
+      action: 'document.uploaded',
+      entityType: 'FamilyMemberDocument',
+      entityId: document.id,
+      metadata: { familyMemberId, type },
+    });
+    return document;
   }
 
   listForMember(familyMemberId: string) {
@@ -54,7 +67,11 @@ export class FamilyMemberDocumentsService {
     return document;
   }
 
-  async deleteDocument(documentId: string, ownerMemberId?: string) {
+  async deleteDocument(
+    documentId: string,
+    ownerMemberId?: string,
+    actorIdentityId?: string,
+  ) {
     const document = await this.getDocument(documentId, ownerMemberId);
     await this.prisma.familyMemberDocument.delete({
       where: { id: document.id },
@@ -67,5 +84,12 @@ export class FamilyMemberDocumentsService {
         ),
       )
       .catch(() => undefined);
+    await this.auditService.record({
+      identityId: actorIdentityId,
+      action: 'document.deleted',
+      entityType: 'FamilyMemberDocument',
+      entityId: documentId,
+      metadata: { familyMemberId: document.familyMemberId, type: document.type },
+    });
   }
 }

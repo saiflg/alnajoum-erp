@@ -21,4 +21,22 @@ describe('MockNotificationProviderService', () => {
 
     expect(result).toEqual({ success: true });
   });
+
+  it('always reports success for SMS without actually sending anything', async () => {
+    const result = await service.sendSms({
+      to: '+2348000000101',
+      body: 'Hello',
+    });
+
+    expect(result).toEqual({ success: true });
+  });
+
+  it('always reports success for WhatsApp without actually sending anything', async () => {
+    const result = await service.sendWhatsApp({
+      to: '+2348000000101',
+      body: 'Hello',
+    });
+
+    expect(result).toEqual({ success: true });
+  });
 });

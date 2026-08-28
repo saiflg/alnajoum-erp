@@ -54,13 +54,17 @@ export class CustomersController {
 
   @Patch(':id')
   @RequirePermissions(PERMISSIONS.CUSTOMER.UPDATE)
-  update(@Param('id') id: string, @Body() dto: AdminUpdateCustomerDto) {
-    return this.customersService.update(id, dto);
+  update(
+    @CurrentUser() user: AuthContext,
+    @Param('id') id: string,
+    @Body() dto: AdminUpdateCustomerDto,
+  ) {
+    return this.customersService.update(id, dto, user.sub);
   }
 
   @Delete(':id')
   @RequirePermissions(PERMISSIONS.CUSTOMER.DELETE)
-  remove(@Param('id') id: string) {
-    return this.customersService.deactivate(id);
+  remove(@CurrentUser() user: AuthContext, @Param('id') id: string) {
+    return this.customersService.deactivate(id, user.sub);
   }
 }

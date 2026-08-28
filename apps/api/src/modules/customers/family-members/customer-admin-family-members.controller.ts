@@ -104,6 +104,7 @@ export class CustomerAdminFamilyMembersController {
     ),
   )
   async uploadDocument(
+    @CurrentUser() user: AuthContext,
     @Param('customerId') customerId: string,
     @Param('memberId') memberId: string,
     @UploadedFile() file: Express.Multer.File,
@@ -116,7 +117,7 @@ export class CustomerAdminFamilyMembersController {
         file.mimetype,
       );
     }
-    return this.documentsService.recordUpload(memberId, file, query.type);
+    return this.documentsService.recordUpload(memberId, file, query.type, user.sub);
   }
 
   @Get(':memberId/documents/:documentId/file')
@@ -149,12 +150,13 @@ export class CustomerAdminFamilyMembersController {
   @Delete(':memberId/documents/:documentId')
   @RequirePermissions(PERMISSIONS.CUSTOMER.DELETE)
   async deleteDocument(
+    @CurrentUser() user: AuthContext,
     @Param('customerId') customerId: string,
     @Param('memberId') memberId: string,
     @Param('documentId') documentId: string,
   ) {
     await this.familyMembersService.getMember(memberId, customerId);
-    await this.documentsService.deleteDocument(documentId, memberId);
+    await this.documentsService.deleteDocument(documentId, memberId, user.sub);
     return { deleted: true };
   }
 }

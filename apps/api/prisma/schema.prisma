@@ -665,6 +665,13 @@ enum NotificationStatus {
   FAILED
 }
 
+enum NotificationChannel {
+  EMAIL
+  SMS
+  WHATSAPP
+  IN_APP
+}
+
 /**
  * Append-only send log — every attempt is recorded regardless of outcome,
  * so a failed send is visible without needing real inbox access. Not
@@ -673,8 +680,9 @@ enum NotificationStatus {
  * Customer/Staff/Invoice may change or be deleted after the fact.
  */
 model Notification {
-  id        String             @id @default(cuid())
+  id        String              @id @default(cuid())
   type      NotificationType
+  channel   NotificationChannel @default(EMAIL)
   recipient String
   subject   String
   body      String

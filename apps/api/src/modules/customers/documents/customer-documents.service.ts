@@ -7,19 +7,24 @@ import { DocumentType } from '@prisma/client';
 import * as fs from 'fs';
 import { documentFilePath } from '../../../common/documents/document-storage.util';
 import { PrismaService } from '../../../infrastructure/prisma/prisma.service';
+import { AuditService } from '../../audit/audit.service';
 
 const NAMESPACE = 'customer-documents';
 
 @Injectable()
 export class CustomerDocumentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditService: AuditService,
+  ) {}
 
   async recordUpload(
     customerId: string,
     file: Express.Multer.File,
     type: DocumentType,
+    actorIdentityId?: string,
   ) {
-    return this.prisma.customerDocument.create({
+    const document = await this.prisma.customerDocument.create({
       data: {
         customerId,
         type,
@@ -29,6 +34,14 @@ export class CustomerDocumentsService {
         sizeBytes: file.size,
       },
     });
+    await this.auditService.record({
+      identityId: actorIdentityId,
+      action: 'document.uploaded',
+      entityType: 'CustomerDocument',
+      entityId: document.id,
+      metadata: { customerId, type },
+    });
+    return document;
   }
 
   listForCustomer(customerId: string) {
@@ -52,11 +65,22 @@ export class CustomerDocumentsService {
     return document;
   }
 
-  async deleteDocument(documentId: string, ownerCustomerId?: string) {
+  async deleteDocument(
+    documentId: string,
+    ownerCustomerId?: string,
+    actorIdentityId?: string,
+  ) {
     const document = await this.getDocument(documentId, ownerCustomerId);
     await this.prisma.customerDocument.delete({ where: { id: document.id } });
     await fs.promises
       .unlink(documentFilePath(NAMESPACE, document.storedFileName))
       .catch(() => undefined);
+    await this.auditService.record({
+      identityId: actorIdentityId,
+      action: 'document.deleted',
+      entityType: 'CustomerDocument',
+      entityId: documentId,
+      metadata: { customerId: document.customerId, type: document.type },
+    });
   }
 }

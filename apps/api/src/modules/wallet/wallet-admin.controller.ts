@@ -6,6 +6,7 @@ import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { UsersService } from '../users/users.service';
 import { AdjustWalletDto } from './dto/adjust-wallet.dto';
 import { CreditWalletDto } from './dto/credit-wallet.dto';
+import { TransferWalletDto } from './dto/transfer-wallet.dto';
 import { WalletService } from './wallet.service';
 
 @Controller('wallet')
@@ -19,6 +20,21 @@ export class WalletAdminController {
   @RequirePermissions(PERMISSIONS.WALLET.READ_ALL)
   listAll() {
     return this.walletService.listAllWallets();
+  }
+
+  /** Static route — must be registered before the dynamic ":customerId" GET below. */
+  @Post('transfer')
+  @RequirePermissions(PERMISSIONS.WALLET.TRANSFER)
+  async transfer(@CurrentUser() user: AuthContext, @Body() dto: TransferWalletDto) {
+    const staffId = await this.usersService.getStaffIdForIdentity(user.sub);
+    return this.walletService.transferBetweenWallets(
+      dto.fromCustomerId,
+      dto.toCustomerId,
+      dto.amount,
+      dto.description,
+      staffId ?? undefined,
+      user.sub,
+    );
   }
 
   @Get(':customerId')

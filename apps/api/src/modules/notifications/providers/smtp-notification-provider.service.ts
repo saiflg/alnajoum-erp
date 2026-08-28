@@ -5,6 +5,8 @@ import {
   NotificationProviderPort,
   SendEmailInput,
   SendEmailResult,
+  SendTextInput,
+  SendTextResult,
 } from './notification-provider.port';
 
 /**
@@ -76,5 +78,24 @@ export class SmtpNotificationProviderService
       this.logger.error(`Failed to send email to ${input.to}: ${message}`);
       return { success: false, error: message };
     }
+  }
+
+  // This provider only ever configures a real SMTP transport — SMS/WhatsApp
+  // need their own vendor account (Twilio, Meta's WhatsApp Business API,
+  // etc.) that this project doesn't have credentials for. Honestly reports
+  // "not configured" rather than silently pretending to send, exactly like
+  // sendEmail() above does when SMTP_HOST is missing.
+  sendSms(_input: SendTextInput): Promise<SendTextResult> {
+    return Promise.resolve({
+      success: false,
+      error: 'SMS is not configured for this deployment',
+    });
+  }
+
+  sendWhatsApp(_input: SendTextInput): Promise<SendTextResult> {
+    return Promise.resolve({
+      success: false,
+      error: 'WhatsApp is not configured for this deployment',
+    });
   }
 }

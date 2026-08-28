@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { InvoiceStatus } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -7,13 +8,17 @@ const OVERDUE_AFTER_DAYS = 14;
 const REQUIRED_DOCUMENT_TYPES = ['PASSPORT', 'PHOTO'] as const;
 
 /**
- * On-demand reminder sweep, triggered from the admin/finance dashboard
- * (`POST /reminders/run`, permission REMINDER.RUN) rather than a background
- * cron — this project has no task-scheduler infrastructure yet (see
- * README's Remaining tasks), so a real deployment would wire this same
- * `runAll()` method behind a scheduled job (cron, a queue worker, etc.)
- * instead of a manual trigger. The logic itself is complete and tested;
- * only the "when it runs" wiring is deferred.
+ * Reminder sweep — runs automatically once a day (see `runScheduled` below)
+ * and can also be triggered on demand from the admin/finance dashboard
+ * (`POST /reminders/run`, permission REMINDER.RUN) for testing or an
+ * out-of-cycle nudge. Both paths call the same `runAll()`.
+ *
+ * Deliberately simple: every outstanding invoice / customer with a missing
+ * document gets a reminder on every run, with no per-recipient frequency
+ * cap or "already reminded today" dedup. A daily cron cadence keeps that
+ * reasonable in practice; a higher-volume production deployment would want
+ * to track last-reminded-at per invoice/customer before increasing the
+ * frequency further.
  */
 @Injectable()
 export class RemindersService {
@@ -23,6 +28,16 @@ export class RemindersService {
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
   ) {}
+
+  /** Daily at 08:00 server time — installment/overdue/missing-document sweep. */
+  @Cron(CronExpression.EVERY_DAY_AT_8AM)
+  async runScheduled(): Promise<void> {
+    this.logger.log('Running scheduled reminder sweep');
+    const result = await this.runAll();
+    this.logger.log(
+      `Scheduled reminder sweep complete: ${JSON.stringify(result)}`,
+    );
+  }
 
   async runAll() {
     const [installmentReminders, documentReminders] = await Promise.all([
@@ -40,7 +55,11 @@ export class RemindersService {
       },
       include: {
         payments: true,
-        customer: { include: { identity: { select: { email: true, id: true } } } },
+        customer: {
+          include: {
+            identity: { select: { email: true, id: true, phone: true } },
+          },
+        },
         hajjRegistration: { include: { package: true } },
         umrahRegistration: { include: { package: true } },
       },
@@ -78,6 +97,8 @@ export class RemindersService {
           currency: invoice.currency,
           overdue,
         },
+        invoice.customer.identity.phone,
+        invoice.customer.whatsapp,
       );
 
       if (overdue) overdueCount++;
@@ -95,7 +116,7 @@ export class RemindersService {
     const customers = await this.prisma.customer.findMany({
       include: {
         documents: { select: { type: true } },
-        identity: { select: { email: true, id: true } },
+        identity: { select: { email: true, id: true, phone: true } },
       },
     });
 
@@ -111,6 +132,8 @@ export class RemindersService {
         customer.identity.email,
         customer.identity.id,
         { missingDocumentTypes: missing },
+        customer.identity.phone,
+        customer.whatsapp,
       );
       count++;
     }

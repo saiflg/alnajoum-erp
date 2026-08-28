@@ -43,7 +43,11 @@ describe('WalletService', () => {
       customer: { findUnique: jest.fn() },
       invoice: { findUnique: jest.fn() },
       payment: { create: jest.fn() },
-      $transaction: jest.fn((cb) => cb(prisma)),
+      // Handles both $transaction call shapes: a callback (payInvoiceWithWallet)
+      // and an array of already-built promises (transferBetweenWallets).
+      $transaction: jest.fn((arg) =>
+        Array.isArray(arg) ? Promise.all(arg) : arg(prisma),
+      ),
     };
     invoicesService = { recomputeStatus: jest.fn() };
     notificationsService = {
@@ -372,6 +376,108 @@ describe('WalletService', () => {
       await service.verifyDeposit('customer-1', 'WDEP-ABC123');
 
       expect(paymentProvider.verifyCheckout).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('transferBetweenWallets', () => {
+    it('rejects transferring to the same customer', async () => {
+      await expect(
+        service.transferBetweenWallets(
+          'customer-1',
+          'customer-1',
+          10_000,
+          'test',
+          'staff-1',
+          'identity-1',
+        ),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('rejects a transfer that exceeds the source wallet balance', async () => {
+      prisma.wallet.findUnique.mockImplementation(({ where }: any) =>
+        where.customerId === 'customer-1'
+          ? { id: 'wallet-from', customerId: 'customer-1', currency: 'NGN' }
+          : { id: 'wallet-to', customerId: 'customer-2', currency: 'NGN' },
+      );
+      prisma.walletTransaction.aggregate.mockResolvedValue({ _sum: { amount: 5_000 } });
+
+      await expect(
+        service.transferBetweenWallets(
+          'customer-1',
+          'customer-2',
+          10_000,
+          'test',
+          'staff-1',
+          'identity-1',
+        ),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.walletTransaction.create).not.toHaveBeenCalled();
+    });
+
+    it('debits the source and credits the destination atomically', async () => {
+      prisma.wallet.findUnique.mockImplementation(({ where }: any) =>
+        where.customerId === 'customer-1'
+          ? { id: 'wallet-from', customerId: 'customer-1', currency: 'NGN' }
+          : { id: 'wallet-to', customerId: 'customer-2', currency: 'NGN' },
+      );
+      prisma.walletTransaction.aggregate.mockResolvedValue({ _sum: { amount: 50_000 } });
+      prisma.walletTransaction.findMany.mockResolvedValue([]);
+      prisma.customer.findUnique.mockImplementation(({ where }: any) =>
+        where.id === 'customer-1'
+          ? { identityId: 'identity-from', identity: { email: 'from@example.com' } }
+          : { identityId: 'identity-to', identity: { email: 'to@example.com' } },
+      );
+
+      const result = await service.transferBetweenWallets(
+        'customer-1',
+        'customer-2',
+        20_000,
+        'gift',
+        'staff-1',
+        'staff-identity',
+      );
+
+      expect(prisma.walletTransaction.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            walletId: 'wallet-from',
+            type: WalletTransactionType.TRANSFER_OUT,
+            amount: -20_000,
+          }),
+        }),
+      );
+      expect(prisma.walletTransaction.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            walletId: 'wallet-to',
+            type: WalletTransactionType.TRANSFER_IN,
+            amount: 20_000,
+          }),
+        }),
+      );
+      expect(notificationsService.sendWalletUpdate).toHaveBeenCalledWith(
+        'from@example.com',
+        'identity-from',
+        expect.objectContaining({ type: 'DEBIT' }),
+      );
+      expect(notificationsService.sendWalletUpdate).toHaveBeenCalledWith(
+        'to@example.com',
+        'identity-to',
+        expect.objectContaining({ type: 'DEPOSIT' }),
+      );
+      expect(auditService.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          identityId: 'staff-identity',
+          action: 'wallet.transferred',
+          metadata: expect.objectContaining({
+            fromCustomerId: 'customer-1',
+            toCustomerId: 'customer-2',
+            amount: 20_000,
+          }),
+        }),
+      );
+      expect(result.from.balance).toBe(50_000);
+      expect(result.to.balance).toBe(50_000);
     });
   });
 });

@@ -51,7 +51,12 @@ export class CustomerOwnDocumentsController {
     const customerId = await this.customersService.getCustomerIdForIdentity(
       user.sub,
     );
-    return this.documentsService.recordUpload(customerId, file, query.type);
+    return this.documentsService.recordUpload(
+      customerId,
+      file,
+      query.type,
+      user.sub,
+    );
   }
 
   @Get()
@@ -92,7 +97,7 @@ export class CustomerOwnDocumentsController {
     const customerId = await this.customersService.getCustomerIdForIdentity(
       user.sub,
     );
-    await this.documentsService.deleteDocument(documentId, customerId);
+    await this.documentsService.deleteDocument(documentId, customerId, user.sub);
     return { deleted: true };
   }
 }

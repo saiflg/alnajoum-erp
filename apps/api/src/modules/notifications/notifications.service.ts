@@ -1,6 +1,10 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { NotificationStatus, NotificationType } from '@prisma/client';
+import {
+  NotificationChannel,
+  NotificationStatus,
+  NotificationType,
+} from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { NOTIFICATION_PROVIDER } from './providers/notification-provider.port';
 import type { NotificationProviderPort } from './providers/notification-provider.port';
@@ -84,6 +88,7 @@ export class NotificationsService {
       await this.prisma.notification.create({
         data: {
           type,
+          channel: NotificationChannel.EMAIL,
           recipient: to,
           subject,
           body: textBody,
@@ -98,6 +103,53 @@ export class NotificationsService {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.error(
         `Failed to send/record ${type} notification: ${message}`,
+      );
+    }
+  }
+
+  /**
+   * Same recording contract as `send()`, but over SMS or WhatsApp — used by
+   * the two notification types that go out over more than one channel
+   * (installment/overdue reminders, document-missing reminders). Silently a
+   * no-op when the recipient has no phone number on file; a provider that
+   * isn't configured for the channel (see SmtpNotificationProviderService)
+   * still records a FAILED row rather than pretending to have sent it.
+   */
+  private async sendText(
+    channel: 'SMS' | 'WHATSAPP',
+    type: NotificationType,
+    to: string | null | undefined,
+    subject: string,
+    body: string,
+    identityId?: string,
+  ): Promise<void> {
+    if (!to) return;
+    try {
+      const result =
+        channel === 'SMS'
+          ? await this.provider.sendSms({ to, body })
+          : await this.provider.sendWhatsApp({ to, body });
+      await this.prisma.notification.create({
+        data: {
+          type,
+          channel:
+            channel === 'SMS'
+              ? NotificationChannel.SMS
+              : NotificationChannel.WHATSAPP,
+          recipient: to,
+          subject,
+          body,
+          status: result.success
+            ? NotificationStatus.SENT
+            : NotificationStatus.FAILED,
+          errorMessage: result.error,
+          identityId,
+        },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `Failed to send/record ${type} ${channel} notification: ${message}`,
       );
     }
   }
@@ -225,11 +277,23 @@ export class NotificationsService {
     );
   }
 
+  /**
+   * Multi-channel by design: email always, plus SMS and WhatsApp when a
+   * phone/WhatsApp number is on file — reminders are the one notification
+   * type explicitly required to reach a customer more than one way (a
+   * missed email is exactly the failure mode a payment reminder needs to
+   * survive).
+   */
   async sendInstallmentReminder(
     email: string,
     identityId: string,
     reminder: InstallmentReminderDetails,
+    phone?: string | null,
+    whatsapp?: string | null,
   ): Promise<void> {
+    const type = reminder.overdue
+      ? NotificationType.PAYMENT_OVERDUE
+      : NotificationType.INSTALLMENT_REMINDER;
     const subject = reminder.overdue
       ? `Payment overdue: ${reminder.registrationNumber}`
       : `Installment reminder: ${reminder.registrationNumber}`;
@@ -243,21 +307,19 @@ export class NotificationsService {
       `Total: ${reminder.currency} ${reminder.totalAmount}`,
       `Remaining balance: ${reminder.currency} ${reminder.balance}`,
     ].join('\n');
-    await this.send(
-      reminder.overdue
-        ? NotificationType.PAYMENT_OVERDUE
-        : NotificationType.INSTALLMENT_REMINDER,
-      email,
-      subject,
-      body,
-      identityId,
-    );
+    await Promise.all([
+      this.send(type, email, subject, body, identityId),
+      this.sendText('SMS', type, phone, subject, body, identityId),
+      this.sendText('WHATSAPP', type, whatsapp, subject, body, identityId),
+    ]);
   }
 
   async sendDocumentMissingReminder(
     email: string,
     identityId: string,
     details: DocumentMissingDetails,
+    phone?: string | null,
+    whatsapp?: string | null,
   ): Promise<void> {
     const subject = 'Missing documents on your profile';
     const body = [
@@ -267,13 +329,31 @@ export class NotificationsService {
       '',
       'Please upload them to avoid delays with your applications.',
     ].join('\n');
-    await this.send(
-      NotificationType.DOCUMENT_MISSING,
-      email,
-      subject,
-      body,
-      identityId,
-    );
+    await Promise.all([
+      this.send(
+        NotificationType.DOCUMENT_MISSING,
+        email,
+        subject,
+        body,
+        identityId,
+      ),
+      this.sendText(
+        'SMS',
+        NotificationType.DOCUMENT_MISSING,
+        phone,
+        subject,
+        body,
+        identityId,
+      ),
+      this.sendText(
+        'WHATSAPP',
+        NotificationType.DOCUMENT_MISSING,
+        whatsapp,
+        subject,
+        body,
+        identityId,
+      ),
+    ]);
   }
 
   async sendManualPaymentStatus(
