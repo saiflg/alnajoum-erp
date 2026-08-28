@@ -346,12 +346,10 @@ async function main() {
       totalAmount: hajjTotal,
       issuedByStaffId: agentIdentity.staff!.id,
       lineItems: {
-        create: [
-          {
-            description: `Hajj package ${hajjStandard.name} (${hajjRegistration.registrationNumber}) — ${hajjPilgrims.length} pilgrims`,
-            amount: hajjTotal,
-          },
-        ],
+        create: hajjPilgrims.map((pilgrim) => ({
+          description: `Hajj package ${hajjStandard.name} (${hajjRegistration.registrationNumber}) — ${pilgrim.firstName} ${pilgrim.lastName}`,
+          amount: hajjStandard.price,
+        })),
       },
       payments: {
         create: [
@@ -404,12 +402,10 @@ async function main() {
       totalAmount: umrahTotal,
       issuedByStaffId: agentIdentity.staff!.id,
       lineItems: {
-        create: [
-          {
-            description: `Umrah package ${umrahEconomy.name} (${umrahRegistration.registrationNumber})`,
-            amount: umrahTotal,
-          },
-        ],
+        create: umrahPilgrims.map((pilgrim) => ({
+          description: `Umrah package ${umrahEconomy.name} (${umrahRegistration.registrationNumber}) — ${pilgrim.firstName} ${pilgrim.lastName}`,
+          amount: umrahEconomy.sellingPrice,
+        })),
       },
       payments: {
         create: [

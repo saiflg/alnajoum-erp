@@ -78,6 +78,10 @@ export default function CustomerPortalDashboardPage() {
           <StatTile label="Notifications" value={String(unreadNotifications)} href="/portal/notifications" />
         </div>
 
+        <p className="mt-3 text-xs text-slate-400">
+          Visa applications and support requests are not yet part of the platform — coming in a later phase.
+        </p>
+
         <h3 className="mt-8 text-sm font-semibold text-slate-900">Recent Wallet Transactions</h3>
         <div className="mt-2 overflow-hidden rounded-lg border border-slate-200 bg-white">
           <table className="min-w-full divide-y divide-slate-200 text-sm">
