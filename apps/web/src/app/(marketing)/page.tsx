@@ -23,7 +23,7 @@ const TRUST_ITEMS = [
 ];
 
 const STATS = [
-  { target: 4, suffix: '', label: 'Core modules live today' },
+  { target: 5, suffix: '', label: 'Core modules live today' },
   { target: 6, suffix: '', label: 'Nigerian & partner airlines' },
   { target: 100, suffix: '%', label: 'Bookings backed by a real API' },
   { target: 24, suffix: '/7', label: 'Portal access, anywhere' },
@@ -73,9 +73,9 @@ const SERVICES = [
   {
     id: 'hajj',
     title: 'Hajj & Umrah Packages',
-    status: 'Coming Soon',
+    status: 'Live',
     description:
-      'End-to-end pilgrimage packages — flights, accommodation, and group coordination — for Nigerian pilgrims traveling to Makkah and Madinah.',
+      'Register yourself and any family member on a published Hajj or Umrah package, then pay in installments — by card, bank transfer, or wallet — against a per-pilgrim invoice.',
     icon: (
       <path d="M12 2 4 7v2h16V7zM4 11v9h4v-6h8v6h4v-9z" />
     ),

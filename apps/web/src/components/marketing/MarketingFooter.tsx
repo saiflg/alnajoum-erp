@@ -6,7 +6,7 @@ const SERVICE_LINKS = [
   { href: '/services#family', label: 'Family Travel' },
   { href: '/services#hotels', label: 'Hotels (Coming Soon)' },
   { href: '/services#visa', label: 'Visa Assistance (Coming Soon)' },
-  { href: '/services#hajj', label: 'Hajj & Umrah (Coming Soon)' },
+  { href: '/services#hajj', label: 'Hajj & Umrah Packages' },
   { href: '/services#corporate', label: 'Corporate Travel (Coming Soon)' },
 ];
 

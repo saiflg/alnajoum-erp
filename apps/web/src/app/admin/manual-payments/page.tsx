@@ -28,14 +28,27 @@ function SubmitManualPaymentForm({ onSubmitted }: { onSubmitted: () => void }) {
     apiRequest<CustomerProfile[]>('/customers').then(setCustomers).catch(() => undefined);
   }, []);
 
+  // Reset the invoice list/selection the instant the chosen customer changes (including
+  // back to "none"), rather than in the fetch effect below — calling setState directly in
+  // an effect body risks cascading renders, so this follows React's documented pattern for
+  // adjusting state during render when a dependency changes.
+  const [invoicesLoadedFor, setInvoicesLoadedFor] = useState('');
+  if (customerId !== invoicesLoadedFor && !customerId) {
+    setInvoicesLoadedFor(customerId);
+    setInvoices([]);
+    setInvoiceId('');
+  }
+
   useEffect(() => {
     if (!customerId) {
-      setInvoices([]);
-      setInvoiceId('');
       return;
     }
     apiRequest<Invoice[]>(`/invoices?customerId=${customerId}`)
-      .then((data) => setInvoices(data.filter((inv) => inv.status !== 'PAID' && inv.status !== 'VOID')))
+      .then((data) => {
+        setInvoices(data.filter((inv) => inv.status !== 'PAID' && inv.status !== 'VOID'));
+        setInvoiceId('');
+        setInvoicesLoadedFor(customerId);
+      })
       .catch(() => undefined);
   }, [customerId]);
 

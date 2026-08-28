@@ -56,13 +56,14 @@ const SERVICES = [
   {
     id: 'hajj',
     title: 'Hajj & Umrah Packages',
-    status: 'Coming Soon',
+    status: 'Live',
     summary:
       'End-to-end pilgrimage packages for Nigerian pilgrims traveling to Makkah and Madinah.',
     points: [
-      'Flights, accommodation, and ground transport bundled into one package',
-      'Group and family coordination',
-      'Payment plans against a single invoice',
+      'Browse published Hajj and Umrah packages with live seat availability and pricing',
+      'Register yourself and any family member on the same booking, with a per-pilgrim invoice breakdown',
+      'Pay in installments — by card, bank transfer, or wallet balance — against a single tracked invoice',
+      'Automatic reminders for outstanding installments and missing travel documents',
     ],
   },
   {
@@ -87,8 +88,8 @@ export default function ServicesPage() {
           Our services
         </h1>
         <p className="mx-auto mt-6 max-w-2xl text-lg text-slate-600">
-          Flights and family travel are live and bookable today. Everything else is on
-          our roadmap, built on the same real infrastructure.
+          Flights, family travel, and Hajj &amp; Umrah packages are live and bookable today.
+          Everything else is on our roadmap, built on the same real infrastructure.
         </p>
       </Reveal>
 
