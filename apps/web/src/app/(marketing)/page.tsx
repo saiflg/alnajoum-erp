@@ -329,8 +329,8 @@ export default function MarketingHomePage() {
               Everything a modern travel agency needs
             </h2>
             <p className="mt-4 text-slate-600">
-              Flights and family travel are live today, running on the same real
-              booking and invoicing engine that powers every module we add next.
+              Flights, family travel, and Hajj &amp; Umrah packages are live today, running on
+              the same real booking and invoicing engine that powers every module we add next.
             </p>
           </Reveal>
 
