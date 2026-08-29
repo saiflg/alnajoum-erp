@@ -6,6 +6,7 @@ import {
   NotificationType,
 } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
+import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { NOTIFICATION_PROVIDER } from './providers/notification-provider.port';
 import type { NotificationProviderPort } from './providers/notification-provider.port';
 
@@ -371,6 +372,55 @@ export class NotificationsService {
       details.reviewNote ? `\nNote from finance: ${details.reviewNote}` : '',
     ].join('\n');
     await this.send(type, email, subject, body, identityId);
+  }
+
+  /**
+   * Fans out to every staff identity that can actually review manual
+   * payments — this was the one gap where MANUAL_PAYMENT_SUBMITTED existed
+   * as a NotificationType but nothing ever fired it, leaving finance staff
+   * to notice new submissions only by checking the review queue manually.
+   */
+  async notifyManualPaymentSubmitted(details: {
+    invoiceNumber: string;
+    amount: number;
+    currency: string;
+    method: string;
+  }): Promise<void> {
+    const reviewers = await this.prisma.identity.findMany({
+      where: {
+        roles: {
+          some: {
+            role: {
+              permissions: {
+                some: {
+                  permission: { key: PERMISSIONS.MANUAL_PAYMENT.REVIEW },
+                },
+              },
+            },
+          },
+        },
+      },
+      select: { id: true, email: true },
+    });
+
+    const subject = `New manual payment awaiting review: ${details.invoiceNumber}`;
+    const body = [
+      `A ${details.method.toLowerCase().replace('_', ' ')} payment of ${details.currency} ${details.amount} was submitted against invoice ${details.invoiceNumber} and needs your review.`,
+      '',
+      'Review it from Manual Payments in the admin dashboard.',
+    ].join('\n');
+
+    await Promise.all(
+      reviewers.map((reviewer) =>
+        this.send(
+          NotificationType.MANUAL_PAYMENT_SUBMITTED,
+          reviewer.email,
+          subject,
+          body,
+          reviewer.id,
+        ),
+      ),
+    );
   }
 
   listAll(filters: { type?: NotificationType; status?: NotificationStatus }) {

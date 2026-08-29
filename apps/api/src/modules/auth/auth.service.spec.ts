@@ -223,4 +223,39 @@ describe('AuthService', () => {
       ).rejects.toThrow(UnauthorizedException);
     });
   });
+
+  describe('getMe', () => {
+    it('surfaces the staff member\'s real company/branch name for the top nav', async () => {
+      prisma.identity.findUniqueOrThrow.mockResolvedValue({
+        ...baseIdentity,
+        customer: null,
+        staff: {
+          id: 'staff-1',
+          firstName: 'Fatima',
+          lastName: 'Sule',
+          company: { id: 'company-1', name: 'Alnajoum Travel Agency' },
+          branch: { id: 'branch-1', name: 'Kaduna HQ' },
+        },
+      });
+
+      const result = await service.getMe('identity-1');
+
+      expect(result.companyName).toBe('Alnajoum Travel Agency');
+      expect(result.branchName).toBe('Kaduna HQ');
+    });
+
+    it('is null for a customer identity, which has no company scope', async () => {
+      prisma.identity.findUniqueOrThrow.mockResolvedValue({
+        ...baseIdentity,
+        type: 'CUSTOMER',
+        customer: { id: 'customer-1', firstName: 'Amina', lastName: 'Yusuf' },
+        staff: null,
+      });
+
+      const result = await service.getMe('identity-1');
+
+      expect(result.companyName).toBeNull();
+      expect(result.branchName).toBeNull();
+    });
+  });
 });

@@ -90,6 +90,13 @@ export class ManualPaymentsService {
       metadata: { invoiceId: dto.invoiceId, amount: dto.amount, staffId },
     });
 
+    await this.notificationsService.notifyManualPaymentSubmitted({
+      invoiceNumber: invoice.invoiceNumber,
+      amount: dto.amount,
+      currency: invoice.currency,
+      method: dto.method,
+    });
+
     return submission;
   }
 

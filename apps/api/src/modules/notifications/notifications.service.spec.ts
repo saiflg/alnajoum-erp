@@ -11,13 +11,17 @@ import { NOTIFICATION_PROVIDER } from './providers/notification-provider.port';
 
 describe('NotificationsService', () => {
   let service: NotificationsService;
-  let prisma: { notification: { create: jest.Mock; findMany: jest.Mock } };
+  let prisma: {
+    notification: { create: jest.Mock; findMany: jest.Mock };
+    identity: { findMany: jest.Mock };
+  };
   let provider: { sendEmail: jest.Mock; sendSms: jest.Mock; sendWhatsApp: jest.Mock };
   let configService: { get: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
       notification: { create: jest.fn(), findMany: jest.fn() },
+      identity: { findMany: jest.fn() },
     };
     provider = {
       sendEmail: jest.fn(),
@@ -245,6 +249,64 @@ describe('NotificationsService', () => {
           }),
         }),
       );
+    });
+  });
+
+  describe('notifyManualPaymentSubmitted', () => {
+    it('emails every identity holding manual_payment:review, not just one', async () => {
+      prisma.identity.findMany.mockResolvedValue([
+        { id: 'staff-finance-1', email: 'finance@alnajoum.travel' },
+        { id: 'staff-admin-1', email: 'admin@alnajoum.travel' },
+      ]);
+      provider.sendEmail.mockResolvedValue({ success: true });
+
+      await service.notifyManualPaymentSubmitted({
+        invoiceNumber: 'INV-ABC123',
+        amount: 20_000,
+        currency: 'NGN',
+        method: 'BANK_TRANSFER',
+      });
+
+      expect(prisma.identity.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            roles: expect.objectContaining({
+              some: expect.objectContaining({
+                role: expect.objectContaining({
+                  permissions: expect.objectContaining({
+                    some: expect.objectContaining({
+                      permission: expect.objectContaining({
+                        key: 'manual_payment:review',
+                      }),
+                    }),
+                  }),
+                }),
+              }),
+            }),
+          }),
+        }),
+      );
+      expect(provider.sendEmail).toHaveBeenCalledTimes(2);
+      expect(provider.sendEmail).toHaveBeenCalledWith(
+        expect.objectContaining({ to: 'finance@alnajoum.travel' }),
+      );
+      expect(provider.sendEmail).toHaveBeenCalledWith(
+        expect.objectContaining({ to: 'admin@alnajoum.travel' }),
+      );
+      expect(prisma.notification.create).toHaveBeenCalledTimes(2);
+    });
+
+    it('does nothing (no crash) when no staff currently hold the review permission', async () => {
+      prisma.identity.findMany.mockResolvedValue([]);
+
+      await service.notifyManualPaymentSubmitted({
+        invoiceNumber: 'INV-ABC123',
+        amount: 20_000,
+        currency: 'NGN',
+        method: 'CASH',
+      });
+
+      expect(provider.sendEmail).not.toHaveBeenCalled();
     });
   });
 });

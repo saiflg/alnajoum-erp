@@ -305,7 +305,10 @@ export class AuthService {
   async getMe(identityId: string) {
     const identity = await this.prisma.identity.findUniqueOrThrow({
       where: { id: identityId },
-      include: { customer: true, staff: true },
+      include: {
+        customer: true,
+        staff: { include: { company: true, branch: true } },
+      },
     });
     const { roles, permissions } =
       await this.rbacService.getEffectiveAccess(identityId);
@@ -321,6 +324,11 @@ export class AuthService {
       permissions,
       dashboardPath: this.resolveDashboardPath(roles),
       profile: identity.customer ?? identity.staff,
+      // Real tenant context for the top nav — null for customers, who
+      // aren't scoped to a company in this schema (there's only ever been
+      // one agency operating the platform so far).
+      companyName: identity.staff?.company.name ?? null,
+      branchName: identity.staff?.branch?.name ?? null,
     };
   }
 

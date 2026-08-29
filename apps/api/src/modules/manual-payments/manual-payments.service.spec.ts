@@ -12,7 +12,10 @@ describe('ManualPaymentsService', () => {
   let service: ManualPaymentsService;
   let prisma: Record<string, any>;
   let invoicesService: { recomputeStatus: jest.Mock };
-  let notificationsService: { sendManualPaymentStatus: jest.Mock };
+  let notificationsService: {
+    sendManualPaymentStatus: jest.Mock;
+    notifyManualPaymentSubmitted: jest.Mock;
+  };
   let auditService: { record: jest.Mock };
   let incentivesService: { applyForInvoicePayment: jest.Mock };
 
@@ -28,7 +31,10 @@ describe('ManualPaymentsService', () => {
       $transaction: jest.fn((cb) => cb(prisma)),
     };
     invoicesService = { recomputeStatus: jest.fn() };
-    notificationsService = { sendManualPaymentStatus: jest.fn() };
+    notificationsService = {
+      sendManualPaymentStatus: jest.fn(),
+      notifyManualPaymentSubmitted: jest.fn(),
+    };
     auditService = { record: jest.fn() };
     incentivesService = { applyForInvoicePayment: jest.fn() };
 
@@ -50,6 +56,8 @@ describe('ManualPaymentsService', () => {
     it('never creates a Payment row — submitting has no ledger effect', async () => {
       prisma.invoice.findUnique.mockResolvedValue({
         id: 'invoice-1',
+        invoiceNumber: 'INV-ABC123',
+        currency: 'NGN',
         customerId: 'customer-1',
         status: InvoiceStatus.ISSUED,
         totalAmount: 50_000,
@@ -77,6 +85,12 @@ describe('ManualPaymentsService', () => {
         }),
       );
       expect(prisma.payment.create).not.toHaveBeenCalled();
+      expect(notificationsService.notifyManualPaymentSubmitted).toHaveBeenCalledWith({
+        invoiceNumber: 'INV-ABC123',
+        amount: 20_000,
+        currency: 'NGN',
+        method: PaymentMethod.BANK_TRANSFER,
+      });
     });
 
     it('rejects a submission that exceeds the outstanding balance', async () => {
