@@ -27,6 +27,8 @@ import { UmrahModule } from './modules/umrah/umrah.module';
 import { ManualPaymentsModule } from './modules/manual-payments/manual-payments.module';
 import { RemindersModule } from './modules/reminders/reminders.module';
 import { IntegrationsModule } from './modules/integrations/integrations.module';
+import { HotelsModule } from './modules/hotels/hotels.module';
+import { VehicleRentalsModule } from './modules/vehicle-rentals/vehicle-rentals.module';
 
 @Module({
   imports: [
@@ -54,6 +56,8 @@ import { IntegrationsModule } from './modules/integrations/integrations.module';
     UmrahModule,
     ManualPaymentsModule,
     RemindersModule,
+    HotelsModule,
+    VehicleRentalsModule,
   ],
   controllers: [AppController],
   providers: [

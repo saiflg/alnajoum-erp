@@ -7,10 +7,12 @@ import {
   FlightBooking,
   HajjRegistration,
   HajjRegistrationPilgrim,
+  HotelBooking,
   InvoiceStatus,
   Prisma,
   UmrahRegistration,
   UmrahRegistrationPilgrim,
+  VehicleRental,
 } from '@prisma/client';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
@@ -54,6 +56,52 @@ export class InvoicesService {
             {
               description: `Flight ${booking.bookingReference}: ${booking.origin} → ${booking.destination}`,
               amount: booking.totalAmount,
+            },
+          ],
+        },
+      },
+    });
+  }
+
+  /** Called from HotelsService.createBooking inside the same transaction as the booking insert. */
+  createForHotelBooking(booking: HotelBooking, tx: PrismaTransactionClient) {
+    return tx.invoice.create({
+      data: {
+        invoiceNumber: generateInvoiceNumber(),
+        customerId: booking.customerId,
+        hotelBookingId: booking.id,
+        status: InvoiceStatus.ISSUED,
+        currency: booking.currency,
+        totalAmount: booking.totalAmount,
+        issuedByStaffId: booking.bookedByStaffId,
+        lineItems: {
+          create: [
+            {
+              description: `${booking.hotelName}, ${booking.city} (${booking.bookingReference}) — ${booking.rooms} room(s), ${booking.checkInDate.toISOString().slice(0, 10)} to ${booking.checkOutDate.toISOString().slice(0, 10)}`,
+              amount: booking.totalAmount,
+            },
+          ],
+        },
+      },
+    });
+  }
+
+  /** Called from VehicleRentalsService.createBooking inside the same transaction as the booking insert. */
+  createForVehicleRental(rental: VehicleRental, tx: PrismaTransactionClient) {
+    return tx.invoice.create({
+      data: {
+        invoiceNumber: generateInvoiceNumber(),
+        customerId: rental.customerId,
+        vehicleRentalId: rental.id,
+        status: InvoiceStatus.ISSUED,
+        currency: rental.currency,
+        totalAmount: rental.totalAmount,
+        issuedByStaffId: rental.bookedByStaffId,
+        lineItems: {
+          create: [
+            {
+              description: `${rental.vehicleName} rental (${rental.bookingReference}) — ${rental.pickupCity}, ${rental.pickupAt.toISOString().slice(0, 10)} to ${rental.dropoffAt.toISOString().slice(0, 10)}`,
+              amount: rental.totalAmount,
             },
           ],
         },
@@ -193,6 +241,36 @@ export class InvoicesService {
   async voidIfUnpaid(flightBookingId: string): Promise<void> {
     const invoice = await this.prisma.invoice.findUnique({
       where: { flightBookingId },
+      include: { payments: true },
+    });
+    if (!invoice || invoice.payments.length > 0) {
+      return;
+    }
+    await this.prisma.invoice.update({
+      where: { id: invoice.id },
+      data: { status: InvoiceStatus.VOID },
+    });
+  }
+
+  /** Same as voidIfUnpaid, for a cancelled hotel booking. */
+  async voidHotelBookingIfUnpaid(hotelBookingId: string): Promise<void> {
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { hotelBookingId },
+      include: { payments: true },
+    });
+    if (!invoice || invoice.payments.length > 0) {
+      return;
+    }
+    await this.prisma.invoice.update({
+      where: { id: invoice.id },
+      data: { status: InvoiceStatus.VOID },
+    });
+  }
+
+  /** Same as voidIfUnpaid, for a cancelled vehicle rental. */
+  async voidVehicleRentalIfUnpaid(vehicleRentalId: string): Promise<void> {
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { vehicleRentalId },
       include: { payments: true },
     });
     if (!invoice || invoice.payments.length > 0) {

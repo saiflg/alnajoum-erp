@@ -32,6 +32,16 @@ export const PERMISSIONS = {
     READ: 'flight:read',
     CANCEL: 'flight:cancel',
   },
+  HOTEL: {
+    BOOK: 'hotel:book',
+    READ: 'hotel:read',
+    CANCEL: 'hotel:cancel',
+  },
+  VEHICLE_RENTAL: {
+    BOOK: 'vehicle_rental:book',
+    READ: 'vehicle_rental:read',
+    CANCEL: 'vehicle_rental:cancel',
+  },
   INVOICE: {
     READ: 'invoice:read',
   },

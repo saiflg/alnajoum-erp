@@ -115,6 +115,8 @@ model Customer {
   umrahRegistrations       UmrahRegistration[]
   umrahRegistrationPilgrim UmrahRegistrationPilgrim[]
   manualPaymentSubmissions ManualPaymentSubmission[]
+  hotelBookings            HotelBooking[]
+  vehicleRentals           VehicleRental[]
 
   @@index([assignedStaffId])
   @@index([assignedBranchId])
@@ -234,6 +236,8 @@ model Staff {
   incentives              StaffIncentive[]
   submittedManualPayments ManualPaymentSubmission[] @relation("SubmittedManualPayments")
   reviewedManualPayments  ManualPaymentSubmission[] @relation("ReviewedManualPayments")
+  bookedHotelBookings     HotelBooking[]
+  bookedVehicleRentals    VehicleRental[]
 
   @@index([companyId])
   @@index([branchId])
@@ -544,6 +548,13 @@ model Invoice {
   hajjRegistration    HajjRegistration?  @relation(fields: [hajjRegistrationId], references: [id], onDelete: SetNull)
   umrahRegistrationId String?            @unique
   umrahRegistration   UmrahRegistration? @relation(fields: [umrahRegistrationId], references: [id], onDelete: SetNull)
+
+  // Same nullable/unique shape again — an invoice generated from a hotel
+  // booking or vehicle rental instead of the above.
+  hotelBookingId  String?        @unique
+  hotelBooking    HotelBooking?  @relation(fields: [hotelBookingId], references: [id], onDelete: SetNull)
+  vehicleRentalId String?        @unique
+  vehicleRental   VehicleRental? @relation(fields: [vehicleRentalId], references: [id], onDelete: SetNull)
 
   status InvoiceStatus @default(ISSUED)
 
@@ -1111,4 +1122,125 @@ model IntegrationCredential {
   @@unique([category, provider])
   @@index([category])
   @@map("integration_credentials")
+}
+
+// ---------------------------------------------------------------------------
+// Hotel booking — same provider-abstraction / search / book / invoice shape
+// as flights (see FlightBooking above and HotelProviderPort), for the
+// "Domestic and international hotel stays" module.
+// ---------------------------------------------------------------------------
+
+enum HotelProviderName {
+  MOCK
+}
+
+enum HotelBookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+}
+
+model HotelBooking {
+  id               String @id @default(cuid())
+  bookingReference String @unique
+
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+
+  // Set when a staff member books on the customer's behalf; null for
+  // customer self-service bookings.
+  bookedByStaffId String?
+  bookedByStaff   Staff?  @relation(fields: [bookedByStaffId], references: [id], onDelete: SetNull)
+
+  provider        HotelProviderName
+  providerOfferId String
+  providerOrderId String?
+  status          HotelBookingStatus @default(PENDING)
+
+  currency    String
+  totalAmount Int // whole currency units, no minor-unit subdivision
+
+  hotelName    String
+  city         String
+  country      String
+  starRating   Int
+  roomType     String
+  checkInDate  DateTime
+  checkOutDate DateTime
+  rooms        Int
+  guests       Int
+
+  // Full offer snapshot as returned by the provider at booking time — same
+  // reasoning as FlightBooking.itinerary.
+  offerSnapshot Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  invoice Invoice?
+
+  @@index([customerId])
+  @@index([bookedByStaffId])
+  @@map("hotel_bookings")
+}
+
+// ---------------------------------------------------------------------------
+// Vehicle rental — car, van, or bus, with or without a driver. Nigerian car
+// hire is overwhelmingly chauffeur-driven, so withDriver defaults true
+// rather than being an afterthought.
+// ---------------------------------------------------------------------------
+
+enum VehicleType {
+  CAR
+  VAN
+  BUS
+}
+
+enum VehicleRentalProviderName {
+  MOCK
+}
+
+enum VehicleRentalStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+}
+
+model VehicleRental {
+  id               String @id @default(cuid())
+  bookingReference String @unique
+
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+
+  bookedByStaffId String?
+  bookedByStaff   Staff?  @relation(fields: [bookedByStaffId], references: [id], onDelete: SetNull)
+
+  provider        VehicleRentalProviderName
+  providerOfferId String
+  providerOrderId String?
+  status          VehicleRentalStatus @default(PENDING)
+
+  currency    String
+  totalAmount Int
+
+  vehicleType     VehicleType
+  vehicleName     String // e.g. "Toyota Camry", "Toyota Hiace (14-seater)"
+  pickupCity      String
+  pickupLocation  String
+  dropoffLocation String
+  pickupAt        DateTime
+  dropoffAt       DateTime
+  withDriver      Boolean @default(true)
+
+  offerSnapshot Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  invoice Invoice?
+
+  @@index([customerId])
+  @@index([bookedByStaffId])
+  @@map("vehicle_rentals")
 }
