@@ -10,6 +10,9 @@ export interface CurrentUser {
   permissions: string[];
   dashboardPath: string;
   profile: Record<string, unknown> | null;
+  /** Real tenant context — null for customers, who aren't scoped to a company. */
+  companyName: string | null;
+  branchName: string | null;
 }
 
 export interface Company {

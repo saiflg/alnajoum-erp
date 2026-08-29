@@ -2,17 +2,11 @@
 
 import { AnimatePresence, motion } from 'framer-motion';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
-import {
-  ChevronLeftIcon,
-  CloseIcon,
-  LogoutIcon,
-  MenuIcon,
-  NavIcon,
-  NavIconName,
-} from '@/lib/nav-icons';
+import { ChevronLeftIcon, CloseIcon, LogoutIcon, NavIcon, NavIconName } from '@/lib/nav-icons';
+import { TopBar } from './TopBar';
 
 export interface NavLink {
   href: string;
@@ -37,7 +31,6 @@ export function AppShell({
   children: React.ReactNode;
 }) {
   const { user, logout } = useAuth();
-  const router = useRouter();
   const pathname = usePathname();
 
   const [collapsed, setCollapsed] = useState(false);
@@ -69,12 +62,8 @@ export function AppShell({
     setMobileOpen(false);
   }
 
-  async function handleLogout() {
-    await logout();
-    router.replace('/login');
-  }
-
   const sidebarWidth = collapsed ? 76 : 248;
+  const agencyName = user?.companyName ?? 'Alnajoum Travel Agency';
 
   const navList = (
     <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 py-2">
@@ -129,7 +118,6 @@ export function AppShell({
             }`}
           >
             <p className="truncate text-sm font-semibold leading-tight">Alnajoum ERP</p>
-            <p className="truncate text-xs text-slate-400">{title}</p>
           </span>
         </div>
         {isMobile && (
@@ -146,46 +134,25 @@ export function AppShell({
       {navList}
 
       <div className="border-t border-white/10 p-3">
-        {user && (
-          <div
-            className={`mb-2 flex items-center gap-2 rounded-lg px-2 py-2 ${
-              collapsed && !isMobile ? 'lg:justify-center' : ''
-            }`}
+        {isMobile ? (
+          // The top bar's profile menu isn't reachable while the drawer
+          // covers most of a mobile viewport, so the drawer keeps its own
+          // direct log-out action rather than requiring a round trip.
+          <button
+            onClick={async () => {
+              await logout();
+              window.location.href = '/login';
+            }}
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
           >
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-700 text-xs font-semibold uppercase">
-              {user.email.slice(0, 2)}
-            </span>
-            <span
-              className={`min-w-0 transition-opacity duration-150 ${
-                collapsed && !isMobile ? 'lg:hidden lg:opacity-0' : 'opacity-100'
-              }`}
-            >
-              <p className="truncate text-xs font-medium text-slate-100">{user.email}</p>
-              <p className="truncate text-[11px] text-slate-400">{user.roles.join(', ')}</p>
-            </span>
-          </div>
-        )}
-        <button
-          onClick={handleLogout}
-          title={collapsed && !isMobile ? 'Log out' : undefined}
-          className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-white/10 hover:text-white ${
-            collapsed && !isMobile ? 'lg:justify-center' : ''
-          }`}
-        >
-          <LogoutIcon className="h-5 w-5 shrink-0" />
-          <span
-            className={`transition-opacity duration-150 ${
-              collapsed && !isMobile ? 'lg:hidden lg:opacity-0' : 'opacity-100'
-            }`}
-          >
+            <LogoutIcon className="h-5 w-5 shrink-0" />
             Log out
-          </span>
-        </button>
-        {!isMobile && (
+          </button>
+        ) : (
           <button
             onClick={() => setCollapsed((v) => !v)}
             aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            className="mt-1 hidden w-full items-center justify-center rounded-lg py-2 text-slate-400 transition-colors hover:bg-white/10 hover:text-white lg:flex"
+            className="flex w-full items-center justify-center rounded-lg py-2 text-slate-400 transition-colors hover:bg-white/10 hover:text-white"
           >
             <ChevronLeftIcon
               className={`h-4 w-4 transition-transform duration-200 ${collapsed ? 'rotate-180' : ''}`}
@@ -207,19 +174,11 @@ export function AppShell({
         {sidebarInner(false)}
       </motion.aside>
 
-      {/* Mobile top bar */}
-      <div className="sticky top-0 z-30 flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 lg:hidden">
-        <div>
-          <p className="text-base font-semibold text-slate-900">Alnajoum Travel ERP</p>
-          <p className="text-xs text-slate-500">{title}</p>
-        </div>
-        <button
-          onClick={() => setMobileOpen(true)}
-          aria-label="Open menu"
-          className="rounded-md border border-slate-200 p-2 text-slate-700"
-        >
-          <MenuIcon className="h-5 w-5" />
-        </button>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <TopBar title={title} agencyName={agencyName} onOpenMobileMenu={() => setMobileOpen(true)} />
+        <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+          <div className="mx-auto max-w-6xl">{children}</div>
+        </main>
       </div>
 
       {/* Mobile drawer */}
@@ -245,10 +204,6 @@ export function AppShell({
           </>
         )}
       </AnimatePresence>
-
-      <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-        <div className="mx-auto max-w-6xl">{children}</div>
-      </main>
     </div>
   );
 }
