@@ -1,4 +1,17 @@
 {
   "extends": "./tsconfig.json",
-  "exclude": ["node_modules", "test", "dist", "**/*spec.ts"]
+  "compilerOptions": {
+    // Without this, tsc computes the output root as the common ancestor of
+    // every compiled file — since prisma/*.ts is excluded below but src/
+    // is the only thing left, this keeps output flat at dist/main.js
+    // (what the Dockerfile CMD and package.json's start:prod both assume)
+    // instead of nested under dist/src/main.js.
+    "rootDir": "./src"
+  },
+  // prisma/*.ts (seed.ts, seed-demo.ts) are standalone scripts always run
+  // via ts-node directly against the .ts source (see package.json's
+  // "prisma".seed and db:seed:demo) — they were never meant to be part of
+  // the compiled Nest app bundle, and including them here is what caused
+  // the rootDir mismatch above.
+  "exclude": ["node_modules", "test", "dist", "**/*spec.ts", "prisma"]
 }
