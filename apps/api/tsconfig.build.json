@@ -6,7 +6,15 @@
     // is the only thing left, this keeps output flat at dist/main.js
     // (what the Dockerfile CMD and package.json's start:prod both assume)
     // instead of nested under dist/src/main.js.
-    "rootDir": "./src"
+    "rootDir": "./src",
+    // Explicit, inside dist/, so `rm -rf dist` always invalidates the
+    // incremental cache along with the output it describes. Without this,
+    // tsc's default buildinfo location can end up outside dist (observed:
+    // apps/api/tsconfig.build.tsbuildinfo at the project root, likely left
+    // behind by an unrelated `tsc --noEmit` run sharing the incremental
+    // setting) — `rm -rf dist` then only deletes the emitted JS, and the
+    // next build sees an up-to-date cache and silently emits nothing.
+    "tsBuildInfoFile": "./dist/tsconfig.build.tsbuildinfo"
   },
   // prisma/*.ts (seed.ts, seed-demo.ts) are standalone scripts always run
   // via ts-node directly against the .ts source (see package.json's
