@@ -485,3 +485,28 @@ export interface StaffIncentive {
   description: string;
   createdAt: string;
 }
+
+// ---------------------------------------------------------------------------
+// Integrations — provider credentials configurable at /admin/integrations
+// ---------------------------------------------------------------------------
+
+export type IntegrationCategory = 'FLIGHT' | 'PAYMENT' | 'NOTIFICATION';
+
+export interface IntegrationFieldSpec {
+  key: string;
+  label: string;
+  secret: boolean;
+  placeholder?: string;
+}
+
+export interface IntegrationProvider {
+  provider: string;
+  label: string;
+  implemented: boolean;
+  docsUrl?: string;
+  fields: IntegrationFieldSpec[];
+  isActive: boolean;
+  /** Which field keys have a value saved — never the values themselves. */
+  configuredFields: string[];
+  updatedAt: string | null;
+}

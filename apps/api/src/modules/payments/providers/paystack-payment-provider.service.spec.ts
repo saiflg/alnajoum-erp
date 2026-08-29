@@ -2,6 +2,7 @@ import { ConfigService } from '@nestjs/config';
 import { ServiceUnavailableException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { createHmac } from 'crypto';
+import { IntegrationsService } from '../../integrations/integrations.service';
 import { PaystackPaymentProviderService } from './paystack-payment-provider.service';
 
 /**
@@ -31,6 +32,12 @@ describe('PaystackPaymentProviderService', () => {
               key === 'PAYSTACK_SECRET_KEY' ? 'sk_test_dummy' : undefined,
             ),
           },
+        },
+        {
+          provide: IntegrationsService,
+          // No DB-saved credential in these tests — falls back to the env
+          // var above, same as the pre-existing behavior this suite covers.
+          useValue: { getCredentialConfig: jest.fn().mockResolvedValue(null) },
         },
       ],
     }).compile();
@@ -161,28 +168,34 @@ describe('PaystackPaymentProviderService', () => {
   });
 
   describe('verifyWebhookSignature', () => {
-    it('accepts a correctly-signed body', () => {
+    it('accepts a correctly-signed body', async () => {
       const rawBody = Buffer.from(JSON.stringify({ event: 'charge.success' }));
       const signature = createHmac('sha512', 'sk_test_dummy')
         .update(rawBody)
         .digest('hex');
 
-      expect(service.verifyWebhookSignature(rawBody, signature)).toBe(true);
+      await expect(service.verifyWebhookSignature(rawBody, signature)).resolves.toBe(
+        true,
+      );
     });
 
-    it('rejects a body signed with the wrong key', () => {
+    it('rejects a body signed with the wrong key', async () => {
       const rawBody = Buffer.from(JSON.stringify({ event: 'charge.success' }));
       const signature = createHmac('sha512', 'some-other-key')
         .update(rawBody)
         .digest('hex');
 
-      expect(service.verifyWebhookSignature(rawBody, signature)).toBe(false);
+      await expect(service.verifyWebhookSignature(rawBody, signature)).resolves.toBe(
+        false,
+      );
     });
 
-    it('rejects a missing signature header', () => {
+    it('rejects a missing signature header', async () => {
       const rawBody = Buffer.from(JSON.stringify({ event: 'charge.success' }));
 
-      expect(service.verifyWebhookSignature(rawBody, undefined)).toBe(false);
+      await expect(
+        service.verifyWebhookSignature(rawBody, undefined),
+      ).resolves.toBe(false);
     });
   });
 });

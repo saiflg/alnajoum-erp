@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ConfigModule } from '@nestjs/config';
 import { CustomersModule } from '../customers/customers.module';
+import { IntegrationsModule } from '../integrations/integrations.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { UsersModule } from '../users/users.module';
@@ -8,9 +9,12 @@ import { FlightBookingsAdminController } from './flight-bookings-admin.controlle
 import { FlightBookingsOwnController } from './flight-bookings-own.controller';
 import { FlightsController } from './flights.controller';
 import { FlightsService } from './flights.service';
+import { AmadeusFlightProviderService } from './providers/amadeus-flight-provider.service';
 import { DuffelFlightProviderService } from './providers/duffel-flight-provider.service';
 import { FLIGHT_PROVIDER } from './providers/flight-provider.port';
+import { FlightProviderRouter } from './providers/flight-provider.router';
 import { MockFlightProviderService } from './providers/mock-flight-provider.service';
+import { SabreFlightProviderService } from './providers/sabre-flight-provider.service';
 
 @Module({
   imports: [
@@ -19,6 +23,7 @@ import { MockFlightProviderService } from './providers/mock-flight-provider.serv
     UsersModule,
     PaymentsModule,
     NotificationsModule,
+    IntegrationsModule,
   ],
   // Order matters: the static "flights/bookings/me" routes must be
   // registered before the dynamic "flights/bookings/:id" ones, otherwise
@@ -32,22 +37,10 @@ import { MockFlightProviderService } from './providers/mock-flight-provider.serv
     FlightsService,
     MockFlightProviderService,
     DuffelFlightProviderService,
-    {
-      provide: FLIGHT_PROVIDER,
-      inject: [
-        ConfigService,
-        MockFlightProviderService,
-        DuffelFlightProviderService,
-      ],
-      useFactory: (
-        configService: ConfigService,
-        mockProvider: MockFlightProviderService,
-        duffelProvider: DuffelFlightProviderService,
-      ) =>
-        configService.get<string>('FLIGHT_PROVIDER', 'mock') === 'duffel'
-          ? duffelProvider
-          : mockProvider,
-    },
+    SabreFlightProviderService,
+    AmadeusFlightProviderService,
+    FlightProviderRouter,
+    { provide: FLIGHT_PROVIDER, useExisting: FlightProviderRouter },
   ],
 })
 export class FlightsModule {}

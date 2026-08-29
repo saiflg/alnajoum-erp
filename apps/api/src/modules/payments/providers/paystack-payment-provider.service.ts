@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHmac } from 'crypto';
+import { IntegrationsService } from '../../integrations/integrations.service';
 import {
   InitiateCheckoutInput,
   InitiateCheckoutResult,
@@ -54,13 +55,21 @@ export class PaystackPaymentProviderService implements PaymentProviderPort {
   private readonly logger = new Logger(PaystackPaymentProviderService.name);
   private readonly baseUrl = 'https://api.paystack.co';
 
-  constructor(private readonly configService: ConfigService) {}
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly integrationsService: IntegrationsService,
+  ) {}
 
-  private getSecretKey(): string {
-    const key = this.configService.get<string>('PAYSTACK_SECRET_KEY');
+  private async getSecretKey(): Promise<string> {
+    const dbConfig = await this.integrationsService.getCredentialConfig(
+      'PAYMENT',
+      'paystack',
+    );
+    const key =
+      dbConfig?.secretKey || this.configService.get<string>('PAYSTACK_SECRET_KEY');
     if (!key) {
       throw new ServiceUnavailableException(
-        'PAYMENT_PROVIDER=paystack but PAYSTACK_SECRET_KEY is not set.',
+        'PAYMENT_PROVIDER=paystack but no secret key is configured. Add one at /admin/integrations, or set PAYSTACK_SECRET_KEY.',
       );
     }
     return key;
@@ -72,7 +81,7 @@ export class PaystackPaymentProviderService implements PaymentProviderPort {
     const res = await fetch(`${this.baseUrl}/transaction/initialize`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${this.getSecretKey()}`,
+        Authorization: `Bearer ${await this.getSecretKey()}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -104,7 +113,7 @@ export class PaystackPaymentProviderService implements PaymentProviderPort {
   async verifyCheckout(reference: string): Promise<VerifyCheckoutResult> {
     const res = await fetch(
       `${this.baseUrl}/transaction/verify/${encodeURIComponent(reference)}`,
-      { headers: { Authorization: `Bearer ${this.getSecretKey()}` } },
+      { headers: { Authorization: `Bearer ${await this.getSecretKey()}` } },
     );
     const body = (await res.json()) as PaystackVerifyResponse;
 
@@ -133,14 +142,14 @@ export class PaystackPaymentProviderService implements PaymentProviderPort {
    * order and silently break the comparison) — see bootstrap wiring for
    * the raw-body capture this depends on.
    */
-  verifyWebhookSignature(
+  async verifyWebhookSignature(
     rawBody: Buffer,
     signature: string | undefined,
-  ): boolean {
+  ): Promise<boolean> {
     if (!signature) {
       return false;
     }
-    const expected = createHmac('sha512', this.getSecretKey())
+    const expected = createHmac('sha512', await this.getSecretKey())
       .update(rawBody)
       .digest('hex');
     return expected === signature;

@@ -20,7 +20,8 @@ export type NavIconName =
   | 'bell'
   | 'shield'
   | 'account'
-  | 'family';
+  | 'family'
+  | 'plug';
 
 const ICON_PATHS: Record<NavIconName, React.ReactNode> = {
   dashboard: (
@@ -132,6 +133,14 @@ const ICON_PATHS: Record<NavIconName, React.ReactNode> = {
       <path d="M12 12c-3 0-5.5 2.2-5.5 6.5h11C17.5 14.2 15 12 12 12Z" strokeLinejoin="round" />
       <path d="M5.5 12c-2 0-3.5 1.8-3.5 5" strokeLinecap="round" />
       <path d="M18.5 12c2 0 3.5 1.8 3.5 5" strokeLinecap="round" />
+    </>
+  ),
+  plug: (
+    <>
+      <path d="M9 2.5v5M15 2.5v5" strokeLinecap="round" />
+      <rect x="6.5" y="7.5" width="11" height="7" rx="2" strokeLinejoin="round" />
+      <path d="M12 14.5V18" strokeLinecap="round" />
+      <path d="M8.5 18h7a1.5 1.5 0 0 1 1.5 1.5V21.5h-10V19.5A1.5 1.5 0 0 1 8.5 18Z" strokeLinejoin="round" />
     </>
   ),
 };

@@ -14,6 +14,7 @@ export const ADMIN_NAV: NavLink[] = [
   { href: '/admin/wallets', label: 'Wallets', icon: 'wallet' },
   { href: '/admin/notifications', label: 'Notifications', icon: 'bell' },
   { href: '/admin/roles', label: 'Roles', icon: 'shield' },
+  { href: '/admin/integrations', label: 'Integrations', icon: 'plug' },
   { href: '/admin/account', label: 'My Account', icon: 'account' },
 ];
 

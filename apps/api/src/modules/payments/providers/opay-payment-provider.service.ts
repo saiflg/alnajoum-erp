@@ -4,6 +4,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { IntegrationsService } from '../../integrations/integrations.service';
 import {
   InitiateCheckoutInput,
   InitiateCheckoutResult,
@@ -73,32 +74,41 @@ export class OpayPaymentProviderService implements PaymentProviderPort {
   private readonly logger = new Logger(OpayPaymentProviderService.name);
   private readonly baseUrl = 'https://liveapi.opaycheckout.com';
 
-  constructor(private readonly configService: ConfigService) {}
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly integrationsService: IntegrationsService,
+  ) {}
 
-  private getSecretKey(): string {
-    const key = this.configService.get<string>('OPAY_SECRET_KEY');
+  private async getDbConfig(): Promise<Record<string, string> | null> {
+    return this.integrationsService.getCredentialConfig('PAYMENT', 'opay');
+  }
+
+  private async getSecretKey(): Promise<string> {
+    const dbConfig = await this.getDbConfig();
+    const key = dbConfig?.secretKey || this.configService.get<string>('OPAY_SECRET_KEY');
     if (!key) {
       throw new ServiceUnavailableException(
-        'PAYMENT_PROVIDER=opay but OPAY_SECRET_KEY is not set.',
+        'PAYMENT_PROVIDER=opay but no secret key is configured. Add one at /admin/integrations, or set OPAY_SECRET_KEY.',
       );
     }
     return key;
   }
 
-  private getMerchantId(): string {
-    const id = this.configService.get<string>('OPAY_MERCHANT_ID');
+  private async getMerchantId(): Promise<string> {
+    const dbConfig = await this.getDbConfig();
+    const id = dbConfig?.merchantId || this.configService.get<string>('OPAY_MERCHANT_ID');
     if (!id) {
       throw new ServiceUnavailableException(
-        'PAYMENT_PROVIDER=opay but OPAY_MERCHANT_ID is not set.',
+        'PAYMENT_PROVIDER=opay but no merchant ID is configured. Add one at /admin/integrations, or set OPAY_MERCHANT_ID.',
       );
     }
     return id;
   }
 
-  private headers(): Record<string, string> {
+  private async headers(): Promise<Record<string, string>> {
     return {
-      Authorization: `Bearer ${this.getSecretKey()}`,
-      MerchantId: this.getMerchantId(),
+      Authorization: `Bearer ${await this.getSecretKey()}`,
+      MerchantId: await this.getMerchantId(),
       'Content-Type': 'application/json',
     };
   }
@@ -110,7 +120,7 @@ export class OpayPaymentProviderService implements PaymentProviderPort {
       `${this.baseUrl}/api/v1/international/cashier/create`,
       {
         method: 'POST',
-        headers: this.headers(),
+        headers: await this.headers(),
         body: JSON.stringify({
           country: 'NG',
           reference: input.reference,
@@ -150,7 +160,7 @@ export class OpayPaymentProviderService implements PaymentProviderPort {
       `${this.baseUrl}/api/v1/international/cashier/status`,
       {
         method: 'POST',
-        headers: this.headers(),
+        headers: await this.headers(),
         body: JSON.stringify({ reference }),
       },
     );

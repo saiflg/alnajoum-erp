@@ -1,6 +1,7 @@
 import { ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
+import { IntegrationsService } from '../../integrations/integrations.service';
 import { OpayPaymentProviderService } from './opay-payment-provider.service';
 
 /**
@@ -32,6 +33,10 @@ describe('OpayPaymentProviderService', () => {
               return undefined;
             }),
           },
+        },
+        {
+          provide: IntegrationsService,
+          useValue: { getCredentialConfig: jest.fn().mockResolvedValue(null) },
         },
       ],
     }).compile();
@@ -114,6 +119,10 @@ describe('OpayPaymentProviderService', () => {
                 key === 'OPAY_SECRET_KEY' ? 'opay_test_secret' : undefined,
               ),
             },
+          },
+          {
+            provide: IntegrationsService,
+            useValue: { getCredentialConfig: jest.fn().mockResolvedValue(null) },
           },
         ],
       }).compile();

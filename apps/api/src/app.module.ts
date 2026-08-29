@@ -26,6 +26,7 @@ import { HajjModule } from './modules/hajj/hajj.module';
 import { UmrahModule } from './modules/umrah/umrah.module';
 import { ManualPaymentsModule } from './modules/manual-payments/manual-payments.module';
 import { RemindersModule } from './modules/reminders/reminders.module';
+import { IntegrationsModule } from './modules/integrations/integrations.module';
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { RemindersModule } from './modules/reminders/reminders.module';
     ScheduleModule.forRoot(),
     PrismaModule,
     AuditModule,
+    IntegrationsModule,
     RbacModule,
     AuthModule,
     CompanyModule,

@@ -94,6 +94,10 @@ export const PERMISSIONS = {
   REMINDER: {
     RUN: 'reminder:run',
   },
+  INTEGRATIONS: {
+    READ: 'integrations:read',
+    MANAGE: 'integrations:manage',
+  },
 } as const;
 
 export const ALL_PERMISSION_KEYS: string[] = Object.values(PERMISSIONS).flatMap(

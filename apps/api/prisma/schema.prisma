@@ -391,6 +391,8 @@ model AuditLog {
 enum FlightProviderName {
   MOCK
   DUFFEL
+  SABRE
+  AMADEUS
 }
 
 enum FlightBookingStatus {
@@ -1077,4 +1079,36 @@ model StaffIncentive {
   @@index([staffId])
   @@index([sourceType, sourceId])
   @@map("staff_incentives")
+}
+
+// ---------------------------------------------------------------------------
+// Integration credentials — lets an admin paste real API keys (Duffel,
+// Sabre, Amadeus, Paystack, OPay, SMTP) through /admin/integrations instead
+// of SSHing into the server to edit .env.prod. One row per (category,
+// provider); `config` holds provider-specific secret fields as JSON (never
+// echoed back to the client — see IntegrationsService). Which provider is
+// active per category is a runtime setting (isActive), not a deploy-time
+// env var — FlightProviderRouter/PaymentProviderRouter/
+// NotificationProviderRouter re-check this on every call, so flipping the
+// switch here takes effect immediately, no restart needed. The FLIGHT_
+// PROVIDER/PAYMENT_PROVIDER/NOTIFICATION_PROVIDER env vars remain the
+// fallback default when no row is marked active for a category.
+enum IntegrationCategory {
+  FLIGHT
+  PAYMENT
+  NOTIFICATION
+}
+
+model IntegrationCredential {
+  id       String              @id @default(cuid())
+  category IntegrationCategory
+  provider String // "mock" | "duffel" | "sabre" | "amadeus" | "paystack" | "opay" | "smtp"
+  isActive Boolean             @default(false)
+  config   Json                @default("{}")
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([category, provider])
+  @@index([category])
+  @@map("integration_credentials")
 }
