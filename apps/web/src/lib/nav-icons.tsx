@@ -12,6 +12,8 @@ export type NavIconName =
   | 'staff'
   | 'customer'
   | 'flight'
+  | 'hotel'
+  | 'car'
   | 'hajj'
   | 'umrah'
   | 'invoice'
@@ -68,6 +70,27 @@ const ICON_PATHS: Record<NavIconName, React.ReactNode> = {
       stroke="none"
       d="M22 16.5v-2l-8.5-5V4a1.5 1.5 0 0 0-3 0v5.5L2 14.5v2l8.5-2.6V19l-2.5 1.8V22l3.5-1 3.5 1v-1.2L12.5 19v-5.1z"
     />
+  ),
+  hotel: (
+    <>
+      <path d="M3 21V9.5a1 1 0 0 1 .55-.9l7-3.5a1 1 0 0 1 .9 0l7 3.5a1 1 0 0 1 .55.9V21" strokeLinejoin="round" />
+      <path d="M3 21h18" strokeLinecap="round" />
+      <rect x="7" y="12" width="3.5" height="3.5" rx="0.5" />
+      <rect x="13.5" y="12" width="3.5" height="3.5" rx="0.5" />
+      <path d="M9.5 21v-3h5v3" strokeLinejoin="round" />
+    </>
+  ),
+  car: (
+    <>
+      <path
+        d="M4.5 16v-3.2c0-.5.2-.9.5-1.2l1.6-1.6c.3-.3.7-.5 1.1-.5h8.6c.4 0 .8.2 1.1.5l1.6 1.6c.3.3.5.7.5 1.2V16"
+        strokeLinejoin="round"
+      />
+      <path d="M4 16h16v2.5a.7.7 0 0 1-.7.7h-1a.7.7 0 0 1-.7-.7V17H6.4v1.5a.7.7 0 0 1-.7.7h-1a.7.7 0 0 1-.7-.7V16Z" strokeLinejoin="round" />
+      <circle cx="7.5" cy="16" r="1.4" fill="currentColor" stroke="none" />
+      <circle cx="16.5" cy="16" r="1.4" fill="currentColor" stroke="none" />
+      <path d="M6 12.5h12" />
+    </>
   ),
   hajj: (
     <>

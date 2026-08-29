@@ -510,3 +510,91 @@ export interface IntegrationProvider {
   configuredFields: string[];
   updatedAt: string | null;
 }
+
+// ---------------------------------------------------------------------------
+// Hotels
+// ---------------------------------------------------------------------------
+
+export type HotelBookingStatus = 'PENDING' | 'CONFIRMED' | 'CANCELLED';
+
+export interface HotelOffer {
+  id: string;
+  provider: 'MOCK';
+  hotelName: string;
+  city: string;
+  country: string;
+  starRating: number;
+  roomType: string;
+  checkInDate: string;
+  checkOutDate: string;
+  rooms: number;
+  guests: number;
+  currency: string;
+  totalAmount: number;
+  amenities: string[];
+  expiresAt: string;
+}
+
+export interface HotelBooking {
+  id: string;
+  bookingReference: string;
+  customerId: string;
+  bookedByStaffId: string | null;
+  status: HotelBookingStatus;
+  currency: string;
+  totalAmount: number;
+  hotelName: string;
+  city: string;
+  country: string;
+  starRating: number;
+  roomType: string;
+  checkInDate: string;
+  checkOutDate: string;
+  rooms: number;
+  guests: number;
+  createdAt: string;
+  customer?: { firstName: string; lastName: string };
+}
+
+// ---------------------------------------------------------------------------
+// Vehicle rentals — car, van, bus
+// ---------------------------------------------------------------------------
+
+export type VehicleType = 'CAR' | 'VAN' | 'BUS';
+export type VehicleRentalStatus = 'PENDING' | 'CONFIRMED' | 'CANCELLED';
+
+export interface VehicleRentalOffer {
+  id: string;
+  provider: 'MOCK';
+  vehicleType: VehicleType;
+  vehicleName: string;
+  pickupCity: string;
+  pickupAt: string;
+  dropoffAt: string;
+  withDriver: boolean;
+  seats: number;
+  currency: string;
+  totalAmount: number;
+  features: string[];
+  expiresAt: string;
+}
+
+export interface VehicleRental {
+  id: string;
+  bookingReference: string;
+  customerId: string;
+  bookedByStaffId: string | null;
+  status: VehicleRentalStatus;
+  currency: string;
+  totalAmount: number;
+  vehicleType: VehicleType;
+  vehicleName: string;
+  pickupCity: string;
+  pickupLocation: string;
+  dropoffLocation: string;
+  pickupAt: string;
+  dropoffAt: string;
+  withDriver: boolean;
+  createdAt: string;
+  customer?: { firstName: string; lastName: string };
+}

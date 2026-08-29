@@ -18,7 +18,7 @@ const VALUES = [
   },
   {
     title: 'Growing deliberately',
-    body: 'We ship one module at a time, fully tested, rather than promising everything at once. Flights, family travel, and Hajj & Umrah packages are live; more is on the way.',
+    body: 'We ship one module at a time, fully tested, rather than promising everything at once. Flights, hotels, car/van/bus rental, family travel, and Hajj & Umrah packages are live; more is on the way.',
   },
 ];
 

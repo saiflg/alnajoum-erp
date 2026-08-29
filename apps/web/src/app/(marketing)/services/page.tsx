@@ -32,13 +32,25 @@ const SERVICES = [
   {
     id: 'hotels',
     title: 'Hotel Booking',
-    status: 'Coming Soon',
+    status: 'Live',
     summary:
       'Domestic and international hotel stays, using the same booking-and-invoicing pattern already proven for flights.',
     points: [
       'Search by city, dates, and guest count',
       'Same automatic invoicing flow as flights',
-      'Bundled flight + hotel packages, once both modules are live',
+      'Every confirmed stay generates a matching invoice instantly',
+    ],
+  },
+  {
+    id: 'vehicles',
+    title: 'Car, Van & Bus Rental',
+    status: 'Live',
+    summary:
+      'Self-drive or chauffeur-driven vehicles for any trip — day hire, airport transfers, or group travel by van or bus.',
+    points: [
+      'Cars, vans, and buses, with or without a driver',
+      'Search by pickup city and date/time range',
+      'Same real booking and invoicing engine as flights and hotels',
     ],
   },
   {
@@ -88,8 +100,9 @@ export default function ServicesPage() {
           Our services
         </h1>
         <p className="mx-auto mt-6 max-w-2xl text-lg text-slate-600">
-          Flights, family travel, and Hajj &amp; Umrah packages are live and bookable today.
-          Everything else is on our roadmap, built on the same real infrastructure.
+          Flights, hotels, car/van/bus rental, family travel, and Hajj &amp; Umrah packages
+          are live and bookable today. Everything else is on our roadmap, built on the
+          same real infrastructure.
         </p>
       </Reveal>
 

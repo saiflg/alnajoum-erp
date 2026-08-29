@@ -23,7 +23,7 @@ const TRUST_ITEMS = [
 ];
 
 const STATS = [
-  { target: 5, suffix: '', label: 'Core modules live today' },
+  { target: 7, suffix: '', label: 'Core modules live today' },
   { target: 6, suffix: '', label: 'Nigerian & partner airlines' },
   { target: 100, suffix: '%', label: 'Bookings backed by a real API' },
   { target: 24, suffix: '/7', label: 'Portal access, anywhere' },
@@ -53,11 +53,21 @@ const SERVICES = [
   {
     id: 'hotels',
     title: 'Hotel Booking',
-    status: 'Coming Soon',
+    status: 'Live',
     description:
-      'Domestic and international hotel stays, booked and invoiced the same way flights are today — on the roadmap now that the provider-abstraction pattern is proven.',
+      'Domestic and international hotel stays, booked and invoiced the same way flights are — search by city, dates, and guest count, confirmed instantly.',
     icon: (
       <path d="M7 13c1.66 0 3-1.34 3-3S8.66 7 7 7s-3 1.34-3 3 1.34 3 3 3zm12-6h-8v7H3V5H1v15h2v-3h18v3h2v-9c0-2.21-1.79-4-4-4z" />
+    ),
+  },
+  {
+    id: 'vehicles',
+    title: 'Car, Van & Bus Rental',
+    status: 'Live',
+    description:
+      'Self-drive or chauffeur-driven cars, vans, and buses for any trip — the same real booking and invoicing engine as flights and hotels.',
+    icon: (
+      <path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1v-1h12v1a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1v-8l-2.08-5.99ZM6.5 16A1.5 1.5 0 1 1 8 14.5 1.5 1.5 0 0 1 6.5 16Zm11 0a1.5 1.5 0 1 1 1.5-1.5 1.5 1.5 0 0 1-1.5 1.5ZM5 11l1.5-4.5h11L19 11H5Z" />
     ),
   },
   {
@@ -329,8 +339,9 @@ export default function MarketingHomePage() {
               Everything a modern travel agency needs
             </h2>
             <p className="mt-4 text-slate-600">
-              Flights, family travel, and Hajj &amp; Umrah packages are live today, running on
-              the same real booking and invoicing engine that powers every module we add next.
+              Flights, hotels, car/van/bus rental, family travel, and Hajj &amp; Umrah packages
+              are live today, running on the same real booking and invoicing engine that
+              powers every module we add next.
             </p>
           </Reveal>
 
