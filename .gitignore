@@ -19,3 +19,4 @@ uploads/
 uploads-test/
 .vscode/*
 !.vscode/extensions.json
+.oracle-key.pem
