@@ -29,11 +29,20 @@ export class SmtpNotificationProviderService
   constructor(private readonly configService: ConfigService) {}
 
   onModuleInit(): void {
+    // NestJS instantiates every registered provider regardless of which one
+    // NOTIFICATION_PROVIDER actually selects for use — without this check,
+    // this warning fires even when "mock" is the active provider and SMTP
+    // was never meant to be configured.
+    const isActiveProvider =
+      this.configService.get<string>('NOTIFICATION_PROVIDER') === 'smtp';
+
     const host = this.configService.get<string>('SMTP_HOST');
     if (!host) {
-      this.logger.warn(
-        'NOTIFICATION_PROVIDER=smtp but SMTP_HOST is not set; emails will fail to send until SMTP is configured.',
-      );
+      if (isActiveProvider) {
+        this.logger.warn(
+          'NOTIFICATION_PROVIDER=smtp but SMTP_HOST is not set; emails will fail to send until SMTP is configured.',
+        );
+      }
       return;
     }
 
