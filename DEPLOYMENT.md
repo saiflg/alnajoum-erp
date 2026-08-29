@@ -57,7 +57,10 @@ You'll need:
 2. **Name**: `alnajoum-app` (or anything you like).
 3. **Image and shape**:
    - Click **Edit** next to "Image and shape".
-   - Image: **Canonical Ubuntu** → **22.04**.
+   - Image: **Canonical Ubuntu** → **24.04** (the current LTS; pick the newest
+     `24.04.x` build offered — avoid a non-LTS release like 26.04 if it's also
+     listed, since third-party apt repos such as Docker's sometimes lag behind
+     a release that fresh).
    - Shape: click **Change shape**, select **Ampere** → **VM.Standard.A1.Flex**.
    - Set **4 OCPUs** and **24 GB memory** (the full Always Free allocation —
      using less doesn't save you anything, since it's free either way, up
