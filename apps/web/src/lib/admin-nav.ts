@@ -1,26 +1,28 @@
-export const ADMIN_NAV = [
-  { href: '/admin/dashboard', label: 'Dashboard' },
-  { href: '/admin/companies', label: 'Companies' },
-  { href: '/admin/branches', label: 'Branches' },
-  { href: '/admin/staff', label: 'Staff' },
-  { href: '/admin/customers', label: 'Customers' },
-  { href: '/admin/flights', label: 'Flight Bookings' },
-  { href: '/admin/hajj-packages', label: 'Hajj Packages' },
-  { href: '/admin/umrah-packages', label: 'Umrah Packages' },
-  { href: '/admin/invoices', label: 'Invoices' },
-  { href: '/admin/manual-payments', label: 'Manual Payments' },
-  { href: '/admin/wallets', label: 'Wallets' },
-  { href: '/admin/notifications', label: 'Notifications' },
-  { href: '/admin/roles', label: 'Roles' },
-  { href: '/admin/account', label: 'My Account' },
+import type { NavLink } from '@/components/AppShell';
+
+export const ADMIN_NAV: NavLink[] = [
+  { href: '/admin/dashboard', label: 'Dashboard', icon: 'dashboard' },
+  { href: '/admin/companies', label: 'Companies', icon: 'company' },
+  { href: '/admin/branches', label: 'Branches', icon: 'branch' },
+  { href: '/admin/staff', label: 'Staff', icon: 'staff' },
+  { href: '/admin/customers', label: 'Customers', icon: 'customer' },
+  { href: '/admin/flights', label: 'Flight Bookings', icon: 'flight' },
+  { href: '/admin/hajj-packages', label: 'Hajj Packages', icon: 'hajj' },
+  { href: '/admin/umrah-packages', label: 'Umrah Packages', icon: 'umrah' },
+  { href: '/admin/invoices', label: 'Invoices', icon: 'invoice' },
+  { href: '/admin/manual-payments', label: 'Manual Payments', icon: 'payment' },
+  { href: '/admin/wallets', label: 'Wallets', icon: 'wallet' },
+  { href: '/admin/notifications', label: 'Notifications', icon: 'bell' },
+  { href: '/admin/roles', label: 'Roles', icon: 'shield' },
+  { href: '/admin/account', label: 'My Account', icon: 'account' },
 ];
 
 /** Finance Officer lands on a narrower nav focused on invoicing/payments. */
-export const FINANCE_NAV = [
-  { href: '/finance/dashboard', label: 'Dashboard' },
-  { href: '/admin/invoices', label: 'Invoices' },
-  { href: '/admin/manual-payments', label: 'Manual Payments' },
-  { href: '/admin/wallets', label: 'Wallets' },
-  { href: '/admin/notifications', label: 'Notifications' },
-  { href: '/admin/account', label: 'My Account' },
+export const FINANCE_NAV: NavLink[] = [
+  { href: '/finance/dashboard', label: 'Dashboard', icon: 'dashboard' },
+  { href: '/admin/invoices', label: 'Invoices', icon: 'invoice' },
+  { href: '/admin/manual-payments', label: 'Manual Payments', icon: 'payment' },
+  { href: '/admin/wallets', label: 'Wallets', icon: 'wallet' },
+  { href: '/admin/notifications', label: 'Notifications', icon: 'bell' },
+  { href: '/admin/account', label: 'My Account', icon: 'account' },
 ];
