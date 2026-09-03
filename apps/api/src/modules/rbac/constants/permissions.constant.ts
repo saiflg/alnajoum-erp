@@ -42,6 +42,15 @@ export const PERMISSIONS = {
     READ: 'vehicle_rental:read',
     CANCEL: 'vehicle_rental:cancel',
   },
+  VISA_APPLICATION: {
+    CREATE: 'visa_application:create',
+    READ: 'visa_application:read',
+    MANAGE: 'visa_application:manage', // update status, cancel on a customer's behalf
+  },
+  CORPORATE_TRAVEL: {
+    MANAGE: 'corporate_travel:manage', // accounts, travelers, and bookings — staff-only feature
+    READ: 'corporate_travel:read',
+  },
   INVOICE: {
     READ: 'invoice:read',
   },

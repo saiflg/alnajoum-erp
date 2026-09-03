@@ -29,6 +29,8 @@ import { RemindersModule } from './modules/reminders/reminders.module';
 import { IntegrationsModule } from './modules/integrations/integrations.module';
 import { HotelsModule } from './modules/hotels/hotels.module';
 import { VehicleRentalsModule } from './modules/vehicle-rentals/vehicle-rentals.module';
+import { VisaModule } from './modules/visa/visa.module';
+import { CorporateTravelModule } from './modules/corporate-travel/corporate-travel.module';
 
 @Module({
   imports: [
@@ -58,6 +60,8 @@ import { VehicleRentalsModule } from './modules/vehicle-rentals/vehicle-rentals.
     RemindersModule,
     HotelsModule,
     VehicleRentalsModule,
+    VisaModule,
+    CorporateTravelModule,
   ],
   controllers: [AppController],
   providers: [

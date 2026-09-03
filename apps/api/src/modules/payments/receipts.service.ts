@@ -22,6 +22,7 @@ export class ReceiptsService {
             flightBooking: true,
             hajjRegistration: { include: { package: true } },
             umrahRegistration: { include: { package: true } },
+            corporateBooking: { include: { corporateAccount: true } },
           },
         },
         recordedByStaff: { include: { branch: true } },
@@ -77,7 +78,10 @@ export class ReceiptsService {
     row('Payment date:', payment.paidAt.toISOString().slice(0, 10));
     row(
       'Customer:',
-      `${invoice.customer.firstName} ${invoice.customer.lastName}`,
+      invoice.customer
+        ? `${invoice.customer.firstName} ${invoice.customer.lastName}`
+        : (invoice.corporateBooking?.corporateAccount.name ??
+            invoice.invoiceNumber),
     );
     row('Invoice number:', invoice.invoiceNumber);
     row('Service:', serviceLabel);

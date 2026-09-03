@@ -96,10 +96,15 @@ export class PaymentsService {
     const updatedInvoice =
       await this.invoicesService.recomputeStatus(invoiceId);
 
-    const customer = await this.prisma.customer.findUnique({
-      where: { id: invoice.customerId },
-      include: { identity: { select: { email: true } } },
-    });
+    // Corporate travel invoices have no customerId (billed to a
+    // CorporateAccount instead — see Invoice.customerId's comment in
+    // schema.prisma), so there's no customer to email a receipt to.
+    const customer = invoice.customerId
+      ? await this.prisma.customer.findUnique({
+          where: { id: invoice.customerId },
+          include: { identity: { select: { email: true } } },
+        })
+      : null;
     if (customer) {
       const newBalance = invoice.totalAmount - (totalPaid + dto.amount);
       await this.notificationsService.sendPaymentReceipt(

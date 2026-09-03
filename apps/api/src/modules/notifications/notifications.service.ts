@@ -423,6 +423,33 @@ export class NotificationsService {
     );
   }
 
+  /** Fired on every VisaApplication status transition — see VisaService.updateStatus. */
+  async sendVisaApplicationStatusUpdate(
+    email: string,
+    identityId: string,
+    details: {
+      applicationReference: string;
+      destinationCountry: string;
+      status: string;
+      staffNote?: string | null;
+    },
+  ): Promise<void> {
+    const subject = `Visa application ${details.applicationReference}: ${details.status.replace(/_/g, ' ').toLowerCase()}`;
+    const body = [
+      `Your visa application to ${details.destinationCountry} (${details.applicationReference}) is now: ${details.status.replace(/_/g, ' ').toLowerCase()}.`,
+      details.staffNote
+        ? `\nNote from our visa team: ${details.staffNote}`
+        : '',
+    ].join('\n');
+    await this.send(
+      NotificationType.VISA_APPLICATION_STATUS_CHANGED,
+      email,
+      subject,
+      body,
+      identityId,
+    );
+  }
+
   listAll(filters: { type?: NotificationType; status?: NotificationStatus }) {
     return this.prisma.notification.findMany({
       where: filters,

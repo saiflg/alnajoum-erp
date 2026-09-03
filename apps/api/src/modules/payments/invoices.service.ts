@@ -4,6 +4,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
+  CorporateBooking,
+  CorporateBookingTraveler,
   FlightBooking,
   HajjRegistration,
   HajjRegistrationPilgrim,
@@ -13,6 +15,7 @@ import {
   UmrahRegistration,
   UmrahRegistrationPilgrim,
   VehicleRental,
+  VisaApplication,
 } from '@prisma/client';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
@@ -172,6 +175,68 @@ export class InvoicesService {
     });
   }
 
+  /** Called from VisaService.submit inside the same transaction as the application insert. */
+  createForVisaApplication(
+    application: VisaApplication,
+    tx: PrismaTransactionClient,
+  ) {
+    return tx.invoice.create({
+      data: {
+        invoiceNumber: generateInvoiceNumber(),
+        customerId: application.customerId,
+        visaApplicationId: application.id,
+        status: InvoiceStatus.ISSUED,
+        currency: application.currency,
+        totalAmount: application.totalAmount,
+        issuedByStaffId: application.appliedByStaffId,
+        lineItems: {
+          create: [
+            {
+              description: `${application.visaType.replace(/_/g, ' ')} visa processing (${application.applicationReference}) — ${application.destinationCountry}, ${application.applicantFirstName} ${application.applicantLastName}`,
+              amount: application.totalAmount,
+            },
+          ],
+        },
+      },
+    });
+  }
+
+  /**
+   * Called from CorporateTravelService.createBooking inside the same
+   * transaction as the booking insert. Same per-traveler line-item shape as
+   * createForHajjRegistration, except amounts are exact (not evenly split)
+   * since each traveler's own line amount is already given at booking time.
+   */
+  createForCorporateBooking(
+    booking: CorporateBooking & { corporateAccount: { name: string } },
+    travelerLines: (CorporateBookingTraveler & {
+      traveler: { firstName: string; lastName: string };
+    })[],
+    tx: PrismaTransactionClient,
+  ) {
+    return tx.invoice.create({
+      data: {
+        invoiceNumber: generateInvoiceNumber(),
+        // Corporate bookings bill a CorporateAccount, not an individual
+        // Customer — customerId stays null (see its comment in
+        // schema.prisma). Scoped by corporateBookingId instead; surfaced
+        // through the corporate travel admin views and the general admin
+        // invoice list, never through a customer's own invoice list.
+        corporateBookingId: booking.id,
+        status: InvoiceStatus.ISSUED,
+        currency: booking.currency,
+        totalAmount: booking.totalAmount,
+        issuedByStaffId: booking.bookedByStaffId,
+        lineItems: {
+          create: travelerLines.map((line) => ({
+            description: `${booking.corporateAccount.name} (${booking.bookingReference}) — ${line.traveler.firstName} ${line.traveler.lastName}: ${line.description}`,
+            amount: line.amount,
+          })),
+        },
+      },
+    });
+  }
+
   listForCustomer(customerId: string) {
     return this.prisma.invoice.findMany({
       where: { customerId },
@@ -271,6 +336,38 @@ export class InvoicesService {
   async voidVehicleRentalIfUnpaid(vehicleRentalId: string): Promise<void> {
     const invoice = await this.prisma.invoice.findUnique({
       where: { vehicleRentalId },
+      include: { payments: true },
+    });
+    if (!invoice || invoice.payments.length > 0) {
+      return;
+    }
+    await this.prisma.invoice.update({
+      where: { id: invoice.id },
+      data: { status: InvoiceStatus.VOID },
+    });
+  }
+
+  /** Same as voidIfUnpaid, for a cancelled visa application. */
+  async voidVisaApplicationIfUnpaid(visaApplicationId: string): Promise<void> {
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { visaApplicationId },
+      include: { payments: true },
+    });
+    if (!invoice || invoice.payments.length > 0) {
+      return;
+    }
+    await this.prisma.invoice.update({
+      where: { id: invoice.id },
+      data: { status: InvoiceStatus.VOID },
+    });
+  }
+
+  /** Same as voidIfUnpaid, for a cancelled corporate booking. */
+  async voidCorporateBookingIfUnpaid(
+    corporateBookingId: string,
+  ): Promise<void> {
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { corporateBookingId },
       include: { payments: true },
     });
     if (!invoice || invoice.payments.length > 0) {

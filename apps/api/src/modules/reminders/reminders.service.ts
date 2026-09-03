@@ -70,6 +70,11 @@ export class RemindersService {
     const now = Date.now();
 
     for (const invoice of invoices) {
+      // Corporate travel invoices have no customer to remind (billed to a
+      // CorporateAccount instead — see Invoice.customerId's comment in
+      // schema.prisma); everything else this query selects always has one.
+      if (!invoice.customer) continue;
+
       const totalPaid = invoice.payments.reduce((sum, p) => sum + p.amount, 0);
       const balance = invoice.totalAmount - totalPaid;
       if (balance <= 0) continue;
@@ -83,7 +88,8 @@ export class RemindersService {
         invoice.umrahRegistration?.package.name ??
         'Invoice';
 
-      const ageDays = (now - invoice.createdAt.getTime()) / (1000 * 60 * 60 * 24);
+      const ageDays =
+        (now - invoice.createdAt.getTime()) / (1000 * 60 * 60 * 24);
       const overdue = ageDays > OVERDUE_AFTER_DAYS;
 
       await this.notificationsService.sendInstallmentReminder(
@@ -108,7 +114,10 @@ export class RemindersService {
     this.logger.log(
       `Reminders sent: ${installmentCount} installment, ${overdueCount} overdue`,
     );
-    return { installmentReminders: installmentCount, overdueReminders: overdueCount };
+    return {
+      installmentReminders: installmentCount,
+      overdueReminders: overdueCount,
+    };
   }
 
   /** One reminder per customer missing any of REQUIRED_DOCUMENT_TYPES. */

@@ -117,6 +117,7 @@ model Customer {
   manualPaymentSubmissions ManualPaymentSubmission[]
   hotelBookings            HotelBooking[]
   vehicleRentals           VehicleRental[]
+  visaApplications         VisaApplication[]
 
   @@index([assignedStaffId])
   @@index([assignedBranchId])
@@ -183,6 +184,7 @@ model FamilyMember {
   flightBookingPassenger   FlightBookingPassenger[]
   hajjRegistrationPilgrim  HajjRegistrationPilgrim[]
   umrahRegistrationPilgrim UmrahRegistrationPilgrim[]
+  visaApplications         VisaApplication[]
 
   @@index([customerId])
   @@map("family_members")
@@ -238,6 +240,8 @@ model Staff {
   reviewedManualPayments  ManualPaymentSubmission[] @relation("ReviewedManualPayments")
   bookedHotelBookings     HotelBooking[]
   bookedVehicleRentals    VehicleRental[]
+  handledVisaApplications VisaApplication[]
+  corporateBookings       CorporateBooking[]
 
   @@index([companyId])
   @@index([branchId])
@@ -286,6 +290,7 @@ model Branch {
 
   staff             Staff[]
   assignedCustomers Customer[]
+  corporateAccounts CorporateAccount[]
 
   @@unique([companyId, code])
   @@index([companyId])
@@ -533,8 +538,13 @@ model Invoice {
   id            String @id @default(cuid())
   invoiceNumber String @unique
 
-  customerId String
-  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  // Nullable: every invoice today is billed to a Customer *except* a
+  // corporate travel booking, which bills a CorporateAccount instead (see
+  // corporateBookingId below) — those don't appear in a customer's own
+  // invoice list, only in the corporate travel admin views and the general
+  // admin invoice list.
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
 
   // Nullable/unique rather than required: today every invoice is generated
   // from a flight booking, but the shape stays valid for a future
@@ -555,6 +565,14 @@ model Invoice {
   hotelBooking    HotelBooking?  @relation(fields: [hotelBookingId], references: [id], onDelete: SetNull)
   vehicleRentalId String?        @unique
   vehicleRental   VehicleRental? @relation(fields: [vehicleRentalId], references: [id], onDelete: SetNull)
+
+  // Same nullable/unique shape again — an invoice generated from a visa
+  // application's processing fee, or a corporate travel booking's
+  // consolidated per-traveler line items.
+  visaApplicationId  String?           @unique
+  visaApplication    VisaApplication?  @relation(fields: [visaApplicationId], references: [id], onDelete: SetNull)
+  corporateBookingId String?           @unique
+  corporateBooking   CorporateBooking? @relation(fields: [corporateBookingId], references: [id], onDelete: SetNull)
 
   status InvoiceStatus @default(ISSUED)
 
@@ -671,6 +689,7 @@ enum NotificationType {
   MANUAL_PAYMENT_SUBMITTED
   MANUAL_PAYMENT_APPROVED
   MANUAL_PAYMENT_REJECTED
+  VISA_APPLICATION_STATUS_CHANGED
 }
 
 enum NotificationStatus {
@@ -1219,7 +1238,7 @@ model VehicleRental {
   provider        VehicleRentalProviderName
   providerOfferId String
   providerOrderId String?
-  status          VehicleRentalStatus @default(PENDING)
+  status          VehicleRentalStatus       @default(PENDING)
 
   currency    String
   totalAmount Int
@@ -1231,7 +1250,7 @@ model VehicleRental {
   dropoffLocation String
   pickupAt        DateTime
   dropoffAt       DateTime
-  withDriver      Boolean @default(true)
+  withDriver      Boolean     @default(true)
 
   offerSnapshot Json
 
@@ -1243,4 +1262,202 @@ model VehicleRental {
   @@index([customerId])
   @@index([bookedByStaffId])
   @@map("vehicle_rentals")
+}
+
+// ---------------------------------------------------------------------------
+// Visa Processing — document collection + staff-tracked application status
+// for a single applicant (the customer or one of their family members).
+// Deliberately reuses the existing CustomerDocument/FamilyMemberDocument
+// upload pipeline (DocumentType already has PASSPORT/VISA/PHOTO) instead of
+// a separate upload path — an application just points at whichever
+// customer/family member the documents already live under. Generates one
+// Invoice for the processing fee, same shape as HotelBooking/VehicleRental.
+// ---------------------------------------------------------------------------
+
+enum VisaType {
+  TOURIST
+  BUSINESS
+  STUDENT
+  WORK
+  TRANSIT
+  PILGRIMAGE
+  OTHER
+}
+
+enum VisaApplicationStatus {
+  SUBMITTED
+  IN_REVIEW
+  ADDITIONAL_DOCUMENTS_REQUIRED
+  APPROVED
+  REJECTED
+  ISSUED
+  CANCELLED
+}
+
+model VisaApplication {
+  id                   String @id @default(cuid())
+  applicationReference String @unique
+
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+
+  // Exactly one applicant per application — set when it's for a family
+  // member rather than the customer themself, same shape as
+  // FlightBookingPassenger/HajjRegistrationPilgrim.
+  familyMemberId String?
+  familyMember   FamilyMember? @relation(fields: [familyMemberId], references: [id], onDelete: SetNull)
+
+  // Set when a staff member submits on the customer's behalf; null for
+  // customer self-service submissions.
+  appliedByStaffId String?
+  appliedByStaff   Staff?  @relation(fields: [appliedByStaffId], references: [id], onDelete: SetNull)
+
+  destinationCountry String
+  visaType           VisaType
+  intendedTravelDate DateTime?
+
+  // Snapshot of who the application is for, independent of later profile edits.
+  applicantFirstName      String
+  applicantLastName       String
+  applicantPassportNumber String?
+
+  status    VisaApplicationStatus @default(SUBMITTED)
+  // Latest staff-visible note — what's missing, why it was rejected, etc.
+  // Phase 1 tracks only the current status + note (like HotelBooking/
+  // VehicleRental's single `status` column); a full transition history would
+  // be a natural follow-up once this is in real use.
+  staffNote String?
+
+  currency    String
+  totalAmount Int // processing fee, whole currency units — see VISA_PROCESSING_FEES
+
+  notes String? // free-text from the applicant at submission time
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  invoice Invoice?
+
+  @@index([customerId])
+  @@index([familyMemberId])
+  @@index([status])
+  @@map("visa_applications")
+}
+
+// ---------------------------------------------------------------------------
+// Corporate Travel — staff-managed booking on behalf of a corporate client's
+// traveling employees, with one consolidated Invoice (one InvoiceLineItem
+// per traveler) covering the whole trip. Staff-only: corporate clients don't
+// get a customer portal login in this phase — "company-level booking on
+// behalf of staff travelers" is literally staff creating and managing these
+// on the client's behalf, reusing the existing Staff/Branch structure
+// (managedBranchId, bookedByStaffId) rather than inventing a parallel one.
+// ---------------------------------------------------------------------------
+
+enum CorporateBookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+}
+
+model CorporateAccount {
+  id   String @id @default(cuid())
+  name String
+
+  registrationNumber String?
+  billingEmail       String?
+  billingPhone       String?
+  billingAddress     String?
+  contactPersonName  String?
+
+  // Which Alnajoum branch manages this account — what "consolidated
+  // invoicing ... per branch" groups by in the admin view, alongside "per
+  // company" (i.e. per CorporateAccount) grouping.
+  managedBranchId String?
+  managedBranch   Branch? @relation(fields: [managedBranchId], references: [id], onDelete: SetNull)
+
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  travelers CorporateTraveler[]
+  bookings  CorporateBooking[]
+
+  @@index([managedBranchId])
+  @@map("corporate_accounts")
+}
+
+model CorporateTraveler {
+  id                 String           @id @default(cuid())
+  corporateAccountId String
+  corporateAccount   CorporateAccount @relation(fields: [corporateAccountId], references: [id], onDelete: Cascade)
+
+  firstName      String
+  lastName       String
+  email          String?
+  phone          String?
+  department     String?
+  passportNumber String?
+  isActive       Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  bookingLines CorporateBookingTraveler[]
+
+  @@index([corporateAccountId])
+  @@map("corporate_travelers")
+}
+
+model CorporateBooking {
+  id               String @id @default(cuid())
+  bookingReference String @unique
+
+  corporateAccountId String
+  corporateAccount   CorporateAccount @relation(fields: [corporateAccountId], references: [id], onDelete: Restrict)
+
+  bookedByStaffId String
+  bookedByStaff   Staff  @relation(fields: [bookedByStaffId], references: [id], onDelete: Restrict)
+
+  // Free-text description of the trip as a whole, e.g. "Lagos–Abuja return
+  // flights, 12–15 Sept, 3 staff" — corporate bookings aggregate travelers
+  // and amounts rather than searching a live provider offer, since what's
+  // actually being booked (flights, hotels, ground transport, or a mix) is
+  // arranged per traveler and only the consolidated total/invoice needs to
+  // be structured data.
+  description String
+  status      CorporateBookingStatus @default(PENDING)
+
+  currency    String
+  totalAmount Int // sum of traveler line amounts, snapshotted at creation
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  travelers CorporateBookingTraveler[]
+  invoice   Invoice?
+
+  @@index([corporateAccountId])
+  @@index([bookedByStaffId])
+  @@index([status])
+  @@map("corporate_bookings")
+}
+
+model CorporateBookingTraveler {
+  id        String           @id @default(cuid())
+  bookingId String
+  booking   CorporateBooking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  travelerId String
+  traveler   CorporateTraveler @relation(fields: [travelerId], references: [id], onDelete: Restrict)
+
+  // e.g. "Return flight LOS-ABV" — one consolidated-invoice line item per
+  // traveler, snapshotted at booking time.
+  description String
+  amount      Int
+
+  @@index([bookingId])
+  @@index([travelerId])
+  @@map("corporate_booking_travelers")
 }
