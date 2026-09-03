@@ -4,10 +4,11 @@ import { BrandMark } from '@/components/BrandMark';
 const SERVICE_LINKS = [
   { href: '/services#flights', label: 'Flight Booking' },
   { href: '/services#family', label: 'Family Travel' },
-  { href: '/services#hotels', label: 'Hotels (Coming Soon)' },
-  { href: '/services#visa', label: 'Visa Assistance (Coming Soon)' },
+  { href: '/services#hotels', label: 'Hotels' },
+  { href: '/services#vehicles', label: 'Car, Van & Bus Rental' },
+  { href: '/services#visa', label: 'Visa Processing' },
   { href: '/services#hajj', label: 'Hajj & Umrah Packages' },
-  { href: '/services#corporate', label: 'Corporate Travel (Coming Soon)' },
+  { href: '/services#corporate', label: 'Corporate Travel' },
 ];
 
 const COMPANY_LINKS = [
