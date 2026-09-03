@@ -23,7 +23,7 @@ const TRUST_ITEMS = [
 ];
 
 const STATS = [
-  { target: 7, suffix: '', label: 'Core modules live today' },
+  { target: 9, suffix: '', label: 'Core modules live today' },
   { target: 6, suffix: '', label: 'Nigerian & partner airlines' },
   { target: 100, suffix: '%', label: 'Bookings backed by a real API' },
   { target: 24, suffix: '/7', label: 'Portal access, anywhere' },
@@ -73,9 +73,9 @@ const SERVICES = [
   {
     id: 'visa',
     title: 'Visa Processing',
-    status: 'Coming Soon',
+    status: 'Live',
     description:
-      'Document collection and status tracking for visa applications, building on the same passport/document upload pipeline already live for customer profiles.',
+      'Submit a visa application and track its status from your portal, from document review to issuance — built on the same passport/document upload pipeline already live for customer profiles.',
     icon: (
       <path d="M20 3H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zM9 17H7v-7h2zm4 0h-2V7h2zm4 0h-2v-4h2z" />
     ),
@@ -93,9 +93,9 @@ const SERVICES = [
   {
     id: 'corporate',
     title: 'Corporate Travel',
-    status: 'Coming Soon',
+    status: 'Live',
     description:
-      'Company-managed booking and consolidated invoicing for organizations sending staff on business travel — built on the same Company/Branch/Staff structure already live.',
+      'Company-managed booking and consolidated invoicing for organizations sending staff on business travel — one itemized invoice per booking, arranged through your account manager.',
     icon: (
       <path d="M12 7V3H2v18h20V7zM6 19H4v-2h2zm0-4H4v-2h2zm0-4H4V9h2zm0-4H4V5h2zm4 12H8v-2h2zm0-4H8v-2h2zm0-4H8V9h2zm0-4H8V5h2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8zm-2-8h-2v2h2zm0 4h-2v2h2z" />
     ),
@@ -339,9 +339,9 @@ export default function MarketingHomePage() {
               Everything a modern travel agency needs
             </h2>
             <p className="mt-4 text-slate-600">
-              Flights, hotels, car/van/bus rental, family travel, and Hajj &amp; Umrah packages
-              are live today, running on the same real booking and invoicing engine that
-              powers every module we add next.
+              Flights, hotels, car/van/bus rental, family travel, Hajj &amp; Umrah packages,
+              visa processing, and corporate travel are all live today, running on the same
+              real booking and invoicing engine end to end.
             </p>
           </Reveal>
 

@@ -56,13 +56,13 @@ const SERVICES = [
   {
     id: 'visa',
     title: 'Visa Processing',
-    status: 'Coming Soon',
+    status: 'Live',
     summary:
       'Document collection and application status tracking for visa applications.',
     points: [
       'Reuses the existing passport/document upload pipeline',
-      'Staff-visible status tracking per application',
-      'Notifications on status changes',
+      'Staff-visible status tracking per application, from submission to issuance',
+      'Notifications every time your application status changes',
     ],
   },
   {
@@ -81,14 +81,16 @@ const SERVICES = [
   {
     id: 'corporate',
     title: 'Corporate Travel',
-    status: 'Coming Soon',
+    status: 'Live',
     summary:
       'Company-managed booking and consolidated invoicing for business travel.',
     points: [
       'Company-level booking on behalf of staff travelers',
-      'Consolidated invoicing per company or per branch',
-      'Built on the existing Company/Branch/Staff structure',
+      'One consolidated invoice per booking, itemized per traveler',
+      'Built on our existing branch and staff structure — talk to your account manager to get set up',
     ],
+    ctaHref: '/contact',
+    ctaLabel: 'Contact us to set up your account',
   },
 ];
 
@@ -100,9 +102,9 @@ export default function ServicesPage() {
           Our services
         </h1>
         <p className="mx-auto mt-6 max-w-2xl text-lg text-slate-600">
-          Flights, hotels, car/van/bus rental, family travel, and Hajj &amp; Umrah packages
-          are live and bookable today. Everything else is on our roadmap, built on the
-          same real infrastructure.
+          Flights, hotels, car/van/bus rental, family travel, Hajj &amp; Umrah packages,
+          visa processing, and corporate travel are all live and bookable today, built on
+          the same real infrastructure end to end.
         </p>
       </Reveal>
 
@@ -136,10 +138,10 @@ export default function ServicesPage() {
               </ul>
               {service.status === 'Live' && (
                 <Link
-                  href="/register"
+                  href={service.ctaHref ?? '/register'}
                   className="mt-6 inline-block rounded-full bg-slate-900 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-slate-800"
                 >
-                  Get started
+                  {service.ctaLabel ?? 'Get started'}
                 </Link>
               )}
             </div>

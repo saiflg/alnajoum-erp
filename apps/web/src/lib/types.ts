@@ -252,7 +252,10 @@ export interface Payment {
 export interface Invoice {
   id: string;
   invoiceNumber: string;
-  customerId: string;
+  // Null for a corporate travel invoice — those bill a CorporateAccount
+  // instead of an individual Customer (see the backend's Invoice.customerId
+  // comment in schema.prisma).
+  customerId: string | null;
   flightBookingId: string | null;
   status: InvoiceStatus;
   currency: string;
@@ -597,4 +600,105 @@ export interface VehicleRental {
   withDriver: boolean;
   createdAt: string;
   customer?: { firstName: string; lastName: string };
+}
+
+// ---------------------------------------------------------------------------
+// Visa processing
+// ---------------------------------------------------------------------------
+
+export type VisaType =
+  | 'TOURIST'
+  | 'BUSINESS'
+  | 'STUDENT'
+  | 'WORK'
+  | 'TRANSIT'
+  | 'PILGRIMAGE'
+  | 'OTHER';
+
+export type VisaApplicationStatus =
+  | 'SUBMITTED'
+  | 'IN_REVIEW'
+  | 'ADDITIONAL_DOCUMENTS_REQUIRED'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'ISSUED'
+  | 'CANCELLED';
+
+export interface VisaApplication {
+  id: string;
+  applicationReference: string;
+  customerId: string;
+  familyMemberId: string | null;
+  destinationCountry: string;
+  visaType: VisaType;
+  intendedTravelDate: string | null;
+  applicantFirstName: string;
+  applicantLastName: string;
+  applicantPassportNumber: string | null;
+  status: VisaApplicationStatus;
+  staffNote: string | null;
+  currency: string;
+  totalAmount: number;
+  notes: string | null;
+  createdAt: string;
+  invoice?: Invoice | null;
+  customer?: { firstName: string; lastName: string };
+}
+
+// ---------------------------------------------------------------------------
+// Corporate travel — staff-managed accounts, traveler rosters, and
+// consolidated bookings for a corporate client's traveling employees.
+// ---------------------------------------------------------------------------
+
+export interface CorporateAccount {
+  id: string;
+  name: string;
+  registrationNumber: string | null;
+  billingEmail: string | null;
+  billingPhone: string | null;
+  billingAddress: string | null;
+  contactPersonName: string | null;
+  managedBranchId: string | null;
+  isActive: boolean;
+  createdAt: string;
+  managedBranch?: { name: string } | null;
+  travelers?: CorporateTraveler[];
+}
+
+export interface CorporateTraveler {
+  id: string;
+  corporateAccountId: string;
+  firstName: string;
+  lastName: string;
+  email: string | null;
+  phone: string | null;
+  department: string | null;
+  passportNumber: string | null;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export type CorporateBookingStatus = 'PENDING' | 'CONFIRMED' | 'CANCELLED';
+
+export interface CorporateBookingTraveler {
+  id: string;
+  travelerId: string;
+  description: string;
+  amount: number;
+  traveler: CorporateTraveler;
+}
+
+export interface CorporateBooking {
+  id: string;
+  bookingReference: string;
+  corporateAccountId: string;
+  bookedByStaffId: string;
+  description: string;
+  status: CorporateBookingStatus;
+  currency: string;
+  totalAmount: number;
+  createdAt: string;
+  corporateAccount?: { name: string };
+  travelers: CorporateBookingTraveler[];
+  invoice?: Invoice | null;
 }

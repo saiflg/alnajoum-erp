@@ -9,6 +9,8 @@ export const ADMIN_NAV: NavLink[] = [
   { href: '/admin/flights', label: 'Flight Bookings', icon: 'flight' },
   { href: '/admin/hotels', label: 'Hotel Bookings', icon: 'hotel' },
   { href: '/admin/vehicle-rentals', label: 'Vehicle Rentals', icon: 'car' },
+  { href: '/admin/visa-applications', label: 'Visa Applications', icon: 'visa' },
+  { href: '/admin/corporate-travel', label: 'Corporate Travel', icon: 'corporate' },
   { href: '/admin/hajj-packages', label: 'Hajj Packages', icon: 'hajj' },
   { href: '/admin/umrah-packages', label: 'Umrah Packages', icon: 'umrah' },
   { href: '/admin/invoices', label: 'Invoices', icon: 'invoice' },

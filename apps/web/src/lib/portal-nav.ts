@@ -11,6 +11,7 @@ export const PORTAL_NAV: NavLink[] = [
   { href: '/portal/flights', label: 'My Bookings', icon: 'flight' },
   { href: '/portal/hotels', label: 'Hotels', icon: 'hotel' },
   { href: '/portal/vehicle-rentals', label: 'Car, Van & Bus', icon: 'car' },
+  { href: '/portal/visa', label: 'Visa Applications', icon: 'visa' },
   { href: '/portal/invoices', label: 'My Invoices', icon: 'invoice' },
   { href: '/portal/notifications', label: 'Notifications', icon: 'bell' },
 ];

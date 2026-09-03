@@ -79,7 +79,7 @@ export default function CustomerPortalDashboardPage() {
         </div>
 
         <p className="mt-3 text-xs text-slate-400">
-          Visa applications and support requests are not yet part of the platform — coming in a later phase.
+          General support requests are not yet part of the platform — coming in a later phase.
         </p>
 
         <h3 className="mt-8 text-sm font-semibold text-slate-900">Recent Wallet Transactions</h3>
@@ -134,6 +134,12 @@ export default function CustomerPortalDashboardPage() {
             className="inline-block rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 shadow-sm hover:border-slate-300"
           >
             Browse Umrah Packages
+          </Link>
+          <Link
+            href="/portal/visa"
+            className="inline-block rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 shadow-sm hover:border-slate-300"
+          >
+            Apply for a Visa
           </Link>
           <Link
             href="/portal/wallet"
