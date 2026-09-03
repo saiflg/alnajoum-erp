@@ -118,6 +118,7 @@ model Customer {
   hotelBookings            HotelBooking[]
   vehicleRentals           VehicleRental[]
   visaApplications         VisaApplication[]
+  visaIncentivesEarned     StaffIncentive[]
 
   @@index([assignedStaffId])
   @@index([assignedBranchId])
@@ -132,6 +133,15 @@ enum DocumentType {
   VACCINATION_CERTIFICATE
   BIRTH_CERTIFICATE
   OTHER
+  // Added for visa application document management (see VisaDocument) —
+  // appended rather than reordered so the existing values above keep their
+  // Postgres enum identity.
+  BANK_STATEMENT
+  INVITATION_LETTER
+  HOTEL_BOOKING
+  FLIGHT_ITINERARY
+  GUARANTOR_ID
+  GUARANTOR_DOCUMENT
 }
 
 model CustomerDocument {
@@ -225,23 +235,38 @@ model Staff {
   hireDate     DateTime?
   isActive     Boolean   @default(true)
 
+  // Required before an incentive payout can be attempted (see
+  // StaffPayoutsService) — nullable since most staff never earn a payable
+  // incentive; never exposed on any list/summary endpoint, only the staff
+  // member's own "my payout details" view and the finance payout screen.
+  bankName          String?
+  bankAccountNumber String?
+  bankAccountName   String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  bookedFlightBookings    FlightBooking[]
-  issuedInvoices          Invoice[]
-  recordedPayments        Payment[]
-  assignedCustomers       Customer[]
-  hajjRegistrations       HajjRegistration[]
-  umrahRegistrations      UmrahRegistration[]
-  walletTransactions      WalletTransaction[]
-  incentives              StaffIncentive[]
-  submittedManualPayments ManualPaymentSubmission[] @relation("SubmittedManualPayments")
-  reviewedManualPayments  ManualPaymentSubmission[] @relation("ReviewedManualPayments")
-  bookedHotelBookings     HotelBooking[]
-  bookedVehicleRentals    VehicleRental[]
-  handledVisaApplications VisaApplication[]
-  corporateBookings       CorporateBooking[]
+  bookedFlightBookings     FlightBooking[]
+  issuedInvoices           Invoice[]
+  recordedPayments         Payment[]
+  assignedCustomers        Customer[]
+  hajjRegistrations        HajjRegistration[]
+  umrahRegistrations       UmrahRegistration[]
+  walletTransactions       WalletTransaction[]
+  incentives               StaffIncentive[]
+  approvedIncentives       StaffIncentive[]          @relation("ApprovedIncentives")
+  submittedManualPayments  ManualPaymentSubmission[] @relation("SubmittedManualPayments")
+  reviewedManualPayments   ManualPaymentSubmission[] @relation("ReviewedManualPayments")
+  bookedHotelBookings      HotelBooking[]
+  bookedVehicleRentals     VehicleRental[]
+  handledVisaApplications  VisaApplication[]
+  corporateBookings        CorporateBooking[]
+  payouts                  StaffPayout[]
+  requestedPayouts         StaffPayout[]             @relation("RequestedPayouts")
+  visaApplicationNotes     VisaApplicationNote[]
+  reviewedVisaDocuments    VisaDocument[]
+  verifiedGuarantors       Guarantor[]
+  assignedVisaApplications VisaApplication[]         @relation("AssignedVisaApplications")
 
   @@index([companyId])
   @@index([branchId])
@@ -690,6 +715,15 @@ enum NotificationType {
   MANUAL_PAYMENT_APPROVED
   MANUAL_PAYMENT_REJECTED
   VISA_APPLICATION_STATUS_CHANGED
+  // Phase 3 additions.
+  GUARANTOR_REQUIRED
+  GUARANTOR_APPROVED
+  GUARANTOR_REJECTED
+  VISA_DOCUMENT_STATUS_CHANGED
+  VISA_DOCUMENT_EXPIRING
+  INCENTIVE_GENERATED
+  INCENTIVE_APPROVED
+  INCENTIVE_PAID
 }
 
 enum NotificationStatus {
@@ -1086,11 +1120,24 @@ model ManualPaymentSubmission {
   @@map("manual_payment_submissions")
 }
 
+enum IncentiveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PAID
+}
+
 /**
  * A staff incentive earned from an approved payment against a Hajj/Umrah
- * registration, computed from the package's incentiveRule. Informational
- * ledger only — paying out incentives is a payroll concern outside this
- * system's scope.
+ * registration, or (from Phase 3) from the margin on a visa application —
+ * computed from the package's incentiveRule or the VisaService's
+ * IncentivePolicy respectively.
+ * Phase 1/2 rows (sourceType HAJJ_REGISTRATION/UMRAH_REGISTRATION) were
+ * "informational only" and are backfilled to PAID by the migration that
+ * added `status` — they were already-settled history, not something that
+ * suddenly needs approval. Phase 3 visa incentives are the first to use the
+ * real PENDING -> APPROVED -> PAID workflow end to end (see
+ * VisaIncentivesService and StaffPayoutsService).
  */
 model StaffIncentive {
   id String @id @default(cuid())
@@ -1098,17 +1145,145 @@ model StaffIncentive {
   staffId String
   staff   Staff  @relation(fields: [staffId], references: [id], onDelete: Cascade)
 
-  sourceType  String // "HAJJ_REGISTRATION" | "UMRAH_REGISTRATION"
+  sourceType  String // "HAJJ_REGISTRATION" | "UMRAH_REGISTRATION" | "VISA_APPLICATION"
   sourceId    String
   amount      Int
   currency    String
   description String
 
+  status          IncentiveStatus @default(PENDING)
+  // Reference number shown to staff/finance, e.g. "INC-2026-000123" —
+  // distinct from `id` (cuid) for the same reason invoiceNumber/
+  // bookingReference exist alongside their own ids elsewhere.
+  referenceNumber String?         @unique
+
+  // Populated only for margin-based incentives (visa); null for the
+  // simpler Hajj/Umrah incentiveRule-based ones, which never had a
+  // separate company-cost/selling-price breakdown to snapshot.
+  companyCost  Int?
+  sellingPrice Int?
+  margin       Int?
+
+  policyId String?
+  policy   IncentivePolicy? @relation(fields: [policyId], references: [id], onDelete: SetNull)
+
+  // Which customer this incentive was earned from — set for visa
+  // incentives, null for Hajj/Umrah (those already carry the customer via
+  // their registration).
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  approvedByStaffId String?
+  approvedByStaff   Staff?    @relation("ApprovedIncentives", fields: [approvedByStaffId], references: [id], onDelete: SetNull)
+  approvedAt        DateTime?
+  // Reason recorded when status is set to REJECTED.
+  rejectionReason   String?
+
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  payout StaffPayout?
 
   @@index([staffId])
   @@index([sourceType, sourceId])
+  @@index([status])
   @@map("staff_incentives")
+}
+
+enum IncentivePolicyType {
+  FULL_MARGIN
+  PERCENT_OF_MARGIN
+  FIXED_AMOUNT
+  STAFF_COMPANY_SPLIT
+  STAFF_BRANCH_COMPANY_SPLIT
+  CUSTOM
+}
+
+/**
+ * Configurable incentive policy an admin attaches to a VisaService (or
+ * leaves unset, in which case DEFAULT_INCENTIVE_POLICY in
+ * visa-incentives.service.ts applies). `config` holds the type-specific
+ * parameters — kept as JSON rather than one column per policy type because
+ * the shape genuinely varies:
+ * FULL_MARGIN             {}
+ * PERCENT_OF_MARGIN       { "percent": 50 }
+ * FIXED_AMOUNT            { "amount": 50000 }
+ * STAFF_COMPANY_SPLIT     { "staffPercent": 70 }
+ * STAFF_BRANCH_COMPANY_SPLIT { "staffPercent": 60, "branchPercent": 15 }
+ * CUSTOM                  { "amount": 50000 } or { "percent": 30 } — an
+ * admin-labeled variant of one of the above, kept
+ * distinct so reporting can tell "we picked a
+ * bespoke number for this service" apart from the
+ * standard presets.
+ * Only the staff share is ever recorded as a StaffIncentive row — the
+ * "company"/"branch" shares are the remainder of the margin, implicit
+ * rather than posted as their own ledger entries (this system has no
+ * branch-level P&L ledger to post them into yet).
+ */
+model IncentivePolicy {
+  id   String @id @default(cuid())
+  name String
+
+  type   IncentivePolicyType
+  config Json                @default("{}")
+
+  isDefault Boolean @default(false)
+  isActive  Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  visaServices VisaService[]
+  incentives   StaffIncentive[]
+
+  @@map("incentive_policies")
+}
+
+enum PayoutStatus {
+  PENDING
+  PROCESSING
+  SUCCESSFUL
+  FAILED
+}
+
+/**
+ * One payout attempt against an APPROVED StaffIncentive. Deliberately
+ * separate from StaffIncentive (same reasoning as ManualPaymentSubmission
+ * vs Payment): the incentive's APPROVED status doesn't move money by
+ * itself, only a successful StaffPayout does — see
+ * StaffPayoutsService.attemptPayout(). A failed attempt never deletes the
+ * money owed; it just leaves the incentive payable again for retry.
+ */
+model StaffPayout {
+  id String @id @default(cuid())
+
+  incentiveId String         @unique
+  incentive   StaffIncentive @relation(fields: [incentiveId], references: [id], onDelete: Restrict)
+
+  staffId String
+  staff   Staff  @relation(fields: [staffId], references: [id], onDelete: Restrict)
+
+  amount   Int
+  currency String
+
+  status PayoutStatus @default(PENDING)
+
+  // "mock" today — see StaffPayoutProviderPort; a real bank-transfer/payroll
+  // API is a DI-binding change away, same pattern as every other provider
+  // in this codebase (Flight/Payment/Notification).
+  provider          String
+  providerReference String?
+  providerError     String?
+
+  requestedByStaffId String?
+  requestedByStaff   Staff?  @relation("RequestedPayouts", fields: [requestedByStaffId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([staffId])
+  @@index([status])
+  @@map("staff_payouts")
 }
 
 // ---------------------------------------------------------------------------
@@ -1285,6 +1460,8 @@ enum VisaType {
 }
 
 enum VisaApplicationStatus {
+  // Phase 2 statuses — kept exactly as-is so existing rows/history and the
+  // Phase 2 own/admin controllers keep working unmodified.
   SUBMITTED
   IN_REVIEW
   ADDITIONAL_DOCUMENTS_REQUIRED
@@ -1292,6 +1469,217 @@ enum VisaApplicationStatus {
   REJECTED
   ISSUED
   CANCELLED
+  // Phase 3 additions — the richer workflow VisaWorkflowService drives for
+  // any application created against a VisaService (the catalog). Appended
+  // rather than replacing the Phase 2 set for the same reason DocumentType
+  // was appended to above: Postgres enum values are cheap to add, risky to
+  // remove or reorder.
+  DRAFT
+  AWAITING_DOCUMENTS
+  AWAITING_GUARANTOR
+  GUARANTOR_VERIFICATION
+  PAYMENT_PENDING
+  PAYMENT_VERIFIED
+  UNDER_REVIEW
+  SUBMITTED_TO_PROVIDER
+  PROCESSING
+  ADDITIONAL_INFO_REQUIRED
+  COMPLETED
+}
+
+enum VisaServiceStatus {
+  DRAFT
+  ACTIVE
+  SUSPENDED
+  CLOSED
+  ARCHIVED
+}
+
+/**
+ * The visa "product catalog" — what Phase 3 adds on top of Phase 2's
+ * free-text destinationCountry/visaType. A VisaApplication may optionally
+ * point at one of these (visaServiceId); when it does, companyCost/
+ * sellingPrice/margin are snapshotted onto the application at submission
+ * time (see VisaApplicationsService.submit) so later catalog price changes
+ * never retroactively alter an already-submitted application's numbers —
+ * same "snapshot what was actually agreed" principle as
+ * FlightBooking.itinerary or HotelBooking.offerSnapshot.
+ * margin is deliberately NOT a stored column — it's always
+ * `sellingPrice - companyCost`, computed wherever it's needed (API
+ * responses, reports), the same "the source of truth is the inputs, not a
+ * cached derivation" principle as Wallet's computed-on-read balance.
+ */
+model VisaService {
+  id          String @id @default(cuid())
+  serviceCode String @unique // e.g. "VS-UK-TOURIST-001"
+
+  country      String
+  visaType     String // free-text, not the VisaType enum — the real world has far more visa categories than that fixed set covers
+  visaCategory String?
+  description  String?
+
+  processingTime    String? // free-text, e.g. "10-15 business days"
+  validityPeriod    String? // free-text, e.g. "90 days, single entry"
+  entryType         String? // e.g. "Single", "Multiple"
+  requiredDocuments String? // free-text list, same pattern as HajjPackage.requiredDocuments
+
+  supplierName String?
+  supplierCost Int? // what the supplier/embassy/agent charges Alnajoum, whole currency units
+  companyCost  Int // Alnajoum's all-in cost (>= supplierCost when set) — what margin is computed against
+  sellingPrice Int // what the customer is charged
+  currency     String  @default("NGN")
+
+  processingFee Int @default(0) // Alnajoum's own service fee, separate from companyCost/sellingPrice
+  otherFees     Int @default(0)
+
+  incentivePolicyId String?
+  incentivePolicy   IncentivePolicy? @relation(fields: [incentivePolicyId], references: [id], onDelete: SetNull)
+
+  termsAndConditions String?
+  isAvailable        Boolean           @default(true)
+  status             VisaServiceStatus @default(DRAFT)
+
+  // The "business configuration requires a guarantor" switch (spec #6) —
+  // defaults true since most visa types in this business genuinely need
+  // one; an admin can turn it off per service (e.g. a low-risk transit
+  // visa). A staff-recorded exemption on a specific application
+  // (VisaApplication.guarantorExempt) can still override this per-case —
+  // see VisaService.isGuarantorRequired() in visa.service.ts.
+  requiresGuarantor Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  applications VisaApplication[]
+
+  @@index([status])
+  @@index([country])
+  @@map("visa_services")
+}
+
+enum VerificationStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/**
+ * A guarantor/sponsor vouching for an applicant — required by
+ * VisaWorkflowService.isGuarantorRequired() unless the applicant is staff
+ * or the service is configured as exempt. One guarantor is scoped to one
+ * application (not reused across applications) since the responsibility
+ * being accepted is specific to that trip.
+ */
+model Guarantor {
+  id String @id @default(cuid())
+
+  fullName     String
+  phone        String
+  whatsapp     String?
+  email        String?
+  address      String?
+  relationship String // e.g. "Parent", "Employer", "Sibling", "Friend"
+
+  idType   String?
+  idNumber String?
+
+  verificationStatus VerificationStatus @default(PENDING)
+  approvalStatus     ApprovalStatus     @default(PENDING)
+
+  // Set once the guarantor has confirmed (via the link sent to them, or
+  // recorded by staff on their behalf) that they accept the responsibility
+  // the business workflow requires of them.
+  acceptedResponsibilityAt DateTime?
+
+  verifiedByStaffId String?
+  verifiedByStaff   Staff?  @relation(fields: [verifiedByStaffId], references: [id], onDelete: SetNull)
+  verificationNote  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  application VisaApplication?
+  documents   VisaDocument[]
+
+  @@map("guarantors")
+}
+
+enum VisaDocumentStatus {
+  PENDING_REVIEW
+  VERIFIED
+  REJECTED
+  EXPIRED
+}
+
+/**
+ * A document attached to a specific visa application (or, when
+ * guarantorId is set instead, to a guarantor) — distinct from the older
+ * CustomerDocument/FamilyMemberDocument (which live on the profile, not
+ * tied to one application) because Phase 3 needs per-application
+ * verification status and expiry tracking that a profile-level document
+ * doesn't have. Exactly one of applicationId/guarantorId is set,
+ * enforced in VisaDocumentsService rather than at the DB level (Prisma
+ * has no CHECK-constraint escape hatch here).
+ */
+model VisaDocument {
+  id String @id @default(cuid())
+
+  applicationId String?
+  application   VisaApplication? @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  guarantorId String?
+  guarantor   Guarantor? @relation(fields: [guarantorId], references: [id], onDelete: Cascade)
+
+  type             DocumentType
+  originalFileName String
+  storedFileName   String       @unique
+  mimeType         String
+  sizeBytes        Int
+
+  uploadedByIdentityId String?
+  expiryDate           DateTime?
+
+  status            VisaDocumentStatus @default(PENDING_REVIEW)
+  reviewedByStaffId String?
+  reviewedByStaff   Staff?             @relation(fields: [reviewedByStaffId], references: [id], onDelete: SetNull)
+  reviewNote        String?
+  reviewedAt        DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([applicationId])
+  @@index([guarantorId])
+  @@index([status])
+  @@map("visa_documents")
+}
+
+/**
+ * Staff-only internal note thread on an application — "Add internal
+ * notes" from the spec, kept as an append-only list (like AuditLog)
+ * rather than a single overwritable field so the review history is never
+ * lost.
+ */
+model VisaApplicationNote {
+  id            String          @id @default(cuid())
+  applicationId String
+  application   VisaApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  staffId String
+  staff   Staff  @relation(fields: [staffId], references: [id], onDelete: Restrict)
+
+  note String
+
+  createdAt DateTime @default(now())
+
+  @@index([applicationId])
+  @@map("visa_application_notes")
 }
 
 model VisaApplication {
@@ -1311,6 +1699,13 @@ model VisaApplication {
   // customer self-service submissions.
   appliedByStaffId String?
   appliedByStaff   Staff?  @relation(fields: [appliedByStaffId], references: [id], onDelete: SetNull)
+
+  // The visa officer currently responsible for this application — distinct
+  // from appliedByStaffId (who submitted it, often a different person from
+  // whoever processes it). Set via VisaWorkflowService.assign(), gated by
+  // the visa:assign permission.
+  assignedStaffId String?
+  assignedStaff   Staff?  @relation("AssignedVisaApplications", fields: [assignedStaffId], references: [id], onDelete: SetNull)
 
   destinationCountry String
   visaType           VisaType
@@ -1333,14 +1728,50 @@ model VisaApplication {
 
   notes String? // free-text from the applicant at submission time
 
+  // --- Phase 3 additions, all nullable so Phase 2 applications (created
+  // without a catalog service) remain perfectly valid rows. ---
+
+  visaServiceId String?
+  visaService   VisaService? @relation(fields: [visaServiceId], references: [id], onDelete: SetNull)
+
+  // Snapshotted from VisaService at submission time — see VisaService's
+  // own doc comment for why these aren't just re-read from the catalog.
+  companyCostSnapshot  Int?
+  sellingPriceSnapshot Int?
+
+  guarantorId           String?    @unique
+  guarantor             Guarantor? @relation(fields: [guarantorId], references: [id], onDelete: SetNull)
+  guarantorRequired     Boolean    @default(false)
+  // A staff-authorized exemption from an otherwise-required guarantor
+  // (e.g. the applicant is a known staff member or VIP) — never
+  // settable by the customer themselves; always audited when set (see
+  // VisaService.submit()).
+  guarantorExempt       Boolean    @default(false)
+  guarantorExemptReason String?
+
+  previousVisaInfo String? // free-text: prior visas held, refusals, etc.
+  contactPhone     String?
+  contactEmail     String?
+
+  isOfflineEntry Boolean @default(false)
+  offlineReason  String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  invoice Invoice?
+  invoice   Invoice?
+  notesLog  VisaApplicationNote[]
+  documents VisaDocument[]
+  // Linked to StaffIncentive by sourceType "VISA_APPLICATION" + sourceId —
+  // a polymorphic reference (not a Prisma relation) matching how
+  // HAJJ_REGISTRATION/UMRAH_REGISTRATION incentives already work; see
+  // VisaIncentivesService.
 
   @@index([customerId])
   @@index([familyMemberId])
   @@index([status])
+  @@index([visaServiceId])
+  @@index([assignedStaffId])
   @@map("visa_applications")
 }
 

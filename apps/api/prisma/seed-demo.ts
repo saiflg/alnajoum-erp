@@ -1,22 +1,48 @@
 /**
- * Phase 2 demo data: fictional customers, a family group, wallet activity,
- * Hajj/Umrah packages and registrations, a manual payment awaiting review,
- * staff assignment, and a few in-app notifications — enough to exercise
- * every Phase 2 screen without registering through the UI first.
+ * Phase 2 + 3 demo data: fictional customers, a family group, wallet
+ * activity, Hajj/Umrah packages and registrations, a manual payment
+ * awaiting review, staff assignment, in-app notifications, and (Phase 3)
+ * a visa service catalog, incentive policies, guarantors, visa
+ * applications across 9 statuses, documents, staff incentives, and
+ * payouts — enough to exercise every screen without registering through
+ * the UI first.
  *
  * Entirely separate from seed.ts (the Phase 1 bootstrap: permissions,
  * roles, the first Company/Branch/Super Admin) — this only ever ADDS demo
  * records under obviously-fictional @demo.alnajoum.travel addresses, never
- * touches real customer accounts, and is safe to re-run (skips entirely if
- * the demo data already exists — see main()).
+ * touches real customer accounts. Each phase's seeding function is
+ * independently idempotent (see seedPhase1And2 and seedPhase3Visa) — safe
+ * to re-run at any time, including after only one of the two phases has
+ * ever run; neither ever needs a destructive reset to pick up the other.
  *
  * All names, passport numbers, phone numbers, and bank details below are
  * fictional. Nothing here is a real document, account, or API credential.
  *
  * Run: pnpm --filter api run db:seed:demo
- * Full reset + reseed: pnpm --filter api run db:reset:demo
+ * Full reset + reseed (asks for confirmation — destroys all data first): pnpm --filter api run db:reset:demo
  */
-import { PrismaClient, PackageStatus, RegistrationStatus, WalletTransactionType, WalletTransactionStatus, PaymentMethod, InvoiceStatus, ManualPaymentStatus, NotificationType, NotificationStatus } from '@prisma/client';
+import {
+  PrismaClient,
+  PackageStatus,
+  RegistrationStatus,
+  WalletTransactionType,
+  WalletTransactionStatus,
+  PaymentMethod,
+  InvoiceStatus,
+  ManualPaymentStatus,
+  NotificationType,
+  NotificationStatus,
+  VisaServiceStatus,
+  VisaApplicationStatus,
+  VisaType,
+  IncentivePolicyType,
+  IncentiveStatus,
+  VerificationStatus,
+  ApprovalStatus,
+  DocumentType,
+  VisaDocumentStatus,
+  PayoutStatus,
+} from '@prisma/client';
 import * as argon2 from 'argon2';
 import { randomBytes } from 'crypto';
 import { SYSTEM_ROLES } from '../src/modules/rbac/constants/default-roles.constant';
@@ -30,10 +56,11 @@ function ref(prefix: string): string {
   return `${prefix}-${randomBytes(4).toString('hex').toUpperCase()}`;
 }
 
-async function main() {
+/** Phase 1/2 demo data — customers, family, Hajj/Umrah, wallet, manual payment. */
+async function seedPhase1And2() {
   const existing = await prisma.identity.findUnique({ where: { email: MARKER_EMAIL } });
   if (existing) {
-    console.log('Demo data already present — skipping (use db:reset:demo for a clean slate)');
+    console.log('Phase 1/2 demo data already present — skipping');
     return;
   }
 
@@ -501,12 +528,705 @@ async function main() {
   console.log('Created in-app notifications for Amina Yusuf');
 
   console.log('--------------------------------------------------------');
-  console.log('Demo data seeded successfully. Demo logins (password for all: Demo@2026):');
+  console.log('Phase 1/2 demo data seeded successfully. Demo logins (password for all: Demo@2026):');
   console.log(`  Customer:        ${aminaIdentity.email}`);
   console.log(`  Customer (VIP):  ${chineduIdentity.email}`);
   console.log(`  Staff (agent):   ${agentIdentity.email}`);
   console.log(`  Staff (finance): ${financeIdentity.email}`);
   console.log('--------------------------------------------------------');
+}
+
+/**
+ * Phase 3 demo data: visa services, guarantors, applications across 9
+ * statuses, documents, incentives, and payouts. Independently idempotent
+ * from seedPhase1And2 (gated on a VisaService already existing, not on the
+ * MARKER_EMAIL check) — this can run additively even after Phase 1/2 demo
+ * data already exists from an earlier invocation, no full reset required.
+ * Depends on the Phase 1/2 demo staff/customers/family already existing —
+ * re-fetches them by their known demo identifiers rather than sharing
+ * in-memory references, so it works correctly whether Phase 1/2 just ran
+ * in this same process or ran previously.
+ */
+async function seedPhase3Visa() {
+  const alreadySeeded = await prisma.visaService.findFirst();
+  if (alreadySeeded) {
+    console.log('Phase 3 demo data already present — skipping');
+    return;
+  }
+
+  const agentIdentity = await prisma.identity.findUniqueOrThrow({
+    where: { email: 'fatima.sule@demo.alnajoum.travel' },
+    include: { staff: true },
+  });
+  const financeIdentity = await prisma.identity.findUniqueOrThrow({
+    where: { email: 'ibrahim.musa@demo.alnajoum.travel' },
+    include: { staff: true },
+  });
+  const aminaIdentity = await prisma.identity.findUniqueOrThrow({
+    where: { email: MARKER_EMAIL },
+    include: { customer: true },
+  });
+  const chineduIdentity = await prisma.identity.findUniqueOrThrow({
+    where: { email: 'chinedu.okafor@demo.alnajoum.travel' },
+    include: { customer: true },
+  });
+  const spouse = await prisma.familyMember.findFirstOrThrow({
+    where: { customerId: aminaIdentity.customer!.id, relationship: 'SPOUSE' },
+  });
+  const child1 = await prisma.familyMember.findFirstOrThrow({
+    where: { customerId: aminaIdentity.customer!.id, firstName: 'Zainab' },
+  });
+
+  // Bank details for the demo agent, so a payout can actually be attempted
+  // against them (fictional account — see the module doc comment above).
+  await prisma.staff.update({
+    where: { id: agentIdentity.staff!.id },
+    data: {
+      bankName: 'Demo Bank Nigeria',
+      bankAccountNumber: '0198765432',
+      bankAccountName: 'Fatima Sule',
+    },
+  });
+
+  const standardPolicy = await prisma.incentivePolicy.create({
+    data: {
+      name: 'Standard Visa Incentive',
+      type: IncentivePolicyType.PERCENT_OF_MARGIN,
+      config: { percent: 50 },
+      isDefault: true,
+    },
+  });
+  const fullMarginPolicy = await prisma.incentivePolicy.create({
+    data: {
+      name: 'Full Margin Bonus',
+      type: IncentivePolicyType.FULL_MARGIN,
+      config: {},
+    },
+  });
+  console.log('Created 2 incentive policies (Standard 50% — platform default, and Full Margin Bonus)');
+
+  const svSaudiPilgrimage = await prisma.visaService.create({
+    data: {
+      serviceCode: ref('VS'),
+      country: 'Saudi Arabia',
+      visaType: 'Pilgrimage',
+      visaCategory: 'Umrah',
+      description: 'Umrah pilgrimage visa, processed through our licensed Saudi partner.',
+      processingTime: '10-15 business days',
+      validityPeriod: '90 days, single entry',
+      entryType: 'Single',
+      requiredDocuments: 'Passport (6+ months validity), passport photo, vaccination certificate',
+      supplierName: 'Al Rajhi Visa Services',
+      supplierCost: 550_000,
+      companyCost: 600_000, // matches the spec's own worked example exactly
+      sellingPrice: 800_000,
+      currency: 'NGN',
+      processingFee: 5_000,
+      requiresGuarantor: true,
+      incentivePolicyId: standardPolicy.id,
+      status: VisaServiceStatus.ACTIVE,
+    },
+  });
+  const svUkTourist = await prisma.visaService.create({
+    data: {
+      serviceCode: ref('VS'),
+      country: 'United Kingdom',
+      visaType: 'Tourist',
+      visaCategory: 'Standard Visitor',
+      description: 'UK standard visitor visa for tourism or family visits.',
+      processingTime: '15-20 business days',
+      validityPeriod: '6 months',
+      entryType: 'Multiple',
+      requiredDocuments: 'Passport, bank statement, proof of accommodation, invitation letter (if applicable)',
+      supplierCost: 300_000,
+      companyCost: 350_000,
+      sellingPrice: 480_000,
+      currency: 'NGN',
+      processingFee: 10_000,
+      requiresGuarantor: true,
+      incentivePolicyId: fullMarginPolicy.id,
+      status: VisaServiceStatus.ACTIVE,
+    },
+  });
+  const svCanadaStudent = await prisma.visaService.create({
+    data: {
+      serviceCode: ref('VS'),
+      country: 'Canada',
+      visaType: 'Student',
+      visaCategory: 'Study Permit',
+      description: 'Canadian study permit application support.',
+      processingTime: '4-8 weeks',
+      validityPeriod: 'Duration of study program',
+      entryType: 'Multiple',
+      requiredDocuments: 'Passport, admission letter, proof of funds, medical exam',
+      companyCost: 250_000,
+      sellingPrice: 350_000,
+      currency: 'NGN',
+      processingFee: 15_000,
+      requiresGuarantor: false, // business decision: study-permit applicants are exempt by default
+      status: VisaServiceStatus.ACTIVE,
+      // No incentivePolicyId set deliberately — this service relies on the
+      // platform default policy (standardPolicy, isDefault: true) to
+      // demonstrate the fallback path.
+    },
+  });
+  await prisma.visaService.create({
+    data: {
+      serviceCode: ref('VS'),
+      country: 'United Arab Emirates',
+      visaType: 'Business',
+      description: 'UAE business visa — still being configured.',
+      companyCost: 150_000,
+      sellingPrice: 220_000,
+      currency: 'NGN',
+      requiresGuarantor: false,
+      status: VisaServiceStatus.DRAFT,
+    },
+  });
+  await prisma.visaService.create({
+    data: {
+      serviceCode: ref('VS'),
+      country: 'United States',
+      visaType: 'Tourist',
+      visaCategory: 'B1/B2',
+      description: 'US tourist visa — temporarily suspended pending embassy schedule changes.',
+      companyCost: 400_000,
+      sellingPrice: 400_000, // zero margin on purpose — a realistic "break-even, do not sell yet" state
+      currency: 'NGN',
+      requiresGuarantor: true,
+      status: VisaServiceStatus.SUSPENDED,
+    },
+  });
+  console.log('Created 5 visa services (Saudi Pilgrimage, UK Tourist, Canada Student, UAE Business [draft], US Tourist [suspended])');
+
+  // Helper matching VisaService.submit()'s pricing/snapshot logic, since
+  // this script writes directly via Prisma rather than going through the
+  // API/service layer (same reasoning as every other section above).
+  function visaTotal(sv: { sellingPrice: number; processingFee: number; otherFees: number }) {
+    return sv.sellingPrice + sv.processingFee + sv.otherFees;
+  }
+
+  // 1) Amina — Saudi Pilgrimage, just submitted, still needs a guarantor.
+  const visaApp1 = await prisma.visaApplication.create({
+    data: {
+      applicationReference: `VISA-${new Date().getFullYear()}-000001`,
+      customerId: aminaIdentity.customer!.id,
+      destinationCountry: svSaudiPilgrimage.country,
+      visaType: VisaType.PILGRIMAGE,
+      applicantFirstName: 'Amina',
+      applicantLastName: 'Yusuf',
+      applicantPassportNumber: 'A00100101',
+      status: VisaApplicationStatus.AWAITING_GUARANTOR,
+      currency: svSaudiPilgrimage.currency,
+      totalAmount: visaTotal(svSaudiPilgrimage),
+      visaServiceId: svSaudiPilgrimage.id,
+      companyCostSnapshot: svSaudiPilgrimage.companyCost,
+      sellingPriceSnapshot: svSaudiPilgrimage.sellingPrice,
+      guarantorRequired: true,
+    },
+  });
+  await prisma.invoice.create({
+    data: {
+      invoiceNumber: ref('INV'),
+      customerId: aminaIdentity.customer!.id,
+      visaApplicationId: visaApp1.id,
+      status: InvoiceStatus.ISSUED,
+      currency: visaApp1.currency,
+      totalAmount: visaApp1.totalAmount,
+      lineItems: { create: [{ description: `Pilgrimage visa processing (${visaApp1.applicationReference}) — Saudi Arabia, Amina Yusuf`, amount: visaApp1.totalAmount }] },
+    },
+  });
+
+  // 2) Amina's spouse — UK Tourist, guarantor attached but not yet verified.
+  const guarantor2 = await prisma.guarantor.create({
+    data: {
+      fullName: 'Amina Yusuf',
+      phone: '+2348000000101',
+      email: MARKER_EMAIL,
+      relationship: 'Spouse',
+      idType: 'National ID',
+      idNumber: 'NIN-10010001',
+      verificationStatus: VerificationStatus.PENDING,
+      approvalStatus: ApprovalStatus.PENDING,
+    },
+  });
+  const visaApp2 = await prisma.visaApplication.create({
+    data: {
+      applicationReference: `VISA-${new Date().getFullYear()}-000002`,
+      customerId: aminaIdentity.customer!.id,
+      familyMemberId: spouse.id,
+      destinationCountry: svUkTourist.country,
+      visaType: VisaType.TOURIST,
+      applicantFirstName: spouse.firstName,
+      applicantLastName: spouse.lastName,
+      applicantPassportNumber: spouse.passportNumber,
+      status: VisaApplicationStatus.GUARANTOR_VERIFICATION,
+      currency: svUkTourist.currency,
+      totalAmount: visaTotal(svUkTourist),
+      visaServiceId: svUkTourist.id,
+      companyCostSnapshot: svUkTourist.companyCost,
+      sellingPriceSnapshot: svUkTourist.sellingPrice,
+      guarantorRequired: true,
+      guarantorId: guarantor2.id,
+      contactPhone: '+2348000000102',
+    },
+  });
+  await prisma.invoice.create({
+    data: {
+      invoiceNumber: ref('INV'),
+      customerId: aminaIdentity.customer!.id,
+      visaApplicationId: visaApp2.id,
+      status: InvoiceStatus.ISSUED,
+      currency: visaApp2.currency,
+      totalAmount: visaApp2.totalAmount,
+      lineItems: { create: [{ description: `Tourist visa processing (${visaApp2.applicationReference}) — United Kingdom, ${spouse.firstName} ${spouse.lastName}`, amount: visaApp2.totalAmount }] },
+    },
+  });
+  await prisma.visaDocument.create({
+    data: {
+      applicationId: visaApp2.id,
+      type: DocumentType.PASSPORT,
+      originalFileName: 'yusuf-abdullahi-passport.jpg',
+      storedFileName: ref('seed-doc') + '.jpg',
+      mimeType: 'image/jpeg',
+      sizeBytes: 482_113,
+      status: VisaDocumentStatus.PENDING_REVIEW,
+    },
+  });
+
+  // 3) Chinedu — UK Tourist, guarantor exempted by staff, awaiting payment.
+  const visaApp3 = await prisma.visaApplication.create({
+    data: {
+      applicationReference: `VISA-${new Date().getFullYear()}-000003`,
+      customerId: chineduIdentity.customer!.id,
+      destinationCountry: svUkTourist.country,
+      visaType: VisaType.TOURIST,
+      applicantFirstName: 'Chinedu',
+      applicantLastName: 'Okafor',
+      applicantPassportNumber: 'A00200201',
+      status: VisaApplicationStatus.PAYMENT_PENDING,
+      currency: svUkTourist.currency,
+      totalAmount: visaTotal(svUkTourist),
+      visaServiceId: svUkTourist.id,
+      companyCostSnapshot: svUkTourist.companyCost,
+      sellingPriceSnapshot: svUkTourist.sellingPrice,
+      guarantorRequired: true,
+      guarantorExempt: true,
+      guarantorExemptReason: 'Long-standing VIP client, waived by branch manager',
+      appliedByStaffId: agentIdentity.staff!.id,
+    },
+  });
+  await prisma.invoice.create({
+    data: {
+      invoiceNumber: ref('INV'),
+      customerId: chineduIdentity.customer!.id,
+      visaApplicationId: visaApp3.id,
+      status: InvoiceStatus.ISSUED,
+      currency: visaApp3.currency,
+      totalAmount: visaApp3.totalAmount,
+      issuedByStaffId: agentIdentity.staff!.id,
+      lineItems: { create: [{ description: `Tourist visa processing (${visaApp3.applicationReference}) — United Kingdom, Chinedu Okafor`, amount: visaApp3.totalAmount }] },
+    },
+  });
+
+  // 4) Chinedu — Canada Student, fully paid, under staff review, with an internal note.
+  const visaApp4 = await prisma.visaApplication.create({
+    data: {
+      applicationReference: `VISA-${new Date().getFullYear()}-000004`,
+      customerId: chineduIdentity.customer!.id,
+      destinationCountry: svCanadaStudent.country,
+      visaType: VisaType.STUDENT,
+      applicantFirstName: 'Chinedu',
+      applicantLastName: 'Okafor',
+      applicantPassportNumber: 'A00200201',
+      status: VisaApplicationStatus.UNDER_REVIEW,
+      currency: svCanadaStudent.currency,
+      totalAmount: visaTotal(svCanadaStudent),
+      visaServiceId: svCanadaStudent.id,
+      companyCostSnapshot: svCanadaStudent.companyCost,
+      sellingPriceSnapshot: svCanadaStudent.sellingPrice,
+      guarantorRequired: false,
+      assignedStaffId: agentIdentity.staff!.id,
+    },
+  });
+  await prisma.invoice.create({
+    data: {
+      invoiceNumber: ref('INV'),
+      customerId: chineduIdentity.customer!.id,
+      visaApplicationId: visaApp4.id,
+      status: InvoiceStatus.PAID,
+      currency: visaApp4.currency,
+      totalAmount: visaApp4.totalAmount,
+      payments: { create: [{ paymentReference: ref('PAY'), amount: visaApp4.totalAmount, method: PaymentMethod.CARD, recordedByStaffId: financeIdentity.staff!.id }] },
+      lineItems: { create: [{ description: `Student visa processing (${visaApp4.applicationReference}) — Canada, Chinedu Okafor`, amount: visaApp4.totalAmount }] },
+    },
+  });
+  await prisma.visaApplicationNote.create({
+    data: {
+      applicationId: visaApp4.id,
+      staffId: agentIdentity.staff!.id,
+      note: 'Admission letter confirmed with the university directly — proceeding to embassy submission.',
+    },
+  });
+
+  // 5) Amina — Saudi Pilgrimage, guarantor approved, now processing.
+  const guarantor5 = await prisma.guarantor.create({
+    data: {
+      fullName: 'Yusuf Abdullahi',
+      phone: '+2348000000102',
+      relationship: 'Spouse',
+      idType: 'International Passport',
+      idNumber: 'A00100102',
+      verificationStatus: VerificationStatus.VERIFIED,
+      approvalStatus: ApprovalStatus.APPROVED,
+      acceptedResponsibilityAt: new Date(),
+      verifiedByStaffId: agentIdentity.staff!.id,
+      verificationNote: 'Confirmed by phone and ID document.',
+    },
+  });
+  const visaApp5 = await prisma.visaApplication.create({
+    data: {
+      applicationReference: `VISA-${new Date().getFullYear()}-000005`,
+      customerId: aminaIdentity.customer!.id,
+      destinationCountry: svSaudiPilgrimage.country,
+      visaType: VisaType.PILGRIMAGE,
+      applicantFirstName: 'Amina',
+      applicantLastName: 'Yusuf',
+      applicantPassportNumber: 'A00100101',
+      status: VisaApplicationStatus.PROCESSING,
+      currency: svSaudiPilgrimage.currency,
+      totalAmount: visaTotal(svSaudiPilgrimage),
+      visaServiceId: svSaudiPilgrimage.id,
+      companyCostSnapshot: svSaudiPilgrimage.companyCost,
+      sellingPriceSnapshot: svSaudiPilgrimage.sellingPrice,
+      guarantorRequired: true,
+      guarantorId: guarantor5.id,
+      assignedStaffId: agentIdentity.staff!.id,
+    },
+  });
+  await prisma.invoice.create({
+    data: {
+      invoiceNumber: ref('INV'),
+      customerId: aminaIdentity.customer!.id,
+      visaApplicationId: visaApp5.id,
+      status: InvoiceStatus.PAID,
+      currency: visaApp5.currency,
+      totalAmount: visaApp5.totalAmount,
+      payments: { create: [{ paymentReference: ref('PAY'), amount: visaApp5.totalAmount, method: PaymentMethod.BANK_TRANSFER, recordedByStaffId: financeIdentity.staff!.id }] },
+      lineItems: { create: [{ description: `Pilgrimage visa processing (${visaApp5.applicationReference}) — Saudi Arabia, Amina Yusuf`, amount: visaApp5.totalAmount }] },
+    },
+  });
+
+  // 6) Amina — Saudi Pilgrimage, COMPLETED — the spec's own worked example
+  // end to end: company cost ₦600,000, selling price ₦800,000, margin
+  // ₦200,000, Standard 50% policy -> ₦100,000 incentive, still PENDING approval.
+  const visaApp6 = await prisma.visaApplication.create({
+    data: {
+      applicationReference: `VISA-${new Date().getFullYear()}-000006`,
+      customerId: aminaIdentity.customer!.id,
+      destinationCountry: svSaudiPilgrimage.country,
+      visaType: VisaType.PILGRIMAGE,
+      applicantFirstName: 'Amina',
+      applicantLastName: 'Yusuf',
+      applicantPassportNumber: 'A00100101',
+      status: VisaApplicationStatus.COMPLETED,
+      currency: svSaudiPilgrimage.currency,
+      totalAmount: visaTotal(svSaudiPilgrimage),
+      visaServiceId: svSaudiPilgrimage.id,
+      companyCostSnapshot: svSaudiPilgrimage.companyCost,
+      sellingPriceSnapshot: svSaudiPilgrimage.sellingPrice,
+      guarantorRequired: true,
+      assignedStaffId: agentIdentity.staff!.id,
+    },
+  });
+  await prisma.invoice.create({
+    data: {
+      invoiceNumber: ref('INV'),
+      customerId: aminaIdentity.customer!.id,
+      visaApplicationId: visaApp6.id,
+      status: InvoiceStatus.PAID,
+      currency: visaApp6.currency,
+      totalAmount: visaApp6.totalAmount,
+      payments: { create: [{ paymentReference: ref('PAY'), amount: visaApp6.totalAmount, method: PaymentMethod.BANK_TRANSFER, recordedByStaffId: financeIdentity.staff!.id }] },
+      lineItems: { create: [{ description: `Pilgrimage visa processing (${visaApp6.applicationReference}) — Saudi Arabia, Amina Yusuf`, amount: visaApp6.totalAmount }] },
+    },
+  });
+  const margin6 = svSaudiPilgrimage.sellingPrice - svSaudiPilgrimage.companyCost;
+  await prisma.staffIncentive.create({
+    data: {
+      staffId: agentIdentity.staff!.id,
+      sourceType: 'VISA_APPLICATION',
+      sourceId: visaApp6.id,
+      amount: Math.round((margin6 * 50) / 100),
+      currency: visaApp6.currency,
+      description: `Incentive on visa application ${visaApp6.applicationReference}`,
+      status: IncentiveStatus.PENDING,
+      referenceNumber: ref('INC'),
+      companyCost: svSaudiPilgrimage.companyCost,
+      sellingPrice: svSaudiPilgrimage.sellingPrice,
+      margin: margin6,
+      policyId: standardPolicy.id,
+      customerId: aminaIdentity.customer!.id,
+    },
+  });
+
+  // 7) Chinedu — UK Tourist, COMPLETED, incentive already APPROVED by
+  // Finance, awaiting payout.
+  const visaApp7 = await prisma.visaApplication.create({
+    data: {
+      applicationReference: `VISA-${new Date().getFullYear()}-000007`,
+      customerId: chineduIdentity.customer!.id,
+      destinationCountry: svUkTourist.country,
+      visaType: VisaType.TOURIST,
+      applicantFirstName: 'Chinedu',
+      applicantLastName: 'Okafor',
+      applicantPassportNumber: 'A00200201',
+      status: VisaApplicationStatus.COMPLETED,
+      currency: svUkTourist.currency,
+      totalAmount: visaTotal(svUkTourist),
+      visaServiceId: svUkTourist.id,
+      companyCostSnapshot: svUkTourist.companyCost,
+      sellingPriceSnapshot: svUkTourist.sellingPrice,
+      guarantorRequired: true,
+      guarantorExempt: true,
+      guarantorExemptReason: 'Repeat customer, previously approved guarantor on file',
+      assignedStaffId: agentIdentity.staff!.id,
+    },
+  });
+  await prisma.invoice.create({
+    data: {
+      invoiceNumber: ref('INV'),
+      customerId: chineduIdentity.customer!.id,
+      visaApplicationId: visaApp7.id,
+      status: InvoiceStatus.PAID,
+      currency: visaApp7.currency,
+      totalAmount: visaApp7.totalAmount,
+      payments: { create: [{ paymentReference: ref('PAY'), amount: visaApp7.totalAmount, method: PaymentMethod.CARD, recordedByStaffId: financeIdentity.staff!.id }] },
+      lineItems: { create: [{ description: `Tourist visa processing (${visaApp7.applicationReference}) — United Kingdom, Chinedu Okafor`, amount: visaApp7.totalAmount }] },
+    },
+  });
+  const margin7 = svUkTourist.sellingPrice - svUkTourist.companyCost;
+  await prisma.staffIncentive.create({
+    data: {
+      staffId: agentIdentity.staff!.id,
+      sourceType: 'VISA_APPLICATION',
+      sourceId: visaApp7.id,
+      amount: margin7, // FULL_MARGIN policy
+      currency: visaApp7.currency,
+      description: `Incentive on visa application ${visaApp7.applicationReference}`,
+      status: IncentiveStatus.APPROVED,
+      referenceNumber: ref('INC'),
+      companyCost: svUkTourist.companyCost,
+      sellingPrice: svUkTourist.sellingPrice,
+      margin: margin7,
+      policyId: fullMarginPolicy.id,
+      customerId: chineduIdentity.customer!.id,
+      approvedByStaffId: financeIdentity.staff!.id,
+      approvedAt: new Date(),
+    },
+  });
+
+  // 8) Amina — a second completed Saudi Pilgrimage, incentive PAID out via
+  // a successful mock payout — demonstrates the full payable lifecycle.
+  const visaApp8 = await prisma.visaApplication.create({
+    data: {
+      applicationReference: `VISA-${new Date().getFullYear()}-000008`,
+      customerId: aminaIdentity.customer!.id,
+      familyMemberId: child1.id,
+      destinationCountry: svSaudiPilgrimage.country,
+      visaType: VisaType.PILGRIMAGE,
+      applicantFirstName: child1.firstName,
+      applicantLastName: child1.lastName,
+      applicantPassportNumber: child1.passportNumber,
+      status: VisaApplicationStatus.COMPLETED,
+      currency: svSaudiPilgrimage.currency,
+      totalAmount: visaTotal(svSaudiPilgrimage),
+      visaServiceId: svSaudiPilgrimage.id,
+      companyCostSnapshot: svSaudiPilgrimage.companyCost,
+      sellingPriceSnapshot: svSaudiPilgrimage.sellingPrice,
+      guarantorRequired: true,
+      guarantorExempt: true,
+      guarantorExemptReason: 'Minor traveling with a parent already on file as guarantor',
+      assignedStaffId: agentIdentity.staff!.id,
+    },
+  });
+  await prisma.invoice.create({
+    data: {
+      invoiceNumber: ref('INV'),
+      customerId: aminaIdentity.customer!.id,
+      visaApplicationId: visaApp8.id,
+      status: InvoiceStatus.PAID,
+      currency: visaApp8.currency,
+      totalAmount: visaApp8.totalAmount,
+      payments: { create: [{ paymentReference: ref('PAY'), amount: visaApp8.totalAmount, method: PaymentMethod.WALLET, recordedByStaffId: financeIdentity.staff!.id }] },
+      lineItems: { create: [{ description: `Pilgrimage visa processing (${visaApp8.applicationReference}) — Saudi Arabia, ${child1.firstName} ${child1.lastName}`, amount: visaApp8.totalAmount }] },
+    },
+  });
+  const margin8 = svSaudiPilgrimage.sellingPrice - svSaudiPilgrimage.companyCost;
+  const incentive8 = await prisma.staffIncentive.create({
+    data: {
+      staffId: agentIdentity.staff!.id,
+      sourceType: 'VISA_APPLICATION',
+      sourceId: visaApp8.id,
+      amount: Math.round((margin8 * 50) / 100),
+      currency: visaApp8.currency,
+      description: `Incentive on visa application ${visaApp8.applicationReference}`,
+      status: IncentiveStatus.PAID,
+      referenceNumber: ref('INC'),
+      companyCost: svSaudiPilgrimage.companyCost,
+      sellingPrice: svSaudiPilgrimage.sellingPrice,
+      margin: margin8,
+      policyId: standardPolicy.id,
+      customerId: aminaIdentity.customer!.id,
+      approvedByStaffId: financeIdentity.staff!.id,
+      approvedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
+    },
+  });
+  await prisma.staffPayout.create({
+    data: {
+      incentiveId: incentive8.id,
+      staffId: agentIdentity.staff!.id,
+      amount: incentive8.amount,
+      currency: incentive8.currency,
+      status: PayoutStatus.SUCCESSFUL,
+      provider: 'mock',
+      providerReference: `MOCKPAY-${randomBytes(4).toString('hex').toUpperCase()}`,
+      requestedByStaffId: financeIdentity.staff!.id,
+    },
+  });
+
+  // 9) An offline/manual transaction, processed by phone — completed, with
+  // its own PENDING incentive requiring approval like any other (see the
+  // module doc comment: manual transactions never skip approval).
+  const visaApp9 = await prisma.visaApplication.create({
+    data: {
+      applicationReference: `VISA-${new Date().getFullYear()}-000009`,
+      customerId: chineduIdentity.customer!.id,
+      destinationCountry: svSaudiPilgrimage.country,
+      visaType: VisaType.PILGRIMAGE,
+      applicantFirstName: 'Chinedu',
+      applicantLastName: 'Okafor',
+      applicantPassportNumber: 'A00200201',
+      status: VisaApplicationStatus.COMPLETED,
+      currency: svSaudiPilgrimage.currency,
+      totalAmount: visaTotal(svSaudiPilgrimage),
+      visaServiceId: svSaudiPilgrimage.id,
+      companyCostSnapshot: svSaudiPilgrimage.companyCost,
+      sellingPriceSnapshot: svSaudiPilgrimage.sellingPrice,
+      guarantorRequired: true,
+      guarantorExempt: true,
+      guarantorExemptReason: 'Processed entirely offline — see offlineReason',
+      isOfflineEntry: true,
+      offlineReason: 'Customer called in and paid cash at the branch; processed by phone, no portal submission.',
+      appliedByStaffId: agentIdentity.staff!.id,
+      assignedStaffId: agentIdentity.staff!.id,
+    },
+  });
+  await prisma.invoice.create({
+    data: {
+      invoiceNumber: ref('INV'),
+      customerId: chineduIdentity.customer!.id,
+      visaApplicationId: visaApp9.id,
+      status: InvoiceStatus.PAID,
+      currency: visaApp9.currency,
+      totalAmount: visaApp9.totalAmount,
+      issuedByStaffId: agentIdentity.staff!.id,
+      payments: { create: [{ paymentReference: ref('PAY'), amount: visaApp9.totalAmount, method: PaymentMethod.CASH, note: 'Cash at branch — offline entry', recordedByStaffId: financeIdentity.staff!.id }] },
+      lineItems: { create: [{ description: `Pilgrimage visa processing (${visaApp9.applicationReference}) — Saudi Arabia, Chinedu Okafor [OFFLINE]`, amount: visaApp9.totalAmount }] },
+    },
+  });
+  const margin9 = svSaudiPilgrimage.sellingPrice - svSaudiPilgrimage.companyCost;
+  const incentive9 = await prisma.staffIncentive.create({
+    data: {
+      staffId: agentIdentity.staff!.id,
+      sourceType: 'VISA_APPLICATION',
+      sourceId: visaApp9.id,
+      amount: Math.round((margin9 * 50) / 100),
+      currency: visaApp9.currency,
+      description: `Incentive on visa application ${visaApp9.applicationReference} (offline transaction)`,
+      status: IncentiveStatus.APPROVED,
+      referenceNumber: ref('INC'),
+      companyCost: svSaudiPilgrimage.companyCost,
+      sellingPrice: svSaudiPilgrimage.sellingPrice,
+      margin: margin9,
+      policyId: standardPolicy.id,
+      customerId: chineduIdentity.customer!.id,
+      approvedByStaffId: financeIdentity.staff!.id,
+      approvedAt: new Date(),
+    },
+  });
+  await prisma.staffPayout.create({
+    data: {
+      incentiveId: incentive9.id,
+      staffId: agentIdentity.staff!.id,
+      amount: incentive9.amount,
+      currency: incentive9.currency,
+      status: PayoutStatus.FAILED,
+      provider: 'mock',
+      providerError: 'Bank rejected the transfer: account number could not be verified',
+      requestedByStaffId: financeIdentity.staff!.id,
+    },
+  });
+
+  // 10) Amina — Canada Student, REJECTED (insufficient funds).
+  await prisma.visaApplication.create({
+    data: {
+      applicationReference: `VISA-${new Date().getFullYear()}-000010`,
+      customerId: aminaIdentity.customer!.id,
+      familyMemberId: child1.id,
+      destinationCountry: svCanadaStudent.country,
+      visaType: VisaType.STUDENT,
+      applicantFirstName: child1.firstName,
+      applicantLastName: child1.lastName,
+      applicantPassportNumber: child1.passportNumber,
+      status: VisaApplicationStatus.REJECTED,
+      staffNote: 'Insufficient proof of funds to support the full duration of study.',
+      currency: svCanadaStudent.currency,
+      totalAmount: visaTotal(svCanadaStudent),
+      visaServiceId: svCanadaStudent.id,
+      companyCostSnapshot: svCanadaStudent.companyCost,
+      sellingPriceSnapshot: svCanadaStudent.sellingPrice,
+      guarantorRequired: false,
+      assignedStaffId: agentIdentity.staff!.id,
+    },
+  });
+
+  // 11) Chinedu — cancelled by the customer before payment.
+  await prisma.visaApplication.create({
+    data: {
+      applicationReference: `VISA-${new Date().getFullYear()}-000011`,
+      customerId: chineduIdentity.customer!.id,
+      destinationCountry: svUkTourist.country,
+      visaType: VisaType.TOURIST,
+      applicantFirstName: 'Chinedu',
+      applicantLastName: 'Okafor',
+      applicantPassportNumber: 'A00200201',
+      status: VisaApplicationStatus.CANCELLED,
+      currency: svUkTourist.currency,
+      totalAmount: visaTotal(svUkTourist),
+      visaServiceId: svUkTourist.id,
+      companyCostSnapshot: svUkTourist.companyCost,
+      sellingPriceSnapshot: svUkTourist.sellingPrice,
+      guarantorRequired: true,
+    },
+  });
+
+  console.log(
+    'Created 11 visa applications across 9 statuses (AWAITING_GUARANTOR, GUARANTOR_VERIFICATION, ' +
+      'PAYMENT_PENDING, UNDER_REVIEW, PROCESSING, COMPLETED x4, REJECTED, CANCELLED), 2 guarantors, ' +
+      '1 document, 4 staff incentives (PENDING/APPROVED/PAID/APPROVED) and 2 payouts (SUCCESSFUL/FAILED)',
+  );
+
+  console.log('--------------------------------------------------------');
+  console.log('Phase 3 visa demo data seeded successfully.');
+  console.log('  Visa officer: fatima.sule@demo.alnajoum.travel (has bank details on file)');
+  console.log('  Finance:      ibrahim.musa@demo.alnajoum.travel');
+  console.log('--------------------------------------------------------');
+}
+
+async function main() {
+  await seedPhase1And2();
+  await seedPhase3Visa();
 }
 
 main()

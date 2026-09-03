@@ -450,6 +450,115 @@ export class NotificationsService {
     );
   }
 
+  /** Fired when a guarantor is approved or rejected — see GuarantorsService.verify. */
+  async sendGuarantorUpdate(
+    email: string,
+    identityId: string,
+    details: {
+      applicationReference: string;
+      approved: boolean;
+      note?: string | null;
+    },
+  ): Promise<void> {
+    const subject = `Guarantor ${details.approved ? 'approved' : 'rejected'}: ${details.applicationReference}`;
+    const body = [
+      details.approved
+        ? `The guarantor for your visa application ${details.applicationReference} has been verified and approved. Your application now moves to review.`
+        : `The guarantor for your visa application ${details.applicationReference} was rejected. Please provide a new guarantor.`,
+      details.note ? `\nNote: ${details.note}` : '',
+    ].join('\n');
+    await this.send(
+      details.approved
+        ? NotificationType.GUARANTOR_APPROVED
+        : NotificationType.GUARANTOR_REJECTED,
+      email,
+      subject,
+      body,
+      identityId,
+    );
+  }
+
+  /** Fired when a visa application first requires a guarantor. */
+  async sendGuarantorRequired(
+    email: string,
+    identityId: string,
+    applicationReference: string,
+  ): Promise<void> {
+    const subject = `Guarantor required: ${applicationReference}`;
+    const body = `Your visa application ${applicationReference} requires a guarantor before it can proceed. Please provide their details from your portal.`;
+    await this.send(
+      NotificationType.GUARANTOR_REQUIRED,
+      email,
+      subject,
+      body,
+      identityId,
+    );
+  }
+
+  /** Fired by VisaDocumentsService.checkExpiring() for a document already expired or expiring soon. */
+  async sendDocumentExpiryNotice(
+    email: string,
+    identityId: string,
+    details: {
+      applicationReference: string;
+      documentType: string;
+      expiryDate: string;
+      isExpired: boolean;
+    },
+  ): Promise<void> {
+    const subject = `Document ${details.isExpired ? 'expired' : 'expiring soon'}: ${details.applicationReference}`;
+    const body = `The ${details.documentType.replace(/_/g, ' ').toLowerCase()} document on visa application ${details.applicationReference} ${details.isExpired ? 'expired on' : 'expires on'} ${details.expiryDate.slice(0, 10)}. ${details.isExpired ? 'Please upload a replacement.' : 'Please upload a replacement soon to avoid delays.'}`;
+    await this.send(
+      NotificationType.VISA_DOCUMENT_EXPIRING,
+      email,
+      subject,
+      body,
+      identityId,
+    );
+  }
+
+  /** Fired on every StaffIncentive status transition (generated/approved/paid). */
+  async sendIncentiveUpdate(
+    email: string,
+    identityId: string,
+    details: {
+      referenceNumber: string;
+      amount: number;
+      currency: string;
+      status: 'GENERATED' | 'APPROVED' | 'PAID';
+    },
+  ): Promise<void> {
+    const type = {
+      GENERATED: NotificationType.INCENTIVE_GENERATED,
+      APPROVED: NotificationType.INCENTIVE_APPROVED,
+      PAID: NotificationType.INCENTIVE_PAID,
+    }[details.status];
+    const verb = {
+      GENERATED: 'generated for you',
+      APPROVED: 'approved',
+      PAID: 'paid out to your bank account on file',
+    }[details.status];
+    const subject = `Incentive ${details.status.toLowerCase()}: ${details.referenceNumber}`;
+    const body = `An incentive of ${details.currency} ${details.amount} (${details.referenceNumber}) has been ${verb}.`;
+    await this.send(type, email, subject, body, identityId);
+  }
+
+  /** Free-form email for cases with no dedicated NotificationType (e.g. finance payout-failure alerts) — recorded as CONTACT_MESSAGE for audit purposes since that's the closest existing catch-all. */
+  async sendGeneric(
+    email: string,
+    identityId: string,
+    subject: string,
+    body: string,
+  ): Promise<void> {
+    await this.send(
+      NotificationType.CONTACT_MESSAGE,
+      email,
+      subject,
+      body,
+      identityId,
+    );
+  }
+
   listAll(filters: { type?: NotificationType; status?: NotificationStatus }) {
     return this.prisma.notification.findMany({
       where: filters,

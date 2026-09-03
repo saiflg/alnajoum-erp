@@ -27,4 +27,28 @@ export class SubmitVisaApplicationDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  // --- Phase 3 additions ---
+
+  /**
+   * Links this application to a VisaService catalog entry — enables the
+   * richer workflow (costing snapshot, guarantor requirement, incentive
+   * eligibility). Omit to keep the simpler Phase 2 flat-fee flow exactly
+   * as it was.
+   */
+  @IsOptional()
+  @IsString()
+  visaServiceId?: string;
+
+  @IsOptional()
+  @IsString()
+  contactPhone?: string;
+
+  @IsOptional()
+  @IsString()
+  contactEmail?: string;
+
+  @IsOptional()
+  @IsString()
+  previousVisaInfo?: string;
 }

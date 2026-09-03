@@ -117,6 +117,27 @@ export const PERMISSIONS = {
     READ: 'integrations:read',
     MANAGE: 'integrations:manage',
   },
+  // Phase 3 — enterprise visa management. Names follow the spec's own
+  // `visa.<action>` scheme (dot-separated) rather than this file's usual
+  // `<module>:<action>` convention — the two are otherwise equivalent
+  // (Permission.key is just an opaque unique string to the RBAC engine),
+  // kept dotted here specifically so they match the spec's literal
+  // permission list.
+  VISA: {
+    VIEW: 'visa.view', // read applications, the VisaService catalog, and their documents
+    CREATE: 'visa.create', // submit an application on a customer's behalf; create VisaService catalog entries
+    EDIT: 'visa.edit', // edit a VisaService catalog entry or an in-progress application
+    ASSIGN: 'visa.assign', // assign an application to a visa officer
+    REVIEW: 'visa.review', // move an application through the working statuses (under review, processing, ...)
+    APPROVE: 'visa.approve', // approve an application
+    REJECT: 'visa.reject', // reject an application
+    DOCUMENT_REVIEW: 'visa.document.review', // verify/reject an uploaded document
+    GUARANTOR_VERIFY: 'visa.guarantor.verify', // verify/approve/reject a guarantor
+    PAYMENT_VERIFY: 'visa.payment.verify', // mark an application's payment as verified
+    INCENTIVE_VIEW: 'visa.incentive.view', // view incentive records (company cost, margin, amounts)
+    INCENTIVE_APPROVE: 'visa.incentive.approve', // approve/reject a pending incentive
+    PAYOUT_APPROVE: 'visa.payout.approve', // trigger/retry an incentive payout
+  },
 } as const;
 
 export const ALL_PERMISSION_KEYS: string[] = Object.values(PERMISSIONS).flatMap(

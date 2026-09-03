@@ -3,6 +3,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { InvoiceStatus } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { VisaDocumentsService } from '../visa/visa-documents.service';
 
 const OVERDUE_AFTER_DAYS = 14;
 const REQUIRED_DOCUMENT_TYPES = ['PASSPORT', 'PHOTO'] as const;
@@ -27,9 +28,10 @@ export class RemindersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
+    private readonly visaDocumentsService: VisaDocumentsService,
   ) {}
 
-  /** Daily at 08:00 server time — installment/overdue/missing-document sweep. */
+  /** Daily at 08:00 server time — installment/overdue/missing-document/visa-document-expiry sweep. */
   @Cron(CronExpression.EVERY_DAY_AT_8AM)
   async runScheduled(): Promise<void> {
     this.logger.log('Running scheduled reminder sweep');
@@ -40,11 +42,13 @@ export class RemindersService {
   }
 
   async runAll() {
-    const [installmentReminders, documentReminders] = await Promise.all([
-      this.sendInstallmentAndOverdueReminders(),
-      this.sendDocumentMissingReminders(),
-    ]);
-    return { ...installmentReminders, documentReminders };
+    const [installmentReminders, documentReminders, visaDocumentExpiry] =
+      await Promise.all([
+        this.sendInstallmentAndOverdueReminders(),
+        this.sendDocumentMissingReminders(),
+        this.visaDocumentsService.checkExpiring(),
+      ]);
+    return { ...installmentReminders, documentReminders, visaDocumentExpiry };
   }
 
   /** One outstanding-balance invoice → one reminder, tagged overdue past OVERDUE_AFTER_DAYS since issue. */

@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { IncentiveStatus } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 
 interface IncentiveRule {
@@ -59,6 +60,11 @@ export class IncentivesService {
           amount,
           currency: invoice.currency,
           description: `${percent}% incentive on ${invoice.currency} ${paymentAmount} payment for ${registration.registrationNumber}`,
+          // Informational-only, exactly as before Phase 3 added the
+          // PENDING -> APPROVED -> PAID workflow for visa incentives — this
+          // one was never gated behind approval, so it's recorded already
+          // settled rather than defaulting to PENDING.
+          status: IncentiveStatus.PAID,
         },
       });
     } catch (error) {
