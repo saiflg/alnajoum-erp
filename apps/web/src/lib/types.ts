@@ -67,7 +67,13 @@ export type DocumentType =
   | 'PHOTO'
   | 'VACCINATION_CERTIFICATE'
   | 'BIRTH_CERTIFICATE'
-  | 'OTHER';
+  | 'OTHER'
+  | 'BANK_STATEMENT'
+  | 'INVITATION_LETTER'
+  | 'HOTEL_BOOKING'
+  | 'FLIGHT_ITINERARY'
+  | 'GUARANTOR_ID'
+  | 'GUARANTOR_DOCUMENT';
 
 export interface CustomerDocument {
   id: string;
@@ -478,6 +484,8 @@ export interface ManualPaymentSubmission {
   reviewedByStaff?: { firstName: string; lastName: string } | null;
 }
 
+export type IncentiveStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'PAID';
+
 export interface StaffIncentive {
   id: string;
   staffId: string;
@@ -487,6 +495,54 @@ export interface StaffIncentive {
   currency: string;
   description: string;
   createdAt: string;
+  status: IncentiveStatus;
+  referenceNumber: string | null;
+  companyCost: number | null;
+  sellingPrice: number | null;
+  margin: number | null;
+  policyId: string | null;
+  customerId: string | null;
+  approvedByStaffId: string | null;
+  approvedAt: string | null;
+  rejectionReason: string | null;
+  staff?: { firstName: string; lastName: string; employeeCode: string };
+  customer?: { firstName: string; lastName: string };
+  payout?: StaffPayout | null;
+}
+
+export type IncentivePolicyType =
+  | 'FULL_MARGIN'
+  | 'PERCENT_OF_MARGIN'
+  | 'FIXED_AMOUNT'
+  | 'STAFF_COMPANY_SPLIT'
+  | 'STAFF_BRANCH_COMPANY_SPLIT'
+  | 'CUSTOM';
+
+export interface IncentivePolicy {
+  id: string;
+  name: string;
+  type: IncentivePolicyType;
+  config: { percent?: number; amount?: number; staffPercent?: number; branchPercent?: number };
+  isDefault: boolean;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export type PayoutStatus = 'PENDING' | 'PROCESSING' | 'SUCCESSFUL' | 'FAILED';
+
+export interface StaffPayout {
+  id: string;
+  incentiveId: string;
+  staffId: string;
+  amount: number;
+  currency: string;
+  status: PayoutStatus;
+  provider: string;
+  providerReference: string | null;
+  providerError: string | null;
+  createdAt: string;
+  staff?: { firstName: string; lastName: string; employeeCode: string };
+  incentive?: StaffIncentive;
 }
 
 // ---------------------------------------------------------------------------
@@ -616,13 +672,120 @@ export type VisaType =
   | 'OTHER';
 
 export type VisaApplicationStatus =
+  // Phase 2
   | 'SUBMITTED'
   | 'IN_REVIEW'
   | 'ADDITIONAL_DOCUMENTS_REQUIRED'
   | 'APPROVED'
   | 'REJECTED'
   | 'ISSUED'
-  | 'CANCELLED';
+  | 'CANCELLED'
+  // Phase 3 — catalog-linked applications use this richer set
+  | 'DRAFT'
+  | 'AWAITING_DOCUMENTS'
+  | 'AWAITING_GUARANTOR'
+  | 'GUARANTOR_VERIFICATION'
+  | 'PAYMENT_PENDING'
+  | 'PAYMENT_VERIFIED'
+  | 'UNDER_REVIEW'
+  | 'SUBMITTED_TO_PROVIDER'
+  | 'PROCESSING'
+  | 'ADDITIONAL_INFO_REQUIRED'
+  | 'COMPLETED';
+
+export type VisaServiceStatus = 'DRAFT' | 'ACTIVE' | 'SUSPENDED' | 'CLOSED' | 'ARCHIVED';
+
+export interface VisaService {
+  id: string;
+  serviceCode: string;
+  country: string;
+  visaType: string;
+  visaCategory: string | null;
+  description: string | null;
+  processingTime: string | null;
+  validityPeriod: string | null;
+  entryType: string | null;
+  requiredDocuments: string | null;
+  supplierName: string | null;
+  supplierCost: number | null;
+  companyCost: number;
+  sellingPrice: number;
+  margin: number;
+  currency: string;
+  processingFee: number;
+  otherFees: number;
+  incentivePolicyId: string | null;
+  incentivePolicy?: IncentivePolicy | null;
+  termsAndConditions: string | null;
+  isAvailable: boolean;
+  requiresGuarantor: boolean;
+  status: VisaServiceStatus;
+  createdAt: string;
+}
+
+/** Customer-facing shape — no cost/margin fields (see VisaPublicController on the API side). */
+export interface PublicVisaService {
+  id: string;
+  serviceCode: string;
+  country: string;
+  visaType: string;
+  visaCategory: string | null;
+  description: string | null;
+  processingTime: string | null;
+  validityPeriod: string | null;
+  entryType: string | null;
+  requiredDocuments: string | null;
+  currency: string;
+  price: number;
+  termsAndConditions: string | null;
+}
+
+export type VerificationStatus = 'PENDING' | 'VERIFIED' | 'REJECTED';
+export type ApprovalStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+
+export interface Guarantor {
+  id: string;
+  fullName: string;
+  phone: string;
+  whatsapp: string | null;
+  email: string | null;
+  address: string | null;
+  relationship: string;
+  idType: string | null;
+  idNumber: string | null;
+  verificationStatus: VerificationStatus;
+  approvalStatus: ApprovalStatus;
+  acceptedResponsibilityAt: string | null;
+  verificationNote: string | null;
+  createdAt: string;
+}
+
+export type VisaDocumentStatus = 'PENDING_REVIEW' | 'VERIFIED' | 'REJECTED' | 'EXPIRED';
+
+export interface VisaDocument {
+  id: string;
+  applicationId: string | null;
+  guarantorId: string | null;
+  type: DocumentType;
+  originalFileName: string;
+  storedFileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  expiryDate: string | null;
+  status: VisaDocumentStatus;
+  reviewNote: string | null;
+  reviewedAt: string | null;
+  createdAt: string;
+}
+
+export interface VisaApplicationNote {
+  id: string;
+  applicationId: string;
+  staffId: string;
+  note: string;
+  createdAt: string;
+  staff?: { firstName: string; lastName: string };
+}
 
 export interface VisaApplication {
   id: string;
@@ -643,6 +806,21 @@ export interface VisaApplication {
   createdAt: string;
   invoice?: Invoice | null;
   customer?: { firstName: string; lastName: string };
+  // Phase 3
+  visaServiceId: string | null;
+  visaService?: Omit<VisaService, 'companyCost' | 'supplierCost' | 'supplierName' | 'incentivePolicyId' | 'incentivePolicy'> | null;
+  guarantorId: string | null;
+  guarantor?: Guarantor | null;
+  guarantorRequired: boolean;
+  guarantorExempt: boolean;
+  guarantorExemptReason: string | null;
+  previousVisaInfo: string | null;
+  contactPhone: string | null;
+  contactEmail: string | null;
+  isOfflineEntry: boolean;
+  offlineReason: string | null;
+  assignedStaffId: string | null;
+  assignedStaff?: { firstName: string; lastName: string } | null;
 }
 
 // ---------------------------------------------------------------------------
