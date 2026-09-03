@@ -24,6 +24,10 @@ echo "==> Applying database migrations"
 docker compose -f docker-compose.prod.yml --env-file .env.prod run --rm \
   api npx prisma migrate deploy
 
+echo "==> Seeding permission catalogue + role grants (idempotent, no demo data)"
+docker compose -f docker-compose.prod.yml --env-file .env.prod run --rm \
+  api npx prisma db seed
+
 echo "==> Restarting services"
 docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
 
