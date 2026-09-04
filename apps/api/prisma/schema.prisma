@@ -3670,8 +3670,9 @@ model HajjGroup {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  pilgrims   HajjRegistrationPilgrim[]
-  transports Transport[]
+  pilgrims        HajjRegistrationPilgrim[]
+  transports      Transport[]
+  roomAllocations RoomAllocation[]
 
   @@index([packageId])
   @@index([status])
@@ -3710,8 +3711,9 @@ model UmrahGroup {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  pilgrims   UmrahRegistrationPilgrim[]
-  transports Transport[]
+  pilgrims        UmrahRegistrationPilgrim[]
+  transports      Transport[]
+  roomAllocations RoomAllocation[]
 
   @@index([packageId])
   @@index([status])
@@ -3889,4 +3891,57 @@ model PilgrimReadinessOverride {
 
   @@index([pilgrimType, pilgrimId])
   @@map("pilgrim_readiness_overrides")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 8 continued — room allocation, group manifest support.
+// Deliberately a lightweight, group-scoped room roster rather than wiring
+// into the Phase 5 Hotel/HotelRoomType catalog: HajjPackage/UmrahPackage's
+// `hotel` field has always been free text (packages aren't booked through
+// the catalog), so a room here is identified by hotelName/roomNumber, not a
+// HotelRoomType id. Capacity conflicts are prevented at the application
+// layer (RoomAllocationService.assign), not a DB constraint, since the room
+// "capacity" is data (varies per room), not a fixed schema shape.
+// ---------------------------------------------------------------------------
+
+model RoomAllocation {
+  id String @id @default(cuid())
+
+  hajjGroupId  String?
+  hajjGroup    HajjGroup?  @relation(fields: [hajjGroupId], references: [id], onDelete: Cascade)
+  umrahGroupId String?
+  umrahGroup   UmrahGroup? @relation(fields: [umrahGroupId], references: [id], onDelete: Cascade)
+
+  hotelName  String
+  roomType   String? // e.g. "Double", "Quad" — free text, matches package.hotel's own convention
+  roomNumber String
+  capacity   Int     @default(2)
+
+  occupants RoomAllocationOccupant[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([hajjGroupId])
+  @@index([umrahGroupId])
+  @@map("room_allocations")
+}
+
+model RoomAllocationOccupant {
+  id               String         @id @default(cuid())
+  roomAllocationId String
+  roomAllocation   RoomAllocation @relation(fields: [roomAllocationId], references: [id], onDelete: Cascade)
+
+  pilgrimType PilgrimType
+  pilgrimId   String
+
+  checkedInAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  // A pilgrim occupies at most one room per allocation batch — same pilgrim
+  // can't be double-booked into two rooms of the same group.
+  @@unique([roomAllocationId, pilgrimType, pilgrimId])
+  @@index([pilgrimType, pilgrimId])
+  @@map("room_allocation_occupants")
 }

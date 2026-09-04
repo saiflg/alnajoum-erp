@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { AppShell } from '@/components/AppShell';
+import { PilgrimStatusCard } from '@/components/PilgrimStatusCard';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { apiRequest, ApiError } from '@/lib/api';
 import { formatCurrency, formatDateTime } from '@/lib/format';
@@ -180,6 +181,9 @@ export default function HajjPage() {
                     {formatCurrency(paid, reg.currency)} of {formatCurrency(reg.totalAmount, reg.currency)} paid ({pct}%)
                   </p>
                 </div>
+                {reg.pilgrims.map((p) => (
+                  <PilgrimStatusCard key={p.id} type="HAJJ" pilgrimId={p.id} name={`${p.firstName} ${p.lastName}`} />
+                ))}
               </div>
             );
           })}

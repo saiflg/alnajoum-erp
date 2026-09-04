@@ -2861,6 +2861,26 @@ async function seedPhase8HajjOps() {
     },
   });
 
+  // --- Room allocation: a quad room in Makkah, 2 of 3 Hajj pilgrims placed ---
+  const makkahRoom = await prisma.roomAllocation.create({
+    data: {
+      hajjGroupId: hajjGroup.id,
+      hotelName: 'Hilton Suites Makkah',
+      roomType: 'Quad',
+      roomNumber: '412',
+      capacity: 4,
+    },
+  });
+  for (const pilgrim of hajjRegistration.pilgrims.slice(0, 2)) {
+    await prisma.roomAllocationOccupant.create({
+      data: {
+        roomAllocationId: makkahRoom.id,
+        pilgrimType: 'HAJJ',
+        pilgrimId: pilgrim.id,
+      },
+    });
+  }
+
   // --- QR code + check-in: Chinedu is already checked in for his group ----
   const umrahPilgrim = umrahRegistration.pilgrims[0];
   const pilgrimCode = `PLG-${randomBytes(6).toString('hex').toUpperCase()}`;
@@ -2879,7 +2899,7 @@ async function seedPhase8HajjOps() {
   });
 
   console.log(
-    `Created Hajj group ${hajjGroup.groupNumber} (3 pilgrims, 1 readiness override) and Umrah group ${umrahGroup.groupNumber} ` +
+    `Created Hajj group ${hajjGroup.groupNumber} (3 pilgrims, 1 readiness override, 1 room with 2 occupants) and Umrah group ${umrahGroup.groupNumber} ` +
       `(1 pilgrim, checked in, QR code ${pilgrimCode}), 1 vehicle, 1 driver, 1 airport transfer.`,
   );
   console.log('--------------------------------------------------------');
