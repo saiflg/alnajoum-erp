@@ -8,10 +8,20 @@ import { apiRequest, ApiError } from '@/lib/api';
 import { formatCurrency, formatDateTime } from '@/lib/format';
 import { HotelBooking, HotelBookingStatus } from '@/lib/types';
 
-const STATUSES: Array<HotelBookingStatus | ''> = ['', 'PENDING', 'CONFIRMED', 'CANCELLED'];
+const STATUSES: Array<HotelBookingStatus | ''> = [
+  '',
+  'PENDING',
+  'CONFIRMED',
+  'COMPLETED',
+  'REFUND_REQUESTED',
+  'REFUNDED',
+  'CANCELLED',
+];
 
 const STATUS_STYLES: Record<string, string> = {
   CONFIRMED: 'bg-green-100 text-green-700',
+  COMPLETED: 'bg-blue-100 text-blue-700',
+  REFUNDED: 'bg-purple-100 text-purple-700',
   CANCELLED: 'bg-slate-100 text-slate-500',
   PENDING: 'bg-amber-100 text-amber-700',
 };
@@ -41,6 +51,29 @@ export default function AdminHotelBookingsPage() {
       setError(err instanceof ApiError ? err.message : 'Failed to cancel');
     } finally {
       setCancellingId(null);
+    }
+  }
+
+  async function handleComplete(id: string) {
+    if (!confirm('Confirm this booking is complete? This fires the staff incentive.')) return;
+    try {
+      await apiRequest(`/hotels/bookings/${id}/complete`, { method: 'POST' });
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to complete');
+    }
+  }
+
+  async function handleRefund(id: string) {
+    try {
+      const preview = await apiRequest<{ estimatedRefundAmount: number; currency: string }>(
+        `/hotels/bookings/${id}/refund-preview`,
+      );
+      if (!confirm(`Refund ${formatCurrency(preview.estimatedRefundAmount, preview.currency)} to the customer?`)) return;
+      await apiRequest(`/hotels/bookings/${id}/refund`, { method: 'POST', body: {} });
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to refund');
     }
   }
 
@@ -102,14 +135,30 @@ export default function AdminHotelBookingsPage() {
                       {b.status}
                     </span>
                   </td>
-                  <td className="px-4 py-2 text-right">
+                  <td className="px-4 py-2 text-right space-x-3">
                     {b.status === 'CONFIRMED' && (
+                      <>
+                        <button
+                          onClick={() => handleComplete(b.id)}
+                          className="font-medium text-blue-700 hover:underline"
+                        >
+                          Complete
+                        </button>
+                        <button
+                          onClick={() => handleCancel(b.id)}
+                          disabled={cancellingId === b.id}
+                          className="font-medium text-slate-700 hover:underline disabled:opacity-50"
+                        >
+                          {cancellingId === b.id ? 'Cancelling…' : 'Cancel'}
+                        </button>
+                      </>
+                    )}
+                    {b.status === 'COMPLETED' && (
                       <button
-                        onClick={() => handleCancel(b.id)}
-                        disabled={cancellingId === b.id}
-                        className="font-medium text-slate-700 hover:underline disabled:opacity-50"
+                        onClick={() => handleRefund(b.id)}
+                        className="font-medium text-purple-700 hover:underline"
                       >
-                        {cancellingId === b.id ? 'Cancelling…' : 'Cancel'}
+                        Refund
                       </button>
                     )}
                   </td>

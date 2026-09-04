@@ -659,11 +659,17 @@ export interface IntegrationProvider {
 // Hotels
 // ---------------------------------------------------------------------------
 
-export type HotelBookingStatus = 'PENDING' | 'CONFIRMED' | 'CANCELLED';
+export type HotelBookingStatus =
+  | 'PENDING'
+  | 'CONFIRMED'
+  | 'COMPLETED'
+  | 'REFUND_REQUESTED'
+  | 'REFUNDED'
+  | 'CANCELLED';
 
 export interface HotelOffer {
   id: string;
-  provider: 'MOCK';
+  provider: 'MOCK' | 'CATALOG';
   hotelName: string;
   city: string;
   country: string;
