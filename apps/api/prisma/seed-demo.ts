@@ -46,7 +46,10 @@ import {
 import * as argon2 from 'argon2';
 import { randomBytes } from 'crypto';
 import { SYSTEM_ROLES } from '../src/modules/rbac/constants/default-roles.constant';
-import { ACCOUNT_CODES, SEED_ACCOUNTS } from '../src/modules/finance/constants/account-codes.constant';
+import {
+  ACCOUNT_CODES,
+  SEED_ACCOUNTS,
+} from '../src/modules/finance/constants/account-codes.constant';
 
 const prisma = new PrismaClient();
 
@@ -59,16 +62,24 @@ function ref(prefix: string): string {
 
 /** Phase 1/2 demo data — customers, family, Hajj/Umrah, wallet, manual payment. */
 async function seedPhase1And2() {
-  const existing = await prisma.identity.findUnique({ where: { email: MARKER_EMAIL } });
+  const existing = await prisma.identity.findUnique({
+    where: { email: MARKER_EMAIL },
+  });
   if (existing) {
     console.log('Phase 1/2 demo data already present — skipping');
     return;
   }
 
   const company = await prisma.company.findFirstOrThrow();
-  const branch = await prisma.branch.findFirstOrThrow({ where: { companyId: company.id } });
-  const staffRole = await prisma.role.findUniqueOrThrow({ where: { name: SYSTEM_ROLES.STAFF } });
-  const financeRole = await prisma.role.findUniqueOrThrow({ where: { name: SYSTEM_ROLES.FINANCE_OFFICER } });
+  const branch = await prisma.branch.findFirstOrThrow({
+    where: { companyId: company.id },
+  });
+  const staffRole = await prisma.role.findUniqueOrThrow({
+    where: { name: SYSTEM_ROLES.STAFF },
+  });
+  const financeRole = await prisma.role.findUniqueOrThrow({
+    where: { name: SYSTEM_ROLES.FINANCE_OFFICER },
+  });
 
   // --- Demo staff: a front-line agent and a finance officer -----------------
   const staffPasswordHash = await argon2.hash(DEMO_PASSWORD);
@@ -119,7 +130,9 @@ async function seedPhase1And2() {
     include: { staff: true },
   });
 
-  console.log(`Created demo staff: ${agentIdentity.email}, ${financeIdentity.email} (password: ${DEMO_PASSWORD})`);
+  console.log(
+    `Created demo staff: ${agentIdentity.email}, ${financeIdentity.email} (password: ${DEMO_PASSWORD})`,
+  );
 
   // --- Demo customers ---------------------------------------------------
   const customerPasswordHash = await argon2.hash(DEMO_PASSWORD);
@@ -132,7 +145,17 @@ async function seedPhase1And2() {
       type: 'CUSTOMER',
       status: 'ACTIVE',
       emailVerifiedAt: new Date(),
-      roles: { create: [{ roleId: (await prisma.role.findUniqueOrThrow({ where: { name: SYSTEM_ROLES.CUSTOMER } })).id }] },
+      roles: {
+        create: [
+          {
+            roleId: (
+              await prisma.role.findUniqueOrThrow({
+                where: { name: SYSTEM_ROLES.CUSTOMER },
+              })
+            ).id,
+          },
+        ],
+      },
       customer: {
         create: {
           firstName: 'Amina',
@@ -166,7 +189,17 @@ async function seedPhase1And2() {
       type: 'CUSTOMER',
       status: 'ACTIVE',
       emailVerifiedAt: new Date(),
-      roles: { create: [{ roleId: (await prisma.role.findUniqueOrThrow({ where: { name: SYSTEM_ROLES.CUSTOMER } })).id }] },
+      roles: {
+        create: [
+          {
+            roleId: (
+              await prisma.role.findUniqueOrThrow({
+                where: { name: SYSTEM_ROLES.CUSTOMER },
+              })
+            ).id,
+          },
+        ],
+      },
       customer: {
         create: {
           firstName: 'Chinedu',
@@ -192,7 +225,9 @@ async function seedPhase1And2() {
     include: { customer: true },
   });
 
-  console.log(`Created demo customers: ${aminaIdentity.email}, ${chineduIdentity.email} (password: ${DEMO_PASSWORD})`);
+  console.log(
+    `Created demo customers: ${aminaIdentity.email}, ${chineduIdentity.email} (password: ${DEMO_PASSWORD})`,
+  );
 
   // --- Family group for Amina: spouse + two children ---------------------
   const spouse = await prisma.familyMember.create({
@@ -234,13 +269,16 @@ async function seedPhase1And2() {
       passportExpiryDate: new Date('2030-06-01'),
     },
   });
-  console.log('Created a 4-member family group for Amina Yusuf (spouse + 2 children)');
+  console.log(
+    'Created a 4-member family group for Amina Yusuf (spouse + 2 children)',
+  );
 
   // --- Hajj packages -------------------------------------------------------
   const hajjStandard = await prisma.hajjPackage.create({
     data: {
       name: 'Standard Hajj 2027',
-      description: 'Economy-tier Hajj package with shared accommodation near Haram.',
+      description:
+        'Economy-tier Hajj package with shared accommodation near Haram.',
       price: 6_000_000,
       internalCost: 4_800_000,
       currency: 'NGN',
@@ -257,16 +295,20 @@ async function seedPhase1And2() {
       guideIncluded: true,
       maxPilgrims: 200,
       seatsAvailable: 197,
-      paymentPlan: 'Deposit ₦500,000, then flexible installments before departure.',
-      termsAndConditions: 'Full balance due 30 days before departure. Non-refundable deposit.',
-      requiredDocuments: 'Passport, passport photograph, yellow fever card, vaccination certificate',
+      paymentPlan:
+        'Deposit ₦500,000, then flexible installments before departure.',
+      termsAndConditions:
+        'Full balance due 30 days before departure. Non-refundable deposit.',
+      requiredDocuments:
+        'Passport, passport photograph, yellow fever card, vaccination certificate',
       status: PackageStatus.PUBLISHED,
     },
   });
   await prisma.hajjPackage.create({
     data: {
       name: 'Premium Hajj 2027',
-      description: 'Premium Hajj package with private hotel rooms close to Haram.',
+      description:
+        'Premium Hajj package with private hotel rooms close to Haram.',
       price: 12_000_000,
       internalCost: 9_500_000,
       currency: 'NGN',
@@ -341,9 +383,27 @@ async function seedPhase1And2() {
 
   // --- Hajj registration for Amina's family, with a partial installment ---
   const hajjPilgrims = [
-    { customerId: aminaIdentity.customer!.id, familyMemberId: null, firstName: 'Amina', lastName: 'Yusuf', passportNumber: 'A00100101' },
-    { customerId: null, familyMemberId: spouse.id, firstName: spouse.firstName, lastName: spouse.lastName, passportNumber: spouse.passportNumber },
-    { customerId: null, familyMemberId: child1.id, firstName: child1.firstName, lastName: child1.lastName, passportNumber: child1.passportNumber },
+    {
+      customerId: aminaIdentity.customer!.id,
+      familyMemberId: null,
+      firstName: 'Amina',
+      lastName: 'Yusuf',
+      passportNumber: 'A00100101',
+    },
+    {
+      customerId: null,
+      familyMemberId: spouse.id,
+      firstName: spouse.firstName,
+      lastName: spouse.lastName,
+      passportNumber: spouse.passportNumber,
+    },
+    {
+      customerId: null,
+      familyMemberId: child1.id,
+      firstName: child1.firstName,
+      lastName: child1.lastName,
+      passportNumber: child1.passportNumber,
+    },
   ];
   const hajjTotal = hajjStandard.price * hajjPilgrims.length;
 
@@ -398,7 +458,13 @@ async function seedPhase1And2() {
 
   // --- Umrah registration for Chinedu, staff-assisted (demonstrates incentive) ---
   const umrahPilgrims = [
-    { customerId: chineduIdentity.customer!.id, familyMemberId: null, firstName: 'Chinedu', lastName: 'Okafor', passportNumber: 'A00200201' },
+    {
+      customerId: chineduIdentity.customer!.id,
+      familyMemberId: null,
+      firstName: 'Chinedu',
+      lastName: 'Okafor',
+      passportNumber: 'A00200201',
+    },
   ];
   const umrahTotal = umrahEconomy.sellingPrice * umrahPilgrims.length;
 
@@ -448,7 +514,8 @@ async function seedPhase1And2() {
       },
     },
   });
-  const incentivePercent = (umrahEconomy.incentiveRule as { percent: number }).percent;
+  const incentivePercent = (umrahEconomy.incentiveRule as { percent: number })
+    .percent;
   await prisma.staffIncentive.create({
     data: {
       staffId: agentIdentity.staff!.id,
@@ -459,10 +526,14 @@ async function seedPhase1And2() {
       description: `${incentivePercent}% incentive on ₦${umrahPaymentAmount.toLocaleString()} payment for ${umrahRegistration.registrationNumber}`,
     },
   });
-  console.log(`Created Umrah registration ${umrahRegistration.registrationNumber} for Chinedu Okafor — paid in full, staff incentive recorded`);
+  console.log(
+    `Created Umrah registration ${umrahRegistration.registrationNumber} for Chinedu Okafor — paid in full, staff incentive recorded`,
+  );
 
   // --- Wallet activity for Amina --------------------------------------
-  const aminaWallet = await prisma.wallet.create({ data: { customerId: aminaIdentity.customer!.id } });
+  const aminaWallet = await prisma.wallet.create({
+    data: { customerId: aminaIdentity.customer!.id },
+  });
   await prisma.walletTransaction.create({
     data: {
       walletId: aminaWallet.id,
@@ -529,7 +600,9 @@ async function seedPhase1And2() {
   console.log('Created in-app notifications for Amina Yusuf');
 
   console.log('--------------------------------------------------------');
-  console.log('Phase 1/2 demo data seeded successfully. Demo logins (password for all: Demo@2026):');
+  console.log(
+    'Phase 1/2 demo data seeded successfully. Demo logins (password for all: Demo@2026):',
+  );
   console.log(`  Customer:        ${aminaIdentity.email}`);
   console.log(`  Customer (VIP):  ${chineduIdentity.email}`);
   console.log(`  Staff (agent):   ${agentIdentity.email}`);
@@ -604,7 +677,9 @@ async function seedPhase3Visa() {
       config: {},
     },
   });
-  console.log('Created 2 incentive policies (Standard 50% — platform default, and Full Margin Bonus)');
+  console.log(
+    'Created 2 incentive policies (Standard 50% — platform default, and Full Margin Bonus)',
+  );
 
   const svSaudiPilgrimage = await prisma.visaService.create({
     data: {
@@ -612,11 +687,13 @@ async function seedPhase3Visa() {
       country: 'Saudi Arabia',
       visaType: 'Pilgrimage',
       visaCategory: 'Umrah',
-      description: 'Umrah pilgrimage visa, processed through our licensed Saudi partner.',
+      description:
+        'Umrah pilgrimage visa, processed through our licensed Saudi partner.',
       processingTime: '10-15 business days',
       validityPeriod: '90 days, single entry',
       entryType: 'Single',
-      requiredDocuments: 'Passport (6+ months validity), passport photo, vaccination certificate',
+      requiredDocuments:
+        'Passport (6+ months validity), passport photo, vaccination certificate',
       supplierName: 'Al Rajhi Visa Services',
       supplierCost: 550_000,
       companyCost: 600_000, // matches the spec's own worked example exactly
@@ -638,7 +715,8 @@ async function seedPhase3Visa() {
       processingTime: '15-20 business days',
       validityPeriod: '6 months',
       entryType: 'Multiple',
-      requiredDocuments: 'Passport, bank statement, proof of accommodation, invitation letter (if applicable)',
+      requiredDocuments:
+        'Passport, bank statement, proof of accommodation, invitation letter (if applicable)',
       supplierCost: 300_000,
       companyCost: 350_000,
       sellingPrice: 480_000,
@@ -659,7 +737,8 @@ async function seedPhase3Visa() {
       processingTime: '4-8 weeks',
       validityPeriod: 'Duration of study program',
       entryType: 'Multiple',
-      requiredDocuments: 'Passport, admission letter, proof of funds, medical exam',
+      requiredDocuments:
+        'Passport, admission letter, proof of funds, medical exam',
       companyCost: 250_000,
       sellingPrice: 350_000,
       currency: 'NGN',
@@ -690,7 +769,8 @@ async function seedPhase3Visa() {
       country: 'United States',
       visaType: 'Tourist',
       visaCategory: 'B1/B2',
-      description: 'US tourist visa — temporarily suspended pending embassy schedule changes.',
+      description:
+        'US tourist visa — temporarily suspended pending embassy schedule changes.',
       companyCost: 400_000,
       sellingPrice: 400_000, // zero margin on purpose — a realistic "break-even, do not sell yet" state
       currency: 'NGN',
@@ -698,12 +778,18 @@ async function seedPhase3Visa() {
       status: VisaServiceStatus.SUSPENDED,
     },
   });
-  console.log('Created 5 visa services (Saudi Pilgrimage, UK Tourist, Canada Student, UAE Business [draft], US Tourist [suspended])');
+  console.log(
+    'Created 5 visa services (Saudi Pilgrimage, UK Tourist, Canada Student, UAE Business [draft], US Tourist [suspended])',
+  );
 
   // Helper matching VisaService.submit()'s pricing/snapshot logic, since
   // this script writes directly via Prisma rather than going through the
   // API/service layer (same reasoning as every other section above).
-  function visaTotal(sv: { sellingPrice: number; processingFee: number; otherFees: number }) {
+  function visaTotal(sv: {
+    sellingPrice: number;
+    processingFee: number;
+    otherFees: number;
+  }) {
     return sv.sellingPrice + sv.processingFee + sv.otherFees;
   }
 
@@ -734,7 +820,14 @@ async function seedPhase3Visa() {
       status: InvoiceStatus.ISSUED,
       currency: visaApp1.currency,
       totalAmount: visaApp1.totalAmount,
-      lineItems: { create: [{ description: `Pilgrimage visa processing (${visaApp1.applicationReference}) — Saudi Arabia, Amina Yusuf`, amount: visaApp1.totalAmount }] },
+      lineItems: {
+        create: [
+          {
+            description: `Pilgrimage visa processing (${visaApp1.applicationReference}) — Saudi Arabia, Amina Yusuf`,
+            amount: visaApp1.totalAmount,
+          },
+        ],
+      },
     },
   });
 
@@ -780,7 +873,14 @@ async function seedPhase3Visa() {
       status: InvoiceStatus.ISSUED,
       currency: visaApp2.currency,
       totalAmount: visaApp2.totalAmount,
-      lineItems: { create: [{ description: `Tourist visa processing (${visaApp2.applicationReference}) — United Kingdom, ${spouse.firstName} ${spouse.lastName}`, amount: visaApp2.totalAmount }] },
+      lineItems: {
+        create: [
+          {
+            description: `Tourist visa processing (${visaApp2.applicationReference}) — United Kingdom, ${spouse.firstName} ${spouse.lastName}`,
+            amount: visaApp2.totalAmount,
+          },
+        ],
+      },
     },
   });
   await prisma.visaDocument.create({
@@ -813,7 +913,8 @@ async function seedPhase3Visa() {
       sellingPriceSnapshot: svUkTourist.sellingPrice,
       guarantorRequired: true,
       guarantorExempt: true,
-      guarantorExemptReason: 'Long-standing VIP client, waived by branch manager',
+      guarantorExemptReason:
+        'Long-standing VIP client, waived by branch manager',
       appliedByStaffId: agentIdentity.staff!.id,
     },
   });
@@ -826,7 +927,14 @@ async function seedPhase3Visa() {
       currency: visaApp3.currency,
       totalAmount: visaApp3.totalAmount,
       issuedByStaffId: agentIdentity.staff!.id,
-      lineItems: { create: [{ description: `Tourist visa processing (${visaApp3.applicationReference}) — United Kingdom, Chinedu Okafor`, amount: visaApp3.totalAmount }] },
+      lineItems: {
+        create: [
+          {
+            description: `Tourist visa processing (${visaApp3.applicationReference}) — United Kingdom, Chinedu Okafor`,
+            amount: visaApp3.totalAmount,
+          },
+        ],
+      },
     },
   });
 
@@ -858,8 +966,24 @@ async function seedPhase3Visa() {
       status: InvoiceStatus.PAID,
       currency: visaApp4.currency,
       totalAmount: visaApp4.totalAmount,
-      payments: { create: [{ paymentReference: ref('PAY'), amount: visaApp4.totalAmount, method: PaymentMethod.CARD, recordedByStaffId: financeIdentity.staff!.id }] },
-      lineItems: { create: [{ description: `Student visa processing (${visaApp4.applicationReference}) — Canada, Chinedu Okafor`, amount: visaApp4.totalAmount }] },
+      payments: {
+        create: [
+          {
+            paymentReference: ref('PAY'),
+            amount: visaApp4.totalAmount,
+            method: PaymentMethod.CARD,
+            recordedByStaffId: financeIdentity.staff!.id,
+          },
+        ],
+      },
+      lineItems: {
+        create: [
+          {
+            description: `Student visa processing (${visaApp4.applicationReference}) — Canada, Chinedu Okafor`,
+            amount: visaApp4.totalAmount,
+          },
+        ],
+      },
     },
   });
   await prisma.visaApplicationNote.create({
@@ -913,8 +1037,24 @@ async function seedPhase3Visa() {
       status: InvoiceStatus.PAID,
       currency: visaApp5.currency,
       totalAmount: visaApp5.totalAmount,
-      payments: { create: [{ paymentReference: ref('PAY'), amount: visaApp5.totalAmount, method: PaymentMethod.BANK_TRANSFER, recordedByStaffId: financeIdentity.staff!.id }] },
-      lineItems: { create: [{ description: `Pilgrimage visa processing (${visaApp5.applicationReference}) — Saudi Arabia, Amina Yusuf`, amount: visaApp5.totalAmount }] },
+      payments: {
+        create: [
+          {
+            paymentReference: ref('PAY'),
+            amount: visaApp5.totalAmount,
+            method: PaymentMethod.BANK_TRANSFER,
+            recordedByStaffId: financeIdentity.staff!.id,
+          },
+        ],
+      },
+      lineItems: {
+        create: [
+          {
+            description: `Pilgrimage visa processing (${visaApp5.applicationReference}) — Saudi Arabia, Amina Yusuf`,
+            amount: visaApp5.totalAmount,
+          },
+        ],
+      },
     },
   });
 
@@ -948,11 +1088,28 @@ async function seedPhase3Visa() {
       status: InvoiceStatus.PAID,
       currency: visaApp6.currency,
       totalAmount: visaApp6.totalAmount,
-      payments: { create: [{ paymentReference: ref('PAY'), amount: visaApp6.totalAmount, method: PaymentMethod.BANK_TRANSFER, recordedByStaffId: financeIdentity.staff!.id }] },
-      lineItems: { create: [{ description: `Pilgrimage visa processing (${visaApp6.applicationReference}) — Saudi Arabia, Amina Yusuf`, amount: visaApp6.totalAmount }] },
+      payments: {
+        create: [
+          {
+            paymentReference: ref('PAY'),
+            amount: visaApp6.totalAmount,
+            method: PaymentMethod.BANK_TRANSFER,
+            recordedByStaffId: financeIdentity.staff!.id,
+          },
+        ],
+      },
+      lineItems: {
+        create: [
+          {
+            description: `Pilgrimage visa processing (${visaApp6.applicationReference}) — Saudi Arabia, Amina Yusuf`,
+            amount: visaApp6.totalAmount,
+          },
+        ],
+      },
     },
   });
-  const margin6 = svSaudiPilgrimage.sellingPrice - svSaudiPilgrimage.companyCost;
+  const margin6 =
+    svSaudiPilgrimage.sellingPrice - svSaudiPilgrimage.companyCost;
   await prisma.staffIncentive.create({
     data: {
       staffId: agentIdentity.staff!.id,
@@ -990,7 +1147,8 @@ async function seedPhase3Visa() {
       sellingPriceSnapshot: svUkTourist.sellingPrice,
       guarantorRequired: true,
       guarantorExempt: true,
-      guarantorExemptReason: 'Repeat customer, previously approved guarantor on file',
+      guarantorExemptReason:
+        'Repeat customer, previously approved guarantor on file',
       assignedStaffId: agentIdentity.staff!.id,
     },
   });
@@ -1002,8 +1160,24 @@ async function seedPhase3Visa() {
       status: InvoiceStatus.PAID,
       currency: visaApp7.currency,
       totalAmount: visaApp7.totalAmount,
-      payments: { create: [{ paymentReference: ref('PAY'), amount: visaApp7.totalAmount, method: PaymentMethod.CARD, recordedByStaffId: financeIdentity.staff!.id }] },
-      lineItems: { create: [{ description: `Tourist visa processing (${visaApp7.applicationReference}) — United Kingdom, Chinedu Okafor`, amount: visaApp7.totalAmount }] },
+      payments: {
+        create: [
+          {
+            paymentReference: ref('PAY'),
+            amount: visaApp7.totalAmount,
+            method: PaymentMethod.CARD,
+            recordedByStaffId: financeIdentity.staff!.id,
+          },
+        ],
+      },
+      lineItems: {
+        create: [
+          {
+            description: `Tourist visa processing (${visaApp7.applicationReference}) — United Kingdom, Chinedu Okafor`,
+            amount: visaApp7.totalAmount,
+          },
+        ],
+      },
     },
   });
   const margin7 = svUkTourist.sellingPrice - svUkTourist.companyCost;
@@ -1047,7 +1221,8 @@ async function seedPhase3Visa() {
       sellingPriceSnapshot: svSaudiPilgrimage.sellingPrice,
       guarantorRequired: true,
       guarantorExempt: true,
-      guarantorExemptReason: 'Minor traveling with a parent already on file as guarantor',
+      guarantorExemptReason:
+        'Minor traveling with a parent already on file as guarantor',
       assignedStaffId: agentIdentity.staff!.id,
     },
   });
@@ -1059,11 +1234,28 @@ async function seedPhase3Visa() {
       status: InvoiceStatus.PAID,
       currency: visaApp8.currency,
       totalAmount: visaApp8.totalAmount,
-      payments: { create: [{ paymentReference: ref('PAY'), amount: visaApp8.totalAmount, method: PaymentMethod.WALLET, recordedByStaffId: financeIdentity.staff!.id }] },
-      lineItems: { create: [{ description: `Pilgrimage visa processing (${visaApp8.applicationReference}) — Saudi Arabia, ${child1.firstName} ${child1.lastName}`, amount: visaApp8.totalAmount }] },
+      payments: {
+        create: [
+          {
+            paymentReference: ref('PAY'),
+            amount: visaApp8.totalAmount,
+            method: PaymentMethod.WALLET,
+            recordedByStaffId: financeIdentity.staff!.id,
+          },
+        ],
+      },
+      lineItems: {
+        create: [
+          {
+            description: `Pilgrimage visa processing (${visaApp8.applicationReference}) — Saudi Arabia, ${child1.firstName} ${child1.lastName}`,
+            amount: visaApp8.totalAmount,
+          },
+        ],
+      },
     },
   });
-  const margin8 = svSaudiPilgrimage.sellingPrice - svSaudiPilgrimage.companyCost;
+  const margin8 =
+    svSaudiPilgrimage.sellingPrice - svSaudiPilgrimage.companyCost;
   const incentive8 = await prisma.staffIncentive.create({
     data: {
       staffId: agentIdentity.staff!.id,
@@ -1118,7 +1310,8 @@ async function seedPhase3Visa() {
       guarantorExempt: true,
       guarantorExemptReason: 'Processed entirely offline — see offlineReason',
       isOfflineEntry: true,
-      offlineReason: 'Customer called in and paid cash at the branch; processed by phone, no portal submission.',
+      offlineReason:
+        'Customer called in and paid cash at the branch; processed by phone, no portal submission.',
       appliedByStaffId: agentIdentity.staff!.id,
       assignedStaffId: agentIdentity.staff!.id,
     },
@@ -1132,11 +1325,29 @@ async function seedPhase3Visa() {
       currency: visaApp9.currency,
       totalAmount: visaApp9.totalAmount,
       issuedByStaffId: agentIdentity.staff!.id,
-      payments: { create: [{ paymentReference: ref('PAY'), amount: visaApp9.totalAmount, method: PaymentMethod.CASH, note: 'Cash at branch — offline entry', recordedByStaffId: financeIdentity.staff!.id }] },
-      lineItems: { create: [{ description: `Pilgrimage visa processing (${visaApp9.applicationReference}) — Saudi Arabia, Chinedu Okafor [OFFLINE]`, amount: visaApp9.totalAmount }] },
+      payments: {
+        create: [
+          {
+            paymentReference: ref('PAY'),
+            amount: visaApp9.totalAmount,
+            method: PaymentMethod.CASH,
+            note: 'Cash at branch — offline entry',
+            recordedByStaffId: financeIdentity.staff!.id,
+          },
+        ],
+      },
+      lineItems: {
+        create: [
+          {
+            description: `Pilgrimage visa processing (${visaApp9.applicationReference}) — Saudi Arabia, Chinedu Okafor [OFFLINE]`,
+            amount: visaApp9.totalAmount,
+          },
+        ],
+      },
     },
   });
-  const margin9 = svSaudiPilgrimage.sellingPrice - svSaudiPilgrimage.companyCost;
+  const margin9 =
+    svSaudiPilgrimage.sellingPrice - svSaudiPilgrimage.companyCost;
   const incentive9 = await prisma.staffIncentive.create({
     data: {
       staffId: agentIdentity.staff!.id,
@@ -1164,7 +1375,8 @@ async function seedPhase3Visa() {
       currency: incentive9.currency,
       status: PayoutStatus.FAILED,
       provider: 'mock',
-      providerError: 'Bank rejected the transfer: account number could not be verified',
+      providerError:
+        'Bank rejected the transfer: account number could not be verified',
       requestedByStaffId: financeIdentity.staff!.id,
     },
   });
@@ -1181,7 +1393,8 @@ async function seedPhase3Visa() {
       applicantLastName: child1.lastName,
       applicantPassportNumber: child1.passportNumber,
       status: VisaApplicationStatus.REJECTED,
-      staffNote: 'Insufficient proof of funds to support the full duration of study.',
+      staffNote:
+        'Insufficient proof of funds to support the full duration of study.',
       currency: svCanadaStudent.currency,
       totalAmount: visaTotal(svCanadaStudent),
       visaServiceId: svCanadaStudent.id,
@@ -1220,7 +1433,9 @@ async function seedPhase3Visa() {
 
   console.log('--------------------------------------------------------');
   console.log('Phase 3 visa demo data seeded successfully.');
-  console.log('  Visa officer: fatima.sule@demo.alnajoum.travel (has bank details on file)');
+  console.log(
+    '  Visa officer: fatima.sule@demo.alnajoum.travel (has bank details on file)',
+  );
   console.log('  Finance:      ibrahim.musa@demo.alnajoum.travel');
   console.log('--------------------------------------------------------');
 }
@@ -1291,8 +1506,17 @@ async function seedPhase4Flights() {
     },
   });
 
-  function itinerary(origin: string, destination: string, airline: string, airlineCode: string, days: number, amount: number) {
-    const departureAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+  function itinerary(
+    origin: string,
+    destination: string,
+    airline: string,
+    airlineCode: string,
+    days: number,
+    amount: number,
+  ) {
+    const departureAt = new Date(
+      Date.now() + days * 24 * 60 * 60 * 1000,
+    ).toISOString();
     return {
       id: ref('offer'),
       provider: 'MOCK',
@@ -1325,7 +1549,8 @@ async function seedPhase4Flights() {
       ],
       fareConditions: {
         refundable: 'PARTIALLY_REFUNDABLE',
-        cancellationPenaltyDescription: 'Refundable minus a 25% cancellation penalty and non-refundable taxes.',
+        cancellationPenaltyDescription:
+          'Refundable minus a 25% cancellation penalty and non-refundable taxes.',
         baggageAllowance: { checked: '1 x 23kg', cabin: '1 x 7kg' },
         fareBrand: 'Economy Basic',
         warnings: [],
@@ -1350,7 +1575,14 @@ async function seedPhase4Flights() {
     bookedByStaffId?: string;
   }) {
     const totalAmount = opts.providerCost + opts.markupAmount;
-    const offer = itinerary(opts.origin, opts.destination, opts.airline, opts.airlineCode, opts.days, totalAmount);
+    const offer = itinerary(
+      opts.origin,
+      opts.destination,
+      opts.airline,
+      opts.airlineCode,
+      opts.days,
+      totalAmount,
+    );
     const booking = await prisma.flightBooking.create({
       data: {
         bookingReference: opts.ref,
@@ -1376,8 +1608,14 @@ async function seedPhase4Flights() {
         refundable: false,
         baggageAllowance: offer.fareConditions.baggageAllowance,
         pnr: opts.pnr,
-        ticketedAt: opts.status === 'TICKETED' || opts.status === 'REFUNDED' ? new Date() : undefined,
-        ticketedByStaffId: opts.status === 'TICKETED' || opts.status === 'REFUNDED' ? opts.bookedByStaffId : undefined,
+        ticketedAt:
+          opts.status === 'TICKETED' || opts.status === 'REFUNDED'
+            ? new Date()
+            : undefined,
+        ticketedByStaffId:
+          opts.status === 'TICKETED' || opts.status === 'REFUNDED'
+            ? opts.bookedByStaffId
+            : undefined,
         passengers: {
           create: [
             {
@@ -1397,7 +1635,8 @@ async function seedPhase4Flights() {
         invoiceNumber: ref('INV'),
         customerId: opts.customerId,
         flightBookingId: booking.id,
-        status: opts.status === 'PENDING' ? InvoiceStatus.ISSUED : InvoiceStatus.PAID,
+        status:
+          opts.status === 'PENDING' ? InvoiceStatus.ISSUED : InvoiceStatus.PAID,
         currency: 'NGN',
         totalAmount,
         issuedByStaffId: opts.bookedByStaffId,
@@ -1415,7 +1654,12 @@ async function seedPhase4Flights() {
                 ],
               },
         lineItems: {
-          create: [{ description: `Flight ${opts.ref}: ${opts.origin} → ${opts.destination}`, amount: totalAmount }],
+          create: [
+            {
+              description: `Flight ${opts.ref}: ${opts.origin} → ${opts.destination}`,
+              amount: totalAmount,
+            },
+          ],
         },
       },
     });
@@ -1617,7 +1861,15 @@ async function seedPhase4Flights() {
           },
         ],
       },
-      lineItems: { create: [{ description: 'Group flight booking: Kaduna Umrah Group 2026 (12 passengers, Jeddah)', amount: 12 * 750_000 }] },
+      lineItems: {
+        create: [
+          {
+            description:
+              'Group flight booking: Kaduna Umrah Group 2026 (12 passengers, Jeddah)',
+            amount: 12 * 750_000,
+          },
+        ],
+      },
     },
   });
   await prisma.flightGroupBooking.create({
@@ -1652,10 +1904,31 @@ async function seedPhase4Flights() {
   // --- Provider transaction logs, for the Reports "Provider Success Rate" --
   await prisma.providerTransactionLog.createMany({
     data: [
-      { provider: 'MOCK', operation: 'SEARCH', status: 'SUCCESS', safeMessage: '4 offer(s) returned' },
-      { provider: 'MOCK', operation: 'SEARCH', status: 'SUCCESS', safeMessage: '3 offer(s) returned' },
-      { provider: 'MOCK', operation: 'CREATE_ORDER', status: 'SUCCESS', safeMessage: 'Order created' },
-      { provider: 'DUFFEL', operation: 'SEARCH', status: 'FAILURE', errorCode: 'INVALID_TOKEN', safeMessage: 'Invalid API token' },
+      {
+        provider: 'MOCK',
+        operation: 'SEARCH',
+        status: 'SUCCESS',
+        safeMessage: '4 offer(s) returned',
+      },
+      {
+        provider: 'MOCK',
+        operation: 'SEARCH',
+        status: 'SUCCESS',
+        safeMessage: '3 offer(s) returned',
+      },
+      {
+        provider: 'MOCK',
+        operation: 'CREATE_ORDER',
+        status: 'SUCCESS',
+        safeMessage: 'Order created',
+      },
+      {
+        provider: 'DUFFEL',
+        operation: 'SEARCH',
+        status: 'FAILURE',
+        errorCode: 'INVALID_TOKEN',
+        safeMessage: 'Invalid API token',
+      },
     ],
   });
 
@@ -1678,7 +1951,9 @@ async function seedPhase4Flights() {
  * idempotent, same pattern as seedPhase3Visa/seedPhase4Flights.
  */
 async function seedPhase5Hotels() {
-  const existing = await prisma.hotel.findFirst({ where: { name: 'Alnajoum Demo Grand Hotel' } });
+  const existing = await prisma.hotel.findFirst({
+    where: { name: 'Alnajoum Demo Grand Hotel' },
+  });
   if (existing) {
     console.log('Phase 5 hotel demo data already present — skipping');
     return;
@@ -1701,13 +1976,16 @@ async function seedPhase5Hotels() {
     include: { staff: true },
   });
   const branch = await prisma.branch.findFirstOrThrow();
-  const defaultIncentivePolicy = await prisma.incentivePolicy.findFirst({ where: { isDefault: true, isActive: true } });
+  const defaultIncentivePolicy = await prisma.incentivePolicy.findFirst({
+    where: { isDefault: true, isActive: true },
+  });
 
   // --- Catalog: 2 hotels, 4 room types --------------------------------------
   const grandHotel = await prisma.hotel.create({
     data: {
       name: 'Alnajoum Demo Grand Hotel',
-      description: 'A fictional 5-star demo hotel in Lagos, for seed data only.',
+      description:
+        'A fictional 5-star demo hotel in Lagos, for seed data only.',
       country: 'Nigeria',
       city: 'Lagos',
       address: '12 Ahmadu Bello Way, Victoria Island',
@@ -1715,9 +1993,16 @@ async function seedPhase5Hotels() {
       contactPhone: '+2348000000700',
       checkInTime: '14:00',
       checkOutTime: '12:00',
-      amenities: ['Free WiFi', 'Pool', 'Gym', 'Airport Shuttle', 'Breakfast Included'],
+      amenities: [
+        'Free WiFi',
+        'Pool',
+        'Gym',
+        'Airport Shuttle',
+        'Breakfast Included',
+      ],
       images: [],
-      cancellationPolicy: 'Free cancellation up to 2 days before check-in; 25% penalty thereafter.',
+      cancellationPolicy:
+        'Free cancellation up to 2 days before check-in; 25% penalty thereafter.',
       paymentPolicy: 'Full payment required at booking.',
       status: 'ACTIVE',
     },
@@ -1725,7 +2010,8 @@ async function seedPhase5Hotels() {
   const madinahHotel = await prisma.hotel.create({
     data: {
       name: 'Alnajoum Demo Madinah Suites',
-      description: 'A fictional demo hotel near the Prophet\'s Mosque, for Umrah/Hajj package seed data only.',
+      description:
+        "A fictional demo hotel near the Prophet's Mosque, for Umrah/Hajj package seed data only.",
       country: 'Saudi Arabia',
       city: 'Madinah',
       address: 'King Fahd Road',
@@ -1735,7 +2021,8 @@ async function seedPhase5Hotels() {
       checkOutTime: '12:00',
       amenities: ['Free WiFi', 'Prayer Hall', 'Breakfast Included'],
       images: [],
-      cancellationPolicy: 'Free cancellation up to 7 days before check-in; 30% penalty thereafter.',
+      cancellationPolicy:
+        'Free cancellation up to 7 days before check-in; 30% penalty thereafter.',
       status: 'ACTIVE',
     },
   });
@@ -1812,7 +2099,9 @@ async function seedPhase5Hotels() {
     bookedByStaffId?: string;
   }) {
     const checkInDate = new Date(Date.now() + 20 * 24 * 60 * 60 * 1000);
-    const checkOutDate = new Date(checkInDate.getTime() + opts.nights * 24 * 60 * 60 * 1000);
+    const checkOutDate = new Date(
+      checkInDate.getTime() + opts.nights * 24 * 60 * 60 * 1000,
+    );
     const supplierCost = opts.roomType.supplierCost * opts.nights * opts.rooms;
     const totalAmount = opts.roomType.sellingPrice * opts.nights * opts.rooms;
     const markupAmount = totalAmount - supplierCost;
@@ -1843,8 +2132,14 @@ async function seedPhase5Hotels() {
         roomTypeId: opts.roomType.id,
         supplierCost,
         markupAmount,
-        completedAt: opts.status === 'COMPLETED' || opts.status === 'REFUNDED' ? new Date() : undefined,
-        completedByStaffId: opts.status === 'COMPLETED' || opts.status === 'REFUNDED' ? opts.bookedByStaffId : undefined,
+        completedAt:
+          opts.status === 'COMPLETED' || opts.status === 'REFUNDED'
+            ? new Date()
+            : undefined,
+        completedByStaffId:
+          opts.status === 'COMPLETED' || opts.status === 'REFUNDED'
+            ? opts.bookedByStaffId
+            : undefined,
       },
     });
 
@@ -1853,15 +2148,32 @@ async function seedPhase5Hotels() {
         invoiceNumber: ref('INV'),
         customerId: opts.customerId,
         hotelBookingId: booking.id,
-        status: opts.status === 'PENDING' ? InvoiceStatus.ISSUED : InvoiceStatus.PAID,
+        status:
+          opts.status === 'PENDING' ? InvoiceStatus.ISSUED : InvoiceStatus.PAID,
         currency: 'NGN',
         totalAmount,
         issuedByStaffId: opts.bookedByStaffId,
         payments:
           opts.status === 'PENDING'
             ? undefined
-            : { create: [{ paymentReference: ref('PAY'), amount: totalAmount, method: PaymentMethod.CARD, recordedByStaffId: financeIdentity.staff!.id }] },
-        lineItems: { create: [{ description: `Hotel ${opts.ref}: ${opts.hotel.name}, ${opts.roomType.name}`, amount: totalAmount }] },
+            : {
+                create: [
+                  {
+                    paymentReference: ref('PAY'),
+                    amount: totalAmount,
+                    method: PaymentMethod.CARD,
+                    recordedByStaffId: financeIdentity.staff!.id,
+                  },
+                ],
+              },
+        lineItems: {
+          create: [
+            {
+              description: `Hotel ${opts.ref}: ${opts.hotel.name}, ${opts.roomType.name}`,
+              amount: totalAmount,
+            },
+          ],
+        },
       },
     });
 
@@ -1933,7 +2245,8 @@ async function seedPhase5Hotels() {
 
   // --- Staff incentive on the completed booking -----------------------------
   if (defaultIncentivePolicy) {
-    const margin = completedBooking.totalAmount - (completedBooking.supplierCost ?? 0);
+    const margin =
+      completedBooking.totalAmount - (completedBooking.supplierCost ?? 0);
     await prisma.staffIncentive.create({
       data: {
         staffId: agentIdentity.staff!.id,
@@ -1962,10 +2275,22 @@ async function seedPhase5Hotels() {
       currency: 'NGN',
       totalAmount: 250_000 + 60_000 + 5_000,
       issuedByStaffId: agentIdentity.staff!.id,
-      payments: { create: [{ paymentReference: ref('PAY'), amount: 315_000, method: PaymentMethod.BANK_TRANSFER, recordedByStaffId: financeIdentity.staff!.id }] },
+      payments: {
+        create: [
+          {
+            paymentReference: ref('PAY'),
+            amount: 315_000,
+            method: PaymentMethod.BANK_TRANSFER,
+            recordedByStaffId: financeIdentity.staff!.id,
+          },
+        ],
+      },
       lineItems: {
         create: [
-          { description: 'Custom package: Lagos -> Dubai flight', amount: 250_000 },
+          {
+            description: 'Custom package: Lagos -> Dubai flight',
+            amount: 250_000,
+          },
           { description: 'Custom package: 2 nights hotel', amount: 60_000 },
           { description: 'Custom package: Airport transfer', amount: 5_000 },
         ],
@@ -1977,7 +2302,8 @@ async function seedPhase5Hotels() {
       packageReference: ref('PKG'),
       name: 'Chinedu — Custom Lagos to Dubai getaway',
       category: 'STANDARD',
-      description: 'Flight + hotel + transfer, built by a staff member for a customer request.',
+      description:
+        'Flight + hotel + transfer, built by a staff member for a customer request.',
       customerId: chineduIdentity.customer!.id,
       totalCost: 210_000 + 45_000 + 3_000,
       totalPrice: 250_000 + 60_000 + 5_000,
@@ -1987,9 +2313,24 @@ async function seedPhase5Hotels() {
       invoiceId: packageInvoice.id,
       components: {
         create: [
-          { type: 'FLIGHT', description: 'Lagos -> Dubai round trip flight', cost: 210_000, price: 250_000 },
-          { type: 'HOTEL', description: '2 nights at a Dubai hotel', cost: 45_000, price: 60_000 },
-          { type: 'TRANSPORT', description: 'Airport transfer both ways', cost: 3_000, price: 5_000 },
+          {
+            type: 'FLIGHT',
+            description: 'Lagos -> Dubai round trip flight',
+            cost: 210_000,
+            price: 250_000,
+          },
+          {
+            type: 'HOTEL',
+            description: '2 nights at a Dubai hotel',
+            cost: 45_000,
+            price: 60_000,
+          },
+          {
+            type: 'TRANSPORT',
+            description: 'Airport transfer both ways',
+            cost: 3_000,
+            price: 5_000,
+          },
         ],
       },
     },
@@ -2023,12 +2364,19 @@ async function seedPhase6Finance() {
   for (const def of SEED_ACCOUNTS) {
     await prisma.ledgerAccount.upsert({
       where: { code: def.code },
-      create: { code: def.code, name: def.name, type: def.type, isSystem: true },
+      create: {
+        code: def.code,
+        name: def.name,
+        type: def.type,
+        isSystem: true,
+      },
       update: {},
     });
   }
 
-  const existing = await prisma.companyInvestment.findFirst({ where: { investor: 'Alnajoum Holdings' } });
+  const existing = await prisma.companyInvestment.findFirst({
+    where: { investor: 'Alnajoum Holdings' },
+  });
   if (existing) {
     console.log('Phase 6 finance demo data already present — skipping');
     return;
@@ -2037,20 +2385,24 @@ async function seedPhase6Finance() {
   const accountId = async (code: string) =>
     (await prisma.ledgerAccount.findUniqueOrThrow({ where: { code } })).id;
 
-  const [cashId, bankId, companyInvestmentId, marketingId, hostingId] = await Promise.all([
-    accountId(ACCOUNT_CODES.CASH),
-    accountId(ACCOUNT_CODES.BANK_ACCOUNTS),
-    accountId(ACCOUNT_CODES.COMPANY_INVESTMENT),
-    accountId(ACCOUNT_CODES.MARKETING),
-    accountId(ACCOUNT_CODES.HOSTING),
-  ]);
+  const [cashId, bankId, companyInvestmentId, marketingId, hostingId] =
+    await Promise.all([
+      accountId(ACCOUNT_CODES.CASH),
+      accountId(ACCOUNT_CODES.BANK_ACCOUNTS),
+      accountId(ACCOUNT_CODES.COMPANY_INVESTMENT),
+      accountId(ACCOUNT_CODES.MARKETING),
+      accountId(ACCOUNT_CODES.HOSTING),
+    ]);
 
   const financeIdentity = await prisma.identity.findUniqueOrThrow({
     where: { email: 'ibrahim.musa@demo.alnajoum.travel' },
     include: { staff: true },
   });
   const superAdminIdentity = await prisma.identity.findFirst({
-    where: { type: 'STAFF', roles: { some: { role: { name: SYSTEM_ROLES.SUPER_ADMIN } } } },
+    where: {
+      type: 'STAFF',
+      roles: { some: { role: { name: SYSTEM_ROLES.SUPER_ADMIN } } },
+    },
   });
 
   // --- Initial company investment --------------------------------------
@@ -2128,7 +2480,9 @@ async function seedPhase6Finance() {
     },
   });
 
-  console.log('Seeded chart of accounts, 1 company investment, and 2 expenses (1 pending, 1 paid) with matching journal entries.');
+  console.log(
+    'Seeded chart of accounts, 1 company investment, and 2 expenses (1 pending, 1 paid) with matching journal entries.',
+  );
   console.log('--------------------------------------------------------');
   console.log('Phase 6 finance demo data seeded successfully.');
   console.log('--------------------------------------------------------');
@@ -2143,7 +2497,9 @@ async function seedPhase6Finance() {
  * CRM screen without needing to click through the UI first.
  */
 async function seedPhase7Crm() {
-  const existing = await prisma.lead.findFirst({ where: { leadNumber: 'LEAD-DEMO0001' } });
+  const existing = await prisma.lead.findFirst({
+    where: { leadNumber: 'LEAD-DEMO0001' },
+  });
   if (existing) {
     console.log('Phase 7 CRM demo data already present — skipping');
     return;
@@ -2167,13 +2523,16 @@ async function seedPhase7Crm() {
   const qualifiedStage = stages[2] ?? newStage;
   const wonStage = stages.find((s) => s.isWon)!;
   const lostStage = stages.find((s) => s.isLost)!;
-  const category = await prisma.supportTicketCategory.findFirstOrThrow({ where: { name: 'Flight' } });
+  const category = await prisma.supportTicketCategory.findFirstOrThrow({
+    where: { name: 'Flight' },
+  });
 
   // --- Campaign ---------------------------------------------------------
   const campaign = await prisma.campaign.create({
     data: {
       name: 'Umrah Ramadan 2027 Early Bird',
-      description: 'Discounted Umrah packages for early registrations ahead of Ramadan 2027.',
+      description:
+        'Discounted Umrah packages for early registrations ahead of Ramadan 2027.',
       targetService: 'UMRAH',
       targetAudience: 'Returning Umrah customers',
       startDate: new Date('2026-10-01'),
@@ -2201,7 +2560,8 @@ async function seedPhase7Crm() {
       assignedStaffId: agentIdentity.staff!.id,
       assignedBranchId: branch.id,
       campaignId: campaign.id,
-      notes: 'Interested in a family Umrah package for 4 — asked for a quotation.',
+      notes:
+        'Interested in a family Umrah package for 4 — asked for a quotation.',
       followUpDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
       createdByStaffId: agentIdentity.staff!.id,
     },
@@ -2230,7 +2590,12 @@ async function seedPhase7Crm() {
     },
   });
   await prisma.leadActivity.create({
-    data: { leadId: lostLead.id, action: 'lost', description: 'Marked lost: Booked with a competitor offering a lower fare' },
+    data: {
+      leadId: lostLead.id,
+      action: 'lost',
+      description:
+        'Marked lost: Booked with a competitor offering a lower fare',
+    },
   });
 
   const convertedLead = await prisma.lead.create({
@@ -2274,7 +2639,8 @@ async function seedPhase7Crm() {
   await prisma.task.create({
     data: {
       title: `Overdue payment follow-up: ${chineduIdentity.customer!.firstName} ${chineduIdentity.customer!.lastName}`,
-      description: 'Outstanding balance on a Hajj installment — system-generated reminder.',
+      description:
+        'Outstanding balance on a Hajj installment — system-generated reminder.',
       relatedType: 'PAYMENT',
       customerId: chineduIdentity.customer!.id,
       assignedStaffId: financeIdentity.staff!.id,
@@ -2293,11 +2659,14 @@ async function seedPhase7Crm() {
       subject: 'Refund status for cancelled hotel booking',
       categoryId: category.id,
       priority: 'HIGH',
-      description: 'I cancelled my Makkah hotel booking last week and would like an update on my refund.',
+      description:
+        'I cancelled my Makkah hotel booking last week and would like an update on my refund.',
       status: 'RESOLVED',
       assignedStaffId: agentIdentity.staff!.id,
       branchId: branch.id,
-      slaResponseDueAt: new Date(Date.now() - 20 * 60 * 60 * 1000 + responseMinutes * 60_000),
+      slaResponseDueAt: new Date(
+        Date.now() - 20 * 60 * 60 * 1000 + responseMinutes * 60_000,
+      ),
       firstRespondedAt: new Date(Date.now() - 19 * 60 * 60 * 1000),
       resolvedAt: new Date(Date.now() - 10 * 60 * 60 * 1000),
       createdAt: new Date(Date.now() - 20 * 60 * 60 * 1000),
@@ -2307,7 +2676,8 @@ async function seedPhase7Crm() {
     data: {
       ticketId: ticket.id,
       authorType: 'CUSTOMER',
-      message: 'I cancelled my Makkah hotel booking last week and would like an update on my refund.',
+      message:
+        'I cancelled my Makkah hotel booking last week and would like an update on my refund.',
       createdAt: new Date(Date.now() - 20 * 60 * 60 * 1000),
     },
   });
@@ -2316,7 +2686,8 @@ async function seedPhase7Crm() {
       ticketId: ticket.id,
       authorType: 'STAFF',
       authorStaffId: agentIdentity.staff!.id,
-      message: 'Checked with finance — the refund was approved yesterday and should reflect within 3-5 business days.',
+      message:
+        'Checked with finance — the refund was approved yesterday and should reflect within 3-5 business days.',
       isInternal: true,
       createdAt: new Date(Date.now() - 19.5 * 60 * 60 * 1000),
     },
@@ -2326,7 +2697,8 @@ async function seedPhase7Crm() {
       ticketId: ticket.id,
       authorType: 'STAFF',
       authorStaffId: agentIdentity.staff!.id,
-      message: 'Your refund has been approved and should arrive within 3-5 business days.',
+      message:
+        'Your refund has been approved and should arrive within 3-5 business days.',
       createdAt: new Date(Date.now() - 19 * 60 * 60 * 1000),
     },
   });
@@ -2350,10 +2722,12 @@ async function seedPhase7Crm() {
       complaintNumber: 'CMP-DEMO0001',
       customerId: chineduIdentity.customer!.id,
       subject: 'Late hotel check-in confirmation',
-      description: 'The hotel confirmation for my Madinah stay arrived only a day before check-in.',
+      description:
+        'The hotel confirmation for my Madinah stay arrived only a day before check-in.',
       status: 'RESOLVED',
       assignedStaffId: agentIdentity.staff!.id,
-      resolution: 'Apologized to the customer and flagged the hotel provider for slower-than-usual confirmations; a goodwill discount was applied to their next booking.',
+      resolution:
+        'Apologized to the customer and flagged the hotel provider for slower-than-usual confirmations; a goodwill discount was applied to their next booking.',
       resolvedAt: new Date(),
     },
   });
@@ -2367,6 +2741,152 @@ async function seedPhase7Crm() {
   console.log('--------------------------------------------------------');
 }
 
+/** Phase 8 — Hajj/Umrah groups, fleet, transport, and pilgrim check-in/QR demo data. */
+async function seedPhase8HajjOps() {
+  const existing = await prisma.hajjGroup.findFirst({
+    where: { groupNumber: 'HGRP-DEMO0001' },
+  });
+  if (existing) {
+    console.log('Phase 8 Hajj ops demo data already present — skipping');
+    return;
+  }
+
+  const agentIdentity = await prisma.identity.findUniqueOrThrow({
+    where: { email: 'fatima.sule@demo.alnajoum.travel' },
+    include: { staff: true },
+  });
+  const hajjRegistration = await prisma.hajjRegistration.findFirstOrThrow({
+    include: { pilgrims: true },
+  });
+  const umrahRegistration = await prisma.umrahRegistration.findFirstOrThrow({
+    include: { pilgrims: true },
+  });
+  const coordinatorStaffId = agentIdentity.staff!.id;
+
+  // --- Fleet: one bus + one driver ---------------------------------------
+  const bus = await prisma.vehicle.create({
+    data: {
+      plateNumber: 'LAG-402-KJA',
+      type: 'BUS',
+      capacity: 45,
+      status: 'AVAILABLE',
+      notes: 'Air-conditioned coach, contracted for the 2026 Hajj season.',
+    },
+  });
+  const driver = await prisma.driver.create({
+    data: {
+      firstName: 'Yusuf',
+      lastName: 'Bello',
+      phone: '+2348030001122',
+      licenseNumber: 'LIC-9981234', // sensitive — never returned by the drivers list endpoint
+      vehicleId: bus.id,
+      status: 'ACTIVE',
+    },
+  });
+
+  // --- Hajj group: Amina Yusuf's family (3 pilgrims), departs in 20 days ---
+  const hajjDepartureDate = new Date(Date.now() + 20 * 24 * 60 * 60 * 1000);
+  const hajjGroup = await prisma.hajjGroup.create({
+    data: {
+      groupNumber: 'HGRP-DEMO0001',
+      name: 'Hajj 2026 — Batch A (Lagos)',
+      packageId: hajjRegistration.packageId,
+      status: 'REGISTRATION_OPEN',
+      departureDate: hajjDepartureDate,
+      returnDate: new Date(
+        hajjDepartureDate.getTime() + 14 * 24 * 60 * 60 * 1000,
+      ),
+      airline: 'Saudia',
+      maxCapacity: 40,
+      coordinatorStaffId,
+      notes:
+        'Demo group — Amina Yusuf traveling with her spouse and one child.',
+    },
+  });
+  await prisma.hajjRegistrationPilgrim.updateMany({
+    where: { registrationId: hajjRegistration.id },
+    data: { groupId: hajjGroup.id },
+  });
+
+  // Spec #30: one pilgrim demonstrates the authorized, audited manual
+  // readiness override (e.g. photo verified in person, upload still pending).
+  const childPilgrim = hajjRegistration.pilgrims.find((p) => p.familyMemberId);
+  if (childPilgrim) {
+    await prisma.pilgrimReadinessOverride.create({
+      data: {
+        pilgrimType: 'HAJJ',
+        pilgrimId: childPilgrim.id,
+        status: 'AMBER',
+        reason:
+          'Photo verified in person at the branch; system upload still pending from the family.',
+        overriddenByStaffId: coordinatorStaffId,
+      },
+    });
+  }
+
+  // --- Umrah group: Chinedu Okafor's VIP Umrah, departs in 8 days --------
+  const umrahDepartureDate = new Date(Date.now() + 8 * 24 * 60 * 60 * 1000);
+  const umrahGroup = await prisma.umrahGroup.create({
+    data: {
+      groupNumber: 'UGRP-DEMO0001',
+      name: 'VIP Umrah — Chinedu Okafor',
+      groupType: 'VIP',
+      packageId: umrahRegistration.packageId,
+      status: 'FULL',
+      departureDate: umrahDepartureDate,
+      returnDate: new Date(
+        umrahDepartureDate.getTime() + 10 * 24 * 60 * 60 * 1000,
+      ),
+      airline: 'Qatar Airways',
+      maxCapacity: 1,
+      coordinatorStaffId,
+    },
+  });
+  await prisma.umrahRegistrationPilgrim.updateMany({
+    where: { registrationId: umrahRegistration.id },
+    data: { groupId: umrahGroup.id },
+  });
+
+  // --- Transport: airport transfer for the Hajj group ---------------------
+  await prisma.transport.create({
+    data: {
+      type: 'AIRPORT_TRANSFER',
+      hajjGroupId: hajjGroup.id,
+      vehicleId: bus.id,
+      driverId: driver.id,
+      pickupLocation: 'Hajj Camp, Lagos',
+      dropoffLocation: 'Murtala Muhammed International Airport',
+      scheduledAt: new Date(hajjDepartureDate.getTime() - 4 * 60 * 60 * 1000),
+      status: 'SCHEDULED',
+    },
+  });
+
+  // --- QR code + check-in: Chinedu is already checked in for his group ----
+  const umrahPilgrim = umrahRegistration.pilgrims[0];
+  const pilgrimCode = `PLG-${randomBytes(6).toString('hex').toUpperCase()}`;
+  await prisma.umrahRegistrationPilgrim.update({
+    where: { id: umrahPilgrim.id },
+    data: { pilgrimCode },
+  });
+  await prisma.pilgrimCheckIn.create({
+    data: {
+      pilgrimType: 'UMRAH',
+      pilgrimId: umrahPilgrim.id,
+      event: 'GROUP_CHECK_IN',
+      location: 'Branch office, Victoria Island',
+      staffId: coordinatorStaffId,
+    },
+  });
+
+  console.log(
+    `Created Hajj group ${hajjGroup.groupNumber} (3 pilgrims, 1 readiness override) and Umrah group ${umrahGroup.groupNumber} ` +
+      `(1 pilgrim, checked in, QR code ${pilgrimCode}), 1 vehicle, 1 driver, 1 airport transfer.`,
+  );
+  console.log('--------------------------------------------------------');
+  console.log('Phase 8 Hajj ops demo data seeded successfully.');
+  console.log('--------------------------------------------------------');
+}
+
 async function main() {
   await seedPhase1And2();
   await seedPhase3Visa();
@@ -2374,6 +2894,7 @@ async function main() {
   await seedPhase5Hotels();
   await seedPhase6Finance();
   await seedPhase7Crm();
+  await seedPhase8HajjOps();
 }
 
 main()

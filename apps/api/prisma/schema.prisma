@@ -214,6 +214,13 @@ model FamilyMember {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Phase 8: restricted-access next-of-kin contact for a pilgrim who is a
+  // family member rather than the customer themself — mirrors Customer's
+  // pre-existing emergencyContactName/Phone fields, gated the same way (see
+  // HajjOpsController's EMERGENCY_CONTACT_VIEW permission).
+  emergencyContactName  String?
+  emergencyContactPhone String?
+
   documents                FamilyMemberDocument[]
   flightBookingPassenger   FlightBookingPassenger[]
   hajjRegistrationPilgrim  HajjRegistrationPilgrim[]
@@ -333,6 +340,12 @@ model Staff {
   feedbackReceived      CustomerFeedback[]
   assignedComplaints    Complaint[]             @relation("AssignedComplaints")
   complaintNotesCreated ComplaintNote[]
+
+  // Phase 8 — Hajj & Umrah operations.
+  coordinatedHajjGroups     HajjGroup[]                @relation("HajjGroupCoordinator")
+  coordinatedUmrahGroups    UmrahGroup[]               @relation("UmrahGroupCoordinator")
+  pilgrimCheckIns           PilgrimCheckIn[]
+  pilgrimReadinessOverrides PilgrimReadinessOverride[]
 
   @@index([companyId])
   @@index([branchId])
@@ -1307,6 +1320,7 @@ model HajjPackage {
   updatedAt DateTime @updatedAt
 
   registrations HajjRegistration[]
+  groups        HajjGroup[]
 
   @@map("hajj_packages")
 }
@@ -1364,9 +1378,20 @@ model HajjRegistrationPilgrim {
   lastName       String
   passportNumber String?
 
+  // Phase 8: optional travel-cohort assignment — a pilgrim's family/
+  // customer record is never duplicated, only linked to a group container.
+  groupId String?
+  group   HajjGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+
+  // Phase 8 spec #33: a short, random, internal-only identifier for QR
+  // check-in — deliberately opaque (no passport/financial data encoded),
+  // generated once on first read by HajjOpsService.ensurePilgrimCode().
+  pilgrimCode String? @unique
+
   createdAt DateTime @default(now())
 
   @@index([registrationId])
+  @@index([groupId])
   @@map("hajj_registration_pilgrims")
 }
 
@@ -1410,6 +1435,7 @@ model UmrahPackage {
   updatedAt DateTime @updatedAt
 
   registrations UmrahRegistration[]
+  groups        UmrahGroup[]
 
   @@map("umrah_packages")
 }
@@ -1457,9 +1483,16 @@ model UmrahRegistrationPilgrim {
   lastName       String
   passportNumber String?
 
+  // Phase 8: same group-assignment / QR-code shape as HajjRegistrationPilgrim.
+  groupId String?
+  group   UmrahGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+
+  pilgrimCode String? @unique
+
   createdAt DateTime @default(now())
 
   @@index([registrationId])
+  @@index([groupId])
   @@map("umrah_registration_pilgrims")
 }
 
@@ -3581,4 +3614,279 @@ model Referral {
   createdAt DateTime @default(now())
 
   @@map("referrals")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 8 — Enterprise Hajj & Umrah pilgrim management, operations & group
+// control. Deliberately reuses existing infrastructure rather than
+// duplicating it:
+//   - A "pilgrim" is still a HajjRegistrationPilgrim/UmrahRegistrationPilgrim
+//     row, already linked to Customer/FamilyMember without a new table —
+//     groups below are pure travel-cohort containers pilgrims optionally
+//     join, not a parallel pilgrim record.
+//   - Installments, amount paid, and outstanding balance are computed from
+//     the existing HajjRegistration/UmrahRegistration → Invoice → Payment
+//     chain (see HajjOpsService), never re-stored here.
+//   - Visa/flight/hotel readiness is computed by matching a pilgrim's
+//     customerId/familyMemberId against VisaApplication/FlightBookingPassenger
+//     /HotelBookingGuest at read time — no synced/duplicated status field.
+//   - Operational reminder tasks reuse the Phase 7 Task model
+//     (relatedType: HAJJ_GROUP/UMRAH_GROUP) and TasksService.createAuto's
+//     existing idempotency, not a second task system.
+// ---------------------------------------------------------------------------
+
+enum TravelGroupStatus {
+  PLANNING
+  REGISTRATION_OPEN
+  ALMOST_FULL
+  FULL
+  DEPARTED
+  IN_SAUDI_ARABIA
+  RETURNING
+  COMPLETED
+  CANCELLED
+}
+
+model HajjGroup {
+  id          String @id @default(cuid())
+  groupNumber String @unique
+  name        String
+
+  packageId String?
+  package   HajjPackage? @relation(fields: [packageId], references: [id], onDelete: SetNull)
+
+  status TravelGroupStatus @default(PLANNING)
+
+  departureDate DateTime?
+  returnDate    DateTime?
+  airline       String?
+  maxCapacity   Int?
+
+  coordinatorStaffId String?
+  coordinatorStaff   Staff?  @relation("HajjGroupCoordinator", fields: [coordinatorStaffId], references: [id], onDelete: SetNull)
+
+  notes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  pilgrims   HajjRegistrationPilgrim[]
+  transports Transport[]
+
+  @@index([packageId])
+  @@index([status])
+  @@map("hajj_groups")
+}
+
+enum UmrahGroupType {
+  INDIVIDUAL
+  FAMILY
+  GROUP
+  CORPORATE
+  VIP
+}
+
+model UmrahGroup {
+  id          String         @id @default(cuid())
+  groupNumber String         @unique
+  name        String
+  groupType   UmrahGroupType @default(GROUP)
+
+  packageId String?
+  package   UmrahPackage? @relation(fields: [packageId], references: [id], onDelete: SetNull)
+
+  status TravelGroupStatus @default(PLANNING)
+
+  departureDate DateTime?
+  returnDate    DateTime?
+  airline       String?
+  maxCapacity   Int?
+
+  coordinatorStaffId String?
+  coordinatorStaff   Staff?  @relation("UmrahGroupCoordinator", fields: [coordinatorStaffId], references: [id], onDelete: SetNull)
+
+  notes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  pilgrims   UmrahRegistrationPilgrim[]
+  transports Transport[]
+
+  @@index([packageId])
+  @@index([status])
+  @@map("umrah_groups")
+}
+
+enum VehicleFleetType {
+  BUS
+  VAN
+  SEDAN
+  SUV
+  OTHER
+}
+
+enum VehicleFleetStatus {
+  AVAILABLE
+  IN_USE
+  MAINTENANCE
+  OUT_OF_SERVICE
+}
+
+// Internal fleet used for pilgrim transport — deliberately distinct from
+// VehicleRental (a customer-facing marketplace booking with a third-party
+// provider); no overlap in purpose or data.
+model Vehicle {
+  id          String             @id @default(cuid())
+  plateNumber String             @unique
+  type        VehicleFleetType
+  capacity    Int
+  status      VehicleFleetStatus @default(AVAILABLE)
+  notes       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  drivers    Driver[]
+  transports Transport[]
+
+  @@map("hajj_ops_vehicles")
+}
+
+enum DriverStatus {
+  ACTIVE
+  INACTIVE
+}
+
+model Driver {
+  id        String @id @default(cuid())
+  firstName String
+  lastName  String
+  phone     String
+
+  // Sensitive — never returned on a list endpoint, only a permission-gated
+  // single-driver detail view (same convention as Staff.bankAccountNumber).
+  licenseNumber String?
+
+  vehicleId String?
+  vehicle   Vehicle? @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+
+  status DriverStatus @default(ACTIVE)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  transports Transport[]
+
+  @@index([vehicleId])
+  @@map("hajj_ops_drivers")
+}
+
+enum TransportType {
+  AIRPORT_TRANSFER
+  MAKKAH_TRANSPORT
+  MADINAH_TRANSPORT
+  INTERCITY
+  GROUP_BUS
+  PRIVATE_VEHICLE
+}
+
+enum TransportStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+model Transport {
+  id   String        @id @default(cuid())
+  type TransportType
+
+  // Exactly one of these is set — same "exactly one" convention as
+  // HajjRegistrationPilgrim.customerId/familyMemberId.
+  hajjGroupId  String?
+  hajjGroup    HajjGroup?  @relation(fields: [hajjGroupId], references: [id], onDelete: SetNull)
+  umrahGroupId String?
+  umrahGroup   UmrahGroup? @relation(fields: [umrahGroupId], references: [id], onDelete: SetNull)
+
+  vehicleId String?
+  vehicle   Vehicle? @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  driverId  String?
+  driver    Driver?  @relation(fields: [driverId], references: [id], onDelete: SetNull)
+
+  pickupLocation  String
+  dropoffLocation String
+  scheduledAt     DateTime
+
+  status TransportStatus @default(SCHEDULED)
+  notes  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([hajjGroupId])
+  @@index([umrahGroupId])
+  @@map("hajj_ops_transports")
+}
+
+enum PilgrimType {
+  HAJJ
+  UMRAH
+}
+
+enum PilgrimCheckInEvent {
+  GROUP_CHECK_IN
+  AIRPORT
+  TRANSPORT
+  HOTEL
+  DEPARTURE
+}
+
+// QR-based check-in event log (spec #34) — the QR payload itself is just
+// HajjRegistrationPilgrim/UmrahRegistrationPilgrim.pilgrimCode, an opaque
+// internal id that never encodes passport/financial data.
+model PilgrimCheckIn {
+  id          String      @id @default(cuid())
+  pilgrimType PilgrimType
+  // Polymorphic by design (HajjRegistrationPilgrim.id or
+  // UmrahRegistrationPilgrim.id) — same convention already used for
+  // StaffIncentive's sourceType/sourceId pairing.
+  pilgrimId   String
+
+  event    PilgrimCheckInEvent
+  location String?
+
+  staffId String?
+  staff   Staff?  @relation(fields: [staffId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([pilgrimType, pilgrimId])
+  @@map("pilgrim_check_ins")
+}
+
+enum ReadinessStatus {
+  GREEN
+  AMBER
+  RED
+}
+
+// Spec #30: the readiness/departure-checklist status is computed live
+// (HajjOpsService.computeReadiness) from real documents/visa/payment/flight/
+// hotel state — this table exists only for the explicit, audited manual
+// override staff cannot apply without the CHECKLIST_OVERRIDE permission.
+model PilgrimReadinessOverride {
+  id          String      @id @default(cuid())
+  pilgrimType PilgrimType
+  pilgrimId   String
+
+  status ReadinessStatus
+  reason String
+
+  overriddenByStaffId String
+  overriddenByStaff   Staff    @relation(fields: [overriddenByStaffId], references: [id], onDelete: Restrict)
+  overriddenAt        DateTime @default(now())
+
+  @@index([pilgrimType, pilgrimId])
+  @@map("pilgrim_readiness_overrides")
 }

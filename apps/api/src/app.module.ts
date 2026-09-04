@@ -34,6 +34,7 @@ import { CorporateTravelModule } from './modules/corporate-travel/corporate-trav
 import { FinanceModule } from './modules/finance/finance.module';
 import { CrmModule } from './modules/crm/crm.module';
 import { SupportModule } from './modules/support/support.module';
+import { HajjOpsModule } from './modules/hajj-ops/hajj-ops.module';
 
 @Module({
   imports: [
@@ -68,6 +69,7 @@ import { SupportModule } from './modules/support/support.module';
     FinanceModule,
     CrmModule,
     SupportModule,
+    HajjOpsModule,
   ],
   controllers: [AppController],
   providers: [

@@ -197,6 +197,22 @@ export const PERMISSIONS = {
     CATEGORY_MANAGE: 'support:category_manage',
     SLA_MANAGE: 'support:sla_manage', // SLA + escalation rule configuration
   },
+  // Phase 8 — enterprise Hajj & Umrah pilgrim management, operations & group
+  // control.
+  HAJJ_OPS: {
+    GROUP_VIEW: 'hajj_ops:group_view',
+    GROUP_MANAGE: 'hajj_ops:group_manage', // create/edit groups, assign pilgrims/coordinator
+    FLEET_MANAGE: 'hajj_ops:fleet_manage', // vehicles + drivers catalog
+    DRIVER_SENSITIVE_VIEW: 'hajj_ops:driver_sensitive_view', // licenseNumber, phone
+    TRANSPORT_MANAGE: 'hajj_ops:transport_manage',
+    CHECKLIST_VIEW: 'hajj_ops:checklist_view', // document checklist + readiness score
+    CHECKLIST_OVERRIDE: 'hajj_ops:checklist_override', // manual GREEN/AMBER/RED override, always audited
+    CHECK_IN: 'hajj_ops:check_in', // record a QR/manual pilgrim check-in event
+    MANIFEST_VIEW: 'hajj_ops:manifest_view', // group/flight/hotel manifests
+    EMERGENCY_CONTACT_VIEW: 'hajj_ops:emergency_contact_view', // restricted personal data
+    DASHBOARD_VIEW: 'hajj_ops:dashboard_view',
+    PROFITABILITY_VIEW: 'hajj_ops:profitability_view', // per-package cost vs. revenue — financial users only
+  },
 } as const;
 
 export const ALL_PERMISSION_KEYS: string[] = Object.values(PERMISSIONS).flatMap(
