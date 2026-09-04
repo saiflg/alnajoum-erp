@@ -48,9 +48,12 @@ export class SmtpNotificationProviderService implements NotificationProviderPort
     );
     return {
       host: db?.host || this.configService.get<string>('SMTP_HOST'),
-      port: Number(db?.port || this.configService.get<number>('SMTP_PORT', 587)),
+      port: Number(
+        db?.port || this.configService.get<number>('SMTP_PORT', 587),
+      ),
       secure:
-        (db?.secure ?? this.configService.get<string>('SMTP_SECURE')) === 'true',
+        (db?.secure ?? this.configService.get<string>('SMTP_SECURE')) ===
+        'true',
       user: db?.user || this.configService.get<string>('SMTP_USER'),
       password: db?.password || this.configService.get<string>('SMTP_PASSWORD'),
       from: db?.from || this.configService.get<string>('SMTP_FROM'),
@@ -62,7 +65,8 @@ export class SmtpNotificationProviderService implements NotificationProviderPort
     if (!settings.host) {
       return {
         success: false,
-        error: 'SMTP is not configured — add a host at /admin/integrations, or set SMTP_HOST',
+        error:
+          'SMTP is not configured — add a host at /admin/integrations, or set SMTP_HOST',
       };
     }
 
@@ -75,7 +79,9 @@ export class SmtpNotificationProviderService implements NotificationProviderPort
       host: settings.host,
       port: settings.port,
       secure: settings.secure,
-      auth: settings.user ? { user: settings.user, pass: settings.password } : undefined,
+      auth: settings.user
+        ? { user: settings.user, pass: settings.password }
+        : undefined,
     });
 
     try {

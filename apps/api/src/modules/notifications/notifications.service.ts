@@ -7,6 +7,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { PERMISSIONS } from '../rbac/constants/permissions.constant';
+import { NotificationPreferencesService } from './notification-preferences.service';
 import { NOTIFICATION_PROVIDER } from './providers/notification-provider.port';
 import type { NotificationProviderPort } from './providers/notification-provider.port';
 
@@ -68,6 +69,7 @@ export class NotificationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
+    private readonly preferencesService: NotificationPreferencesService,
     @Inject(NOTIFICATION_PROVIDER)
     private readonly provider: NotificationProviderPort,
   ) {}
@@ -85,6 +87,19 @@ export class NotificationsService {
     identityId?: string,
   ): Promise<void> {
     try {
+      // Spec #18/#19: an identity that opted out of email for a
+      // non-mandatory type gets nothing sent and no row recorded — silence
+      // is exactly what "configure which notifications you receive" means.
+      if (
+        identityId &&
+        !(await this.preferencesService.isAllowed(
+          identityId,
+          type,
+          NotificationChannel.EMAIL,
+        ))
+      ) {
+        return;
+      }
       const result = await this.provider.sendEmail({ to, subject, textBody });
       await this.prisma.notification.create({
         data: {
@@ -126,6 +141,18 @@ export class NotificationsService {
   ): Promise<void> {
     if (!to) return;
     try {
+      if (
+        identityId &&
+        !(await this.preferencesService.isAllowed(
+          identityId,
+          type,
+          channel === 'SMS'
+            ? NotificationChannel.SMS
+            : NotificationChannel.WHATSAPP,
+        ))
+      ) {
+        return;
+      }
       const result =
         channel === 'SMS'
           ? await this.provider.sendSms({ to, body })

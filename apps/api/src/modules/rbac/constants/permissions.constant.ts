@@ -172,6 +172,31 @@ export const PERMISSIONS = {
     APPROVE_HIGH_VALUE: 'finance:approve_high_value',
     APPROVE_EXECUTIVE: 'finance:approve_executive',
   },
+  // Phase 7 — enterprise CRM, customer support, communication & task management.
+  CRM: {
+    LEAD_CREATE: 'crm:lead_create',
+    LEAD_READ: 'crm:lead_read',
+    LEAD_MANAGE: 'crm:lead_manage', // edit, change stage, assign, convert
+    LEAD_STAGE_MANAGE: 'crm:lead_stage_manage', // configure pipeline stages
+    TASK_MANAGE: 'crm:task_manage', // create/assign tasks for others (own tasks need no extra permission)
+    CUSTOMER_360_VIEW: 'crm:customer_360_view',
+    CUSTOMER_NOTE_MANAGE: 'crm:customer_note_manage',
+    CUSTOMER_TAG_MANAGE: 'crm:customer_tag_manage',
+    CAMPAIGN_MANAGE: 'crm:campaign_manage',
+    REFERRAL_MANAGE: 'crm:referral_manage',
+    FEEDBACK_VIEW: 'crm:feedback_view',
+    FEEDBACK_APPROVE: 'crm:feedback_approve',
+    COMPLAINT_MANAGE: 'crm:complaint_manage',
+    DASHBOARD_VIEW: 'crm:dashboard_view', // branch/company-wide CRM dashboards
+    SEARCH: 'crm:search',
+  },
+  SUPPORT: {
+    TICKET_CREATE: 'support:ticket_create', // customer opening their own ticket
+    TICKET_VIEW: 'support:ticket_view', // staff viewing tickets (own/branch/all per role)
+    TICKET_MANAGE: 'support:ticket_manage', // assign, change status, reply, internal notes
+    CATEGORY_MANAGE: 'support:category_manage',
+    SLA_MANAGE: 'support:sla_manage', // SLA + escalation rule configuration
+  },
 } as const;
 
 export const ALL_PERMISSION_KEYS: string[] = Object.values(PERMISSIONS).flatMap(

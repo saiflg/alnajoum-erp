@@ -6,6 +6,7 @@ import {
   NotificationType,
 } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
+import { NotificationPreferencesService } from './notification-preferences.service';
 import { NotificationsService } from './notifications.service';
 import { NOTIFICATION_PROVIDER } from './providers/notification-provider.port';
 
@@ -15,8 +16,13 @@ describe('NotificationsService', () => {
     notification: { create: jest.Mock; findMany: jest.Mock };
     identity: { findMany: jest.Mock };
   };
-  let provider: { sendEmail: jest.Mock; sendSms: jest.Mock; sendWhatsApp: jest.Mock };
+  let provider: {
+    sendEmail: jest.Mock;
+    sendSms: jest.Mock;
+    sendWhatsApp: jest.Mock;
+  };
   let configService: { get: jest.Mock };
+  let preferencesService: { isAllowed: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
@@ -31,6 +37,7 @@ describe('NotificationsService', () => {
     configService = {
       get: jest.fn((_key: string, fallback?: unknown) => fallback),
     };
+    preferencesService = { isAllowed: jest.fn().mockResolvedValue(true) };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -38,6 +45,10 @@ describe('NotificationsService', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: ConfigService, useValue: configService },
         { provide: NOTIFICATION_PROVIDER, useValue: provider },
+        {
+          provide: NotificationPreferencesService,
+          useValue: preferencesService,
+        },
       ],
     }).compile();
 
@@ -218,7 +229,9 @@ describe('NotificationsService', () => {
       );
       expect(prisma.notification.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ channel: NotificationChannel.WHATSAPP }),
+          data: expect.objectContaining({
+            channel: NotificationChannel.WHATSAPP,
+          }),
         }),
       );
     });
@@ -249,6 +262,40 @@ describe('NotificationsService', () => {
           }),
         }),
       );
+    });
+  });
+
+  describe('notification preferences (spec #18/#19)', () => {
+    it('does not call the provider or record a row when the identity opted out of email for a non-mandatory type', async () => {
+      preferencesService.isAllowed.mockResolvedValue(false);
+
+      await service.sendWalletUpdate('amina@example.com', 'identity-1', {
+        type: 'DEPOSIT',
+        amount: 5_000,
+        currency: 'NGN',
+        description: 'Top-up',
+      });
+
+      expect(provider.sendEmail).not.toHaveBeenCalled();
+      expect(prisma.notification.create).not.toHaveBeenCalled();
+    });
+
+    it('sends normally when no identity is attached to check a preference against (e.g. staff onboarding)', async () => {
+      preferencesService.isAllowed.mockResolvedValue(false);
+      provider.sendEmail.mockResolvedValue({ success: true });
+
+      // sendStaffTempPassword passes no identityId, so the preference check
+      // never applies to it regardless of what isAllowed would return — the
+      // mandatory-type override itself lives in NotificationPreferencesService
+      // and is covered by notification-preferences.service.spec.ts.
+      await service.sendStaffTempPassword(
+        'staff@example.com',
+        'Fola',
+        'Tmp123!',
+      );
+
+      expect(provider.sendEmail).toHaveBeenCalled();
+      expect(preferencesService.isAllowed).not.toHaveBeenCalled();
     });
   });
 

@@ -62,6 +62,9 @@ model Identity {
   journalEntries     JournalEntry[]
   companyInvestments CompanyInvestment[]
 
+  // Phase 7 — per-identity notification channel preferences.
+  notificationPreference NotificationPreference?
+
   @@index([type])
   @@map("identities")
 }
@@ -128,6 +131,18 @@ model Customer {
   visaIncentivesEarned     StaffIncentive[]
   hotelBookingGuests       HotelBookingGuest[]
   travelPackages           TravelPackage[]
+
+  // Phase 7 — CRM, support, communication.
+  convertedFromLeads Lead[]
+  tasks              Task[]
+  customerNotes      CustomerNote[]
+  tagAssignments     CustomerTagAssignment[]
+  timelineEvents     CustomerTimelineEvent[]
+  feedback           CustomerFeedback[]
+  complaints         Complaint[]
+  supportTickets     SupportTicket[]
+  referralCode       ReferralCode?           @relation("ReferralCodeOwner")
+  referredBy         Referral?               @relation("ReferredCustomer")
 
   @@index([assignedStaffId])
   @@index([assignedBranchId])
@@ -305,6 +320,20 @@ model Staff {
   closedDailyClosings        DailyClosing[]
   importedBankStatementLines BankStatementLine[]
 
+  // Phase 7 — CRM, support, communication.
+  assignedLeads         Lead[]                  @relation("AssignedLeads")
+  createdLeads          Lead[]                  @relation("CreatedLeads")
+  leadActivities        LeadActivity[]
+  assignedTasks         Task[]                  @relation("AssignedTasks")
+  createdTasks          Task[]                  @relation("CreatedTasks")
+  assignedTickets       SupportTicket[]         @relation("AssignedTickets")
+  ticketMessages        SupportTicketMessage[]
+  customerNotesCreated  CustomerNote[]
+  timelineEventsCreated CustomerTimelineEvent[]
+  feedbackReceived      CustomerFeedback[]
+  assignedComplaints    Complaint[]             @relation("AssignedComplaints")
+  complaintNotesCreated ComplaintNote[]
+
   @@index([companyId])
   @@index([branchId])
   @@map("staff")
@@ -364,6 +393,10 @@ model Branch {
   journalEntries JournalEntry[]
   expenses       Expense[]
   dailyClosings  DailyClosing[]
+
+  // Phase 7 — CRM, support.
+  assignedLeads  Lead[]
+  supportTickets SupportTicket[]
 
   @@unique([companyId, code])
   @@index([companyId])
@@ -1127,6 +1160,11 @@ model Notification {
   identityId String?
   identity   Identity? @relation(fields: [identityId], references: [id], onDelete: SetNull)
   isRead     Boolean   @default(false)
+
+  // Phase 7 spec #21's "related booking/application" — free-form, same
+  // pattern as WalletTransaction.invoiceId / BankStatementLine.matchedId.
+  relatedType String?
+  relatedId   String?
 
   createdAt DateTime @default(now())
 
@@ -2895,4 +2933,652 @@ model BankStatementLine {
 
   @@index([status])
   @@map("bank_statement_lines")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 7 — Enterprise CRM, customer support, communication & task management.
+// Reuses everything already built rather than duplicating it: Customer
+// already carries assignedStaffId/assignedBranchId (used here for both
+// customers and, via its own copy, leads); NotificationsService/
+// NotificationProviderPort already IS the email/SMS/WhatsApp abstraction
+// spec #15/#17 ask for (MockNotificationProviderService already satisfies
+// spec #36's "testable without real credentials, logs would-be sends");
+// AuditService remains the system-action log — CustomerTimelineEvent below
+// is deliberately a separate, customer-facing subset of "important events"
+// rather than a duplicate of it.
+// ---------------------------------------------------------------------------
+
+enum LeadSource {
+  WEBSITE
+  WHATSAPP
+  PHONE
+  WALK_IN
+  SOCIAL_MEDIA
+  REFERRAL
+  STAFF
+  ADVERTISEMENT
+  MANUAL_ENTRY
+}
+
+enum LeadPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum LeadStatus {
+  OPEN
+  CONVERTED
+  LOST
+}
+
+/**
+ * Configurable pipeline stages (spec #5) — an admin-managed ordered list,
+ * not a hardcoded enum, since "administrators can create additional
+ * stages" is explicit. Seeded with the spec's own 7 default stages (see
+ * LeadsService.ensureDefaultStages(), idempotent like
+ * LedgerService.ensureSystemAccounts()).
+ */
+model LeadStage {
+  id       String  @id @default(cuid())
+  name     String  @unique
+  order    Int
+  isWon    Boolean @default(false)
+  isLost   Boolean @default(false)
+  isActive Boolean @default(true)
+
+  leads Lead[]
+
+  @@map("lead_stages")
+}
+
+model Lead {
+  id         String @id @default(cuid())
+  leadNumber String @unique
+
+  name  String
+  phone String
+  email String?
+
+  source            LeadSource
+  interestedService String?
+  destination       String?
+  budget            Int?
+  currency          String     @default("NGN")
+
+  stageId  String
+  stage    LeadStage    @relation(fields: [stageId], references: [id], onDelete: Restrict)
+  status   LeadStatus   @default(OPEN)
+  priority LeadPriority @default(NORMAL)
+
+  assignedStaffId  String?
+  assignedStaff    Staff?  @relation("AssignedLeads", fields: [assignedStaffId], references: [id], onDelete: SetNull)
+  assignedBranchId String?
+  assignedBranch   Branch? @relation(fields: [assignedBranchId], references: [id], onDelete: SetNull)
+
+  notes        String?
+  followUpDate DateTime?
+
+  campaignId String?
+  campaign   Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+
+  // Set once converted — spec #6's "do not create duplicate customer
+  // records" / "preserve the lead history": the Lead row is never deleted
+  // on conversion, only linked forward.
+  // Deliberately NOT @unique: two separate leads (e.g. two enquiries months
+  // apart) can both turn out to be the same real person and both get
+  // linked to the one deduplicated Customer they resolve to — spec #6's
+  // "do not create duplicate customer records" is enforced by
+  // LeadsService.convert()'s phone/email lookup, not by a DB constraint
+  // that would wrongly forbid a second lead from ever reusing that customer.
+  convertedCustomerId String?
+  convertedCustomer   Customer? @relation(fields: [convertedCustomerId], references: [id], onDelete: SetNull)
+  convertedAt         DateTime?
+  lostReason          String?
+
+  createdByStaffId String?
+  createdByStaff   Staff?  @relation("CreatedLeads", fields: [createdByStaffId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  activities LeadActivity[]
+  tasks      Task[]
+
+  @@index([stageId])
+  @@index([status])
+  @@index([assignedStaffId])
+  @@index([campaignId])
+  @@map("leads")
+}
+
+/**
+ * Stage-change / contact-attempt history — spec #6's "preserve the lead history" in practice.
+ */
+model LeadActivity {
+  id     String @id @default(cuid())
+  leadId String
+  lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  action      String // "stage_changed" | "note_added" | "assigned" | "converted" | "lost" | "contacted"
+  description String
+  fromStageId String?
+  toStageId   String?
+
+  performedByStaffId String?
+  performedByStaff   Staff?  @relation(fields: [performedByStaffId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([leadId])
+  @@map("lead_activities")
+}
+
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  OVERDUE
+}
+
+enum TaskPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum TaskRelatedType {
+  FOLLOW_UP
+  VISA
+  FLIGHT
+  HOTEL
+  HAJJ
+  UMRAH
+  PAYMENT
+  CUSTOMER
+  GUARANTOR
+  DOCUMENT
+  LEAD
+  SUPPORT_TICKET
+  OTHER
+}
+
+/**
+ * One Task model covers both spec #7 (Follow-Up System) and spec #8 (Staff
+ * Task Management) — a follow-up IS a Task with relatedType FOLLOW_UP,
+ * rather than two parallel systems sharing the same staff/due-date/status/
+ * priority shape. Spec #9 lists what auto-creates one (isAutoCreated=true).
+ */
+model Task {
+  id String @id @default(cuid())
+
+  title       String
+  description String?
+  relatedType TaskRelatedType
+  relatedId   String?
+
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  leadId     String?
+  lead       Lead?     @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  assignedStaffId String
+  assignedStaff   Staff  @relation("AssignedTasks", fields: [assignedStaffId], references: [id], onDelete: Restrict)
+
+  createdByStaffId String?
+  createdByStaff   Staff?  @relation("CreatedTasks", fields: [createdByStaffId], references: [id], onDelete: SetNull)
+  isAutoCreated    Boolean @default(false)
+
+  dueDate  DateTime
+  priority TaskPriority @default(NORMAL)
+  status   TaskStatus   @default(PENDING)
+
+  notes       String?
+  completedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([assignedStaffId])
+  @@index([status])
+  @@index([dueDate])
+  @@index([customerId])
+  @@index([leadId])
+  @@map("tasks")
+}
+
+enum TicketStatus {
+  OPEN
+  ASSIGNED
+  IN_PROGRESS
+  WAITING_FOR_CUSTOMER
+  WAITING_FOR_STAFF
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  NORMAL
+  HIGH
+  CRITICAL
+}
+
+/**
+ * Configurable categories (spec #11) — same admin-extendable-list pattern as LeadStage.
+ */
+model SupportTicketCategory {
+  id       String  @id @default(cuid())
+  name     String  @unique
+  isActive Boolean @default(true)
+
+  tickets SupportTicket[]
+
+  @@map("support_ticket_categories")
+}
+
+model SupportTicket {
+  id           String @id @default(cuid())
+  ticketNumber String @unique
+
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+
+  subject     String
+  categoryId  String
+  category    SupportTicketCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  priority    TicketPriority        @default(NORMAL)
+  description String
+
+  assignedStaffId String?
+  assignedStaff   Staff?  @relation("AssignedTickets", fields: [assignedStaffId], references: [id], onDelete: SetNull)
+  branchId        String?
+  branch          Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
+
+  status TicketStatus @default(OPEN)
+
+  // SLA (spec #13) snapshotted at creation from the active SlaRule for this
+  // priority — a later rule-config change never reaches back and re-dates
+  // an in-flight ticket's deadline.
+  slaResponseDueAt DateTime?
+  firstRespondedAt DateTime?
+  slaBreached      Boolean   @default(false)
+
+  resolvedAt DateTime?
+  closedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messages    SupportTicketMessage[]
+  escalations TicketEscalation[]
+
+  @@index([customerId])
+  @@index([status])
+  @@index([assignedStaffId])
+  @@index([priority])
+  @@map("support_tickets")
+}
+
+enum TicketMessageAuthorType {
+  CUSTOMER
+  STAFF
+}
+
+/**
+ * Doubles as the customer-visible message thread AND the live-chat
+ * transport (spec #14) — a "conversation" is a ticket whose messages
+ * arrive close together; portals poll this list the same way
+ * Notification.listForIdentity is already polled, rather than adding a
+ * WebSocket gateway this codebase has never needed. isInternal is spec
+ * #12's "clearly separate CUSTOMER MESSAGE from INTERNAL STAFF NOTE" —
+ * every customer-facing read path filters it out server-side.
+ */
+model SupportTicketMessage {
+  id       String        @id @default(cuid())
+  ticketId String
+  ticket   SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  authorType    TicketMessageAuthorType
+  authorStaffId String?
+  authorStaff   Staff?                  @relation(fields: [authorStaffId], references: [id], onDelete: SetNull)
+
+  message        String
+  isInternal     Boolean @default(false)
+  attachmentPath String?
+
+  createdAt DateTime @default(now())
+
+  @@index([ticketId])
+  @@map("support_ticket_messages")
+}
+
+/**
+ * Spec #13 — configurable per-priority response deadline.
+ */
+model SlaRule {
+  id              String         @id @default(cuid())
+  priority        TicketPriority @unique
+  responseMinutes Int
+
+  @@map("sla_rules")
+}
+
+/**
+ * Spec #25 — configurable, ordered escalation steps per priority.
+ */
+model EscalationRule {
+  id String @id @default(cuid())
+
+  priority     TicketPriority
+  afterMinutes Int
+  notifyRole   String // a SYSTEM_ROLES value, e.g. "BRANCH_MANAGER"
+  order        Int
+  isActive     Boolean        @default(true)
+
+  @@map("escalation_rules")
+}
+
+model TicketEscalation {
+  id       String        @id @default(cuid())
+  ticketId String
+  ticket   SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  notifiedRole String
+  triggeredAt  DateTime @default(now())
+
+  @@index([ticketId])
+  @@map("ticket_escalations")
+}
+
+enum MessageTemplateChannel {
+  EMAIL
+  SMS
+  WHATSAPP
+}
+
+/**
+ * Spec #22 — {{variable}} substitution only, never eval()'d: rendering
+ * (TemplatesService.render) does one regex pass against a plain
+ * string-to-string map and HTML-escapes every substituted value, so a
+ * template can never execute code even if a variable's value looks like
+ * markup or another template.
+ */
+model MessageTemplate {
+  id      String                 @id @default(cuid())
+  key     String                 @unique
+  name    String
+  channel MessageTemplateChannel
+  subject String?
+  body    String
+
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("message_templates")
+}
+
+/**
+ * Spec #19 — per-identity channel opt-out. A NotificationType listed in
+ * MANDATORY_NOTIFICATION_TYPES (notifications constants) always sends
+ * regardless of this row — "administrators can define mandatory
+ * notifications users cannot disable."
+ */
+model NotificationPreference {
+  id         String   @id @default(cuid())
+  identityId String   @unique
+  identity   Identity @relation(fields: [identityId], references: [id], onDelete: Cascade)
+
+  emailEnabled    Boolean @default(true)
+  smsEnabled      Boolean @default(true)
+  whatsappEnabled Boolean @default(true)
+  inAppEnabled    Boolean @default(true)
+
+  updatedAt DateTime @updatedAt
+
+  @@map("notification_preferences")
+}
+
+model CustomerNote {
+  id         String   @id @default(cuid())
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  note String
+
+  createdByStaffId String
+  createdByStaff   Staff  @relation(fields: [createdByStaffId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+
+  @@index([customerId])
+  @@map("customer_notes")
+}
+
+/**
+ * Spec #3's free-form custom tags — the fixed segment categories (Hajj/Umrah/Visa/Flight/Hotel/New/Returning Customer) are computed from actual bookings in CrmService rather than stored, so they can never drift out of sync with reality.
+ */
+model CustomerTag {
+  id   String @id @default(cuid())
+  name String @unique
+
+  assignments CustomerTagAssignment[]
+
+  @@map("customer_tags")
+}
+
+model CustomerTagAssignment {
+  id         String      @id @default(cuid())
+  customerId String
+  customer   Customer    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  tagId      String
+  tag        CustomerTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  assignedByStaffId String?
+  createdAt         DateTime @default(now())
+
+  @@unique([customerId, tagId])
+  @@map("customer_tag_assignments")
+}
+
+enum TimelineEventType {
+  CUSTOMER_REGISTERED
+  VISA_APPLICATION_SUBMITTED
+  DOCUMENT_UPLOADED
+  GUARANTOR_ADDED
+  PAYMENT_RECEIVED
+  VISA_STATUS_CHANGED
+  FLIGHT_BOOKED
+  HOTEL_BOOKED
+  HAJJ_REGISTERED
+  UMRAH_REGISTERED
+  PACKAGE_BOOKED
+  SUPPORT_TICKET_CREATED
+  SUPPORT_TICKET_RESOLVED
+  FEEDBACK_SUBMITTED
+  COMPLAINT_SUBMITTED
+  STAFF_NOTE
+  OTHER
+}
+
+/**
+ * Spec #2 — a deliberately narrow, customer-facing subset of "important events" (not a duplicate of AuditLog, which stays the full system-action log).
+ */
+model CustomerTimelineEvent {
+  id         String   @id @default(cuid())
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  type        TimelineEventType
+  description String
+  relatedType String?
+  relatedId   String?
+
+  createdByStaffId String?
+  createdByStaff   Staff?  @relation(fields: [createdByStaffId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([customerId])
+  @@map("customer_timeline_events")
+}
+
+/**
+ * Spec #23 — isApproved gates visibility; nothing publishes a rating/comment automatically.
+ */
+model CustomerFeedback {
+  id         String   @id @default(cuid())
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  serviceType String
+  sourceType  String?
+  sourceId    String?
+
+  rating      Int
+  staffRating Int?
+  comment     String?
+
+  staffId String?
+  staff   Staff?  @relation(fields: [staffId], references: [id], onDelete: SetNull)
+
+  isApproved        Boolean @default(false)
+  approvedByStaffId String?
+
+  createdAt DateTime @default(now())
+
+  @@index([customerId])
+  @@map("customer_feedback")
+}
+
+enum ComplaintStatus {
+  SUBMITTED
+  ASSIGNED
+  INVESTIGATING
+  RESOLVED
+  ESCALATED
+  CLOSED
+}
+
+model Complaint {
+  id              String @id @default(cuid())
+  complaintNumber String @unique
+
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+
+  subject     String
+  description String
+  status      ComplaintStatus @default(SUBMITTED)
+
+  assignedStaffId String?
+  assignedStaff   Staff?  @relation("AssignedComplaints", fields: [assignedStaffId], references: [id], onDelete: SetNull)
+
+  resolution  String?
+  resolvedAt  DateTime?
+  escalatedTo String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  notes ComplaintNote[]
+
+  @@index([customerId])
+  @@index([status])
+  @@map("complaints")
+}
+
+model ComplaintNote {
+  id          String    @id @default(cuid())
+  complaintId String
+  complaint   Complaint @relation(fields: [complaintId], references: [id], onDelete: Cascade)
+
+  note       String
+  isInternal Boolean @default(true)
+
+  createdByStaffId String
+  createdByStaff   Staff  @relation(fields: [createdByStaffId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+
+  @@index([complaintId])
+  @@map("complaint_notes")
+}
+
+enum CampaignStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  COMPLETED
+}
+
+model Campaign {
+  id          String  @id @default(cuid())
+  name        String
+  description String?
+
+  targetService  String
+  targetAudience String?
+
+  startDate DateTime
+  endDate   DateTime?
+  budget    Int?
+  channel   String?
+
+  status CampaignStatus @default(DRAFT)
+
+  createdByStaffId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  leads Lead[]
+
+  @@map("campaigns")
+}
+
+enum ReferralStatus {
+  PENDING
+  QUALIFIED
+  REWARDED
+  EXPIRED
+}
+
+model ReferralCode {
+  id         String   @id @default(cuid())
+  code       String   @unique
+  customerId String   @unique
+  customer   Customer @relation("ReferralCodeOwner", fields: [customerId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  referrals Referral[]
+
+  @@map("referral_codes")
+}
+
+model Referral {
+  id             String       @id @default(cuid())
+  referralCodeId String
+  referralCode   ReferralCode @relation(fields: [referralCodeId], references: [id], onDelete: Restrict)
+
+  referredCustomerId String   @unique
+  referredCustomer   Customer @relation("ReferredCustomer", fields: [referredCustomerId], references: [id], onDelete: Cascade)
+
+  serviceType       String?
+  transactionId     String?
+  transactionAmount Int?
+
+  status       ReferralStatus @default(PENDING)
+  rewardAmount Int?
+  rewardPaidAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@map("referrals")
 }

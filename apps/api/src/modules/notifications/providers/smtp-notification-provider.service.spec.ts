@@ -18,8 +18,12 @@ describe('SmtpNotificationProviderService', () => {
       .fn()
       .mockReturnValue({ sendMail: sendMailMock });
 
-    integrationsService = { getCredentialConfig: jest.fn().mockResolvedValue(null) };
-    configService = { get: jest.fn((_key: string, fallback?: unknown) => fallback) };
+    integrationsService = {
+      getCredentialConfig: jest.fn().mockResolvedValue(null),
+    };
+    configService = {
+      get: jest.fn((_key: string, fallback?: unknown) => fallback),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -74,7 +78,10 @@ describe('SmtpNotificationProviderService', () => {
       }),
     );
     expect(sendMailMock).toHaveBeenCalledWith(
-      expect.objectContaining({ from: 'DB Sender <db@example.com>', to: 'amina@example.com' }),
+      expect.objectContaining({
+        from: 'DB Sender <db@example.com>',
+        to: 'amina@example.com',
+      }),
     );
   });
 
@@ -101,7 +108,9 @@ describe('SmtpNotificationProviderService', () => {
   });
 
   it('reports the transport error instead of throwing when sendMail rejects', async () => {
-    integrationsService.getCredentialConfig.mockResolvedValue({ host: 'smtp.db.example.com' });
+    integrationsService.getCredentialConfig.mockResolvedValue({
+      host: 'smtp.db.example.com',
+    });
     sendMailMock.mockRejectedValue(new Error('Connection refused'));
 
     const result = await service.sendEmail({
@@ -115,7 +124,9 @@ describe('SmtpNotificationProviderService', () => {
 
   describe('sendSms / sendWhatsApp', () => {
     it('honestly reports not configured rather than pretending to send', async () => {
-      await expect(service.sendSms({ to: '+2348000000000', body: 'hi' })).resolves.toEqual({
+      await expect(
+        service.sendSms({ to: '+2348000000000', body: 'hi' }),
+      ).resolves.toEqual({
         success: false,
         error: expect.stringContaining('not configured'),
       });

@@ -1,0 +1,54 @@
+import { LeadPriority } from '@prisma/client';
+import {
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  Min,
+  MaxLength,
+} from 'class-validator';
+
+export class UpdateLeadDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  name?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  phone?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  email?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  interestedService?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  destination?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  budget?: number;
+
+  @IsOptional()
+  @IsEnum(LeadPriority)
+  priority?: LeadPriority;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  notes?: string;
+
+  @IsOptional()
+  @IsString()
+  followUpDate?: string;
+}

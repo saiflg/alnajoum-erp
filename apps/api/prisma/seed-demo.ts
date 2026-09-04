@@ -2134,12 +2134,246 @@ async function seedPhase6Finance() {
   console.log('--------------------------------------------------------');
 }
 
+/**
+ * Phase 7 CRM demo data: a handful of leads across the pipeline (one still
+ * open, one converted, one lost), tasks (manual and auto-created), a
+ * support ticket with a full message thread (customer message, internal
+ * note, staff reply) demonstrating spec #12's separation, a campaign, one
+ * piece of approved feedback, and one complaint. Enough to populate every
+ * CRM screen without needing to click through the UI first.
+ */
+async function seedPhase7Crm() {
+  const existing = await prisma.lead.findFirst({ where: { leadNumber: 'LEAD-DEMO0001' } });
+  if (existing) {
+    console.log('Phase 7 CRM demo data already present — skipping');
+    return;
+  }
+
+  const agentIdentity = await prisma.identity.findUniqueOrThrow({
+    where: { email: 'fatima.sule@demo.alnajoum.travel' },
+    include: { staff: true },
+  });
+  const financeIdentity = await prisma.identity.findUniqueOrThrow({
+    where: { email: 'ibrahim.musa@demo.alnajoum.travel' },
+    include: { staff: true },
+  });
+  const chineduIdentity = await prisma.identity.findUniqueOrThrow({
+    where: { email: 'chinedu.okafor@demo.alnajoum.travel' },
+    include: { customer: true },
+  });
+  const branch = await prisma.branch.findFirstOrThrow();
+  const stages = await prisma.leadStage.findMany({ orderBy: { order: 'asc' } });
+  const newStage = stages.find((s) => !s.isWon && !s.isLost)!;
+  const qualifiedStage = stages[2] ?? newStage;
+  const wonStage = stages.find((s) => s.isWon)!;
+  const lostStage = stages.find((s) => s.isLost)!;
+  const category = await prisma.supportTicketCategory.findFirstOrThrow({ where: { name: 'Flight' } });
+
+  // --- Campaign ---------------------------------------------------------
+  const campaign = await prisma.campaign.create({
+    data: {
+      name: 'Umrah Ramadan 2027 Early Bird',
+      description: 'Discounted Umrah packages for early registrations ahead of Ramadan 2027.',
+      targetService: 'UMRAH',
+      targetAudience: 'Returning Umrah customers',
+      startDate: new Date('2026-10-01'),
+      endDate: new Date('2027-01-31'),
+      budget: 500_000,
+      channel: 'WHATSAPP',
+      status: 'ACTIVE',
+      createdByStaffId: agentIdentity.staff!.id,
+    },
+  });
+
+  // --- Leads across the pipeline -----------------------------------------
+  const openLead = await prisma.lead.create({
+    data: {
+      leadNumber: 'LEAD-DEMO0001',
+      name: 'Blessing Adeyemi',
+      phone: '+2348021110001',
+      email: 'blessing.adeyemi@example.com',
+      source: 'WHATSAPP',
+      interestedService: 'Umrah Package',
+      destination: 'Madinah',
+      budget: 900_000,
+      stageId: qualifiedStage.id,
+      priority: 'HIGH',
+      assignedStaffId: agentIdentity.staff!.id,
+      assignedBranchId: branch.id,
+      campaignId: campaign.id,
+      notes: 'Interested in a family Umrah package for 4 — asked for a quotation.',
+      followUpDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+      createdByStaffId: agentIdentity.staff!.id,
+    },
+  });
+  await prisma.leadActivity.create({
+    data: {
+      leadId: openLead.id,
+      action: 'created',
+      description: 'Lead created from whatsapp',
+      performedByStaffId: agentIdentity.staff!.id,
+    },
+  });
+
+  const lostLead = await prisma.lead.create({
+    data: {
+      leadNumber: 'LEAD-DEMO0002',
+      name: 'Emeka Nwachukwu',
+      phone: '+2348021110002',
+      source: 'ADVERTISEMENT',
+      interestedService: 'Flight to Dubai',
+      stageId: lostStage.id,
+      status: 'LOST',
+      lostReason: 'Booked with a competitor offering a lower fare',
+      assignedStaffId: agentIdentity.staff!.id,
+      createdByStaffId: agentIdentity.staff!.id,
+    },
+  });
+  await prisma.leadActivity.create({
+    data: { leadId: lostLead.id, action: 'lost', description: 'Marked lost: Booked with a competitor offering a lower fare' },
+  });
+
+  const convertedLead = await prisma.lead.create({
+    data: {
+      leadNumber: 'LEAD-DEMO0003',
+      name: `${chineduIdentity.customer!.firstName} ${chineduIdentity.customer!.lastName}`,
+      phone: '+2348021110003',
+      source: 'REFERRAL',
+      interestedService: 'Visa application',
+      stageId: wonStage.id,
+      status: 'CONVERTED',
+      convertedCustomerId: chineduIdentity.customer!.id,
+      convertedAt: new Date(),
+      assignedStaffId: agentIdentity.staff!.id,
+      createdByStaffId: agentIdentity.staff!.id,
+    },
+  });
+  await prisma.leadActivity.create({
+    data: {
+      leadId: convertedLead.id,
+      action: 'converted',
+      description: `Converted, linked to existing customer (${chineduIdentity.customer!.id})`,
+      performedByStaffId: agentIdentity.staff!.id,
+    },
+  });
+
+  // --- Tasks: one manual follow-up, one auto-created ----------------------
+  await prisma.task.create({
+    data: {
+      title: `Call ${openLead.name} about Umrah package quotation`,
+      description: 'Follow up on the family package pricing sent by WhatsApp.',
+      relatedType: 'FOLLOW_UP',
+      relatedId: openLead.id,
+      leadId: openLead.id,
+      assignedStaffId: agentIdentity.staff!.id,
+      createdByStaffId: agentIdentity.staff!.id,
+      dueDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000),
+      priority: 'NORMAL',
+    },
+  });
+  await prisma.task.create({
+    data: {
+      title: `Overdue payment follow-up: ${chineduIdentity.customer!.firstName} ${chineduIdentity.customer!.lastName}`,
+      description: 'Outstanding balance on a Hajj installment — system-generated reminder.',
+      relatedType: 'PAYMENT',
+      customerId: chineduIdentity.customer!.id,
+      assignedStaffId: financeIdentity.staff!.id,
+      isAutoCreated: true,
+      dueDate: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      priority: 'HIGH',
+    },
+  });
+
+  // --- Support ticket with a full message thread --------------------------
+  const responseMinutes = 240; // HIGH
+  const ticket = await prisma.supportTicket.create({
+    data: {
+      ticketNumber: 'TKT-DEMO0001',
+      customerId: chineduIdentity.customer!.id,
+      subject: 'Refund status for cancelled hotel booking',
+      categoryId: category.id,
+      priority: 'HIGH',
+      description: 'I cancelled my Makkah hotel booking last week and would like an update on my refund.',
+      status: 'RESOLVED',
+      assignedStaffId: agentIdentity.staff!.id,
+      branchId: branch.id,
+      slaResponseDueAt: new Date(Date.now() - 20 * 60 * 60 * 1000 + responseMinutes * 60_000),
+      firstRespondedAt: new Date(Date.now() - 19 * 60 * 60 * 1000),
+      resolvedAt: new Date(Date.now() - 10 * 60 * 60 * 1000),
+      createdAt: new Date(Date.now() - 20 * 60 * 60 * 1000),
+    },
+  });
+  await prisma.supportTicketMessage.create({
+    data: {
+      ticketId: ticket.id,
+      authorType: 'CUSTOMER',
+      message: 'I cancelled my Makkah hotel booking last week and would like an update on my refund.',
+      createdAt: new Date(Date.now() - 20 * 60 * 60 * 1000),
+    },
+  });
+  await prisma.supportTicketMessage.create({
+    data: {
+      ticketId: ticket.id,
+      authorType: 'STAFF',
+      authorStaffId: agentIdentity.staff!.id,
+      message: 'Checked with finance — the refund was approved yesterday and should reflect within 3-5 business days.',
+      isInternal: true,
+      createdAt: new Date(Date.now() - 19.5 * 60 * 60 * 1000),
+    },
+  });
+  await prisma.supportTicketMessage.create({
+    data: {
+      ticketId: ticket.id,
+      authorType: 'STAFF',
+      authorStaffId: agentIdentity.staff!.id,
+      message: 'Your refund has been approved and should arrive within 3-5 business days.',
+      createdAt: new Date(Date.now() - 19 * 60 * 60 * 1000),
+    },
+  });
+
+  // --- Feedback and complaint ---------------------------------------------
+  await prisma.customerFeedback.create({
+    data: {
+      customerId: chineduIdentity.customer!.id,
+      serviceType: 'VISA',
+      rating: 5,
+      staffRating: 5,
+      comment: 'Very smooth visa process, kept me updated throughout.',
+      staffId: agentIdentity.staff!.id,
+      isApproved: true,
+      approvedByStaffId: financeIdentity.staff!.id,
+    },
+  });
+
+  await prisma.complaint.create({
+    data: {
+      complaintNumber: 'CMP-DEMO0001',
+      customerId: chineduIdentity.customer!.id,
+      subject: 'Late hotel check-in confirmation',
+      description: 'The hotel confirmation for my Madinah stay arrived only a day before check-in.',
+      status: 'RESOLVED',
+      assignedStaffId: agentIdentity.staff!.id,
+      resolution: 'Apologized to the customer and flagged the hotel provider for slower-than-usual confirmations; a goodwill discount was applied to their next booking.',
+      resolvedAt: new Date(),
+    },
+  });
+
+  console.log(
+    'Seeded 1 campaign, 3 leads (open/lost/converted), 2 tasks (1 auto-created), ' +
+      '1 support ticket with a 3-message thread (customer/internal/staff), 1 approved feedback, and 1 resolved complaint.',
+  );
+  console.log('--------------------------------------------------------');
+  console.log('Phase 7 CRM demo data seeded successfully.');
+  console.log('--------------------------------------------------------');
+}
+
 async function main() {
   await seedPhase1And2();
   await seedPhase3Visa();
   await seedPhase4Flights();
   await seedPhase5Hotels();
   await seedPhase6Finance();
+  await seedPhase7Crm();
 }
 
 main()

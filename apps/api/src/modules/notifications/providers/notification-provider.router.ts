@@ -24,7 +24,8 @@ export class NotificationProviderRouter implements NotificationProviderPort {
   ) {}
 
   private async resolve(): Promise<NotificationProviderPort> {
-    const active = await this.integrationsService.getActiveProvider('NOTIFICATION');
+    const active =
+      await this.integrationsService.getActiveProvider('NOTIFICATION');
     const providerName =
       active ?? this.configService.get<string>('NOTIFICATION_PROVIDER', 'mock');
     return providerName === 'smtp' ? this.smtpProvider : this.mockProvider;
