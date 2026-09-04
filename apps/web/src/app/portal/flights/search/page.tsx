@@ -294,7 +294,33 @@ function FlightSearchForm() {
                       : offer.tripType === 'ROUND_TRIP'
                         ? 'Round trip'
                         : 'Multi-city'}
+                    {offer.fareConditions && (
+                      <>
+                        {' · '}
+                        <span
+                          className={
+                            offer.fareConditions.refundable === 'REFUNDABLE'
+                              ? 'text-emerald-700'
+                              : offer.fareConditions.refundable === 'NON_REFUNDABLE'
+                                ? 'text-red-600'
+                                : 'text-amber-700'
+                          }
+                        >
+                          {offer.fareConditions.refundable.replace('_', ' ')}
+                        </span>
+                      </>
+                    )}
                   </p>
+                  {offer.fareConditions && offer.fareConditions.warnings.length > 0 && (
+                    <div className="mt-1 space-y-0.5">
+                      {offer.fareConditions.warnings.map((w, i) => (
+                        <p key={i} className="text-xs text-amber-700">
+                          ⚠ {w.message}
+                          {!w.verified && ' (could not be automatically verified)'}
+                        </p>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <div className="text-right">
                   <p className="text-lg font-semibold text-slate-900">

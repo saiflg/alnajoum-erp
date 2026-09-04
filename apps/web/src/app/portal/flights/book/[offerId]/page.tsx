@@ -43,8 +43,12 @@ export default function BookFlightPage() {
       .catch(() => undefined);
   }, [params.offerId]);
 
+  const [priceChangeNotice, setPriceChangeNotice] = useState<string | null>(null);
+  const [idempotencyKey] = useState(() => `${params.offerId}-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+
   async function handleConfirm() {
     setError(null);
+    setPriceChangeNotice(null);
     const passengers = [
       ...(selfIncluded ? [{ type: selfType }] : []),
       ...Object.entries(familySelections)
@@ -56,12 +60,36 @@ export default function BookFlightPage() {
       setError('Select at least one passenger.');
       return;
     }
+    if (!offer) return;
 
     setSubmitting(true);
     try {
+      // Never trust the price shown on this page without re-checking it
+      // first — prices can move between search and the moment you press
+      // confirm (spec #6).
+      const revalidation = await apiRequest<{
+        offer: FlightOffer;
+        priceChanged: boolean;
+        currentAmount: number;
+      }>(`/flights/offers/${params.offerId}/revalidate?previousAmount=${offer.totalAmount}`);
+
+      if (revalidation.priceChanged) {
+        setOffer(revalidation.offer);
+        setPriceChangeNotice(
+          `The price for this flight has changed to ${formatCurrency(revalidation.currentAmount, revalidation.offer.currency)}. Please review and confirm again.`,
+        );
+        setSubmitting(false);
+        return;
+      }
+
       const booking = await apiRequest<{ id: string }>('/flights/bookings/me', {
         method: 'POST',
-        body: { offerId: params.offerId, passengers },
+        body: {
+          offerId: params.offerId,
+          passengers,
+          expectedPrice: offer.totalAmount,
+          idempotencyKey,
+        },
       });
       router.push(`/portal/flights/${booking.id}`);
     } catch (err) {
@@ -76,6 +104,11 @@ export default function BookFlightPage() {
         <h2 className="text-lg font-semibold text-slate-900">Confirm Your Booking</h2>
 
         {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+        {priceChangeNotice && (
+          <p className="mt-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            {priceChangeNotice}
+          </p>
+        )}
 
         {offer && (
           <div className="mt-4 max-w-2xl rounded-lg border border-slate-200 bg-white p-4">
@@ -91,6 +124,34 @@ export default function BookFlightPage() {
               {formatCurrency(offer.totalAmount, offer.currency)}{' '}
               <span className="text-sm font-normal text-slate-500">total</span>
             </p>
+
+            {offer.fareConditions && (
+              <div className="mt-3 border-t border-slate-100 pt-3 text-xs text-slate-600">
+                <p className="font-medium text-slate-700">
+                  {offer.fareConditions.refundable.replace('_', ' ')}
+                  {offer.fareConditions.fareBrand ? ` · ${offer.fareConditions.fareBrand}` : ''}
+                </p>
+                {offer.fareConditions.cancellationPenaltyDescription && (
+                  <p className="mt-1">{offer.fareConditions.cancellationPenaltyDescription}</p>
+                )}
+                {offer.fareConditions.baggageAllowance && (
+                  <p className="mt-1">
+                    Baggage: {offer.fareConditions.baggageAllowance.checked ?? '—'} checked,{' '}
+                    {offer.fareConditions.baggageAllowance.cabin ?? '—'} cabin
+                  </p>
+                )}
+                {offer.fareConditions.warnings.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    {offer.fareConditions.warnings.map((w, i) => (
+                      <p key={i} className="text-amber-700">
+                        ⚠ {w.message}
+                        {!w.verified && ' (could not be automatically verified)'}
+                      </p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 

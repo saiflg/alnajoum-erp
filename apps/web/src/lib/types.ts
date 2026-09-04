@@ -152,7 +152,32 @@ export interface FamilyMember {
 
 export type CabinClass = 'ECONOMY' | 'PREMIUM_ECONOMY' | 'BUSINESS' | 'FIRST';
 export type PassengerType = 'ADULT' | 'CHILD' | 'INFANT';
-export type FlightBookingStatus = 'PENDING' | 'CONFIRMED' | 'CANCELLED' | 'FAILED';
+export type FlightBookingStatus =
+  | 'PENDING'
+  | 'CONFIRMED'
+  | 'TICKETED'
+  | 'REFUND_REQUESTED'
+  | 'REFUNDED'
+  | 'REISSUE_REQUESTED'
+  | 'REISSUED'
+  | 'CANCELLED'
+  | 'FAILED';
+
+export type FlightRefundStatus =
+  | 'REQUESTED'
+  | 'APPROVED'
+  | 'PROCESSING'
+  | 'COMPLETED'
+  | 'FAILED'
+  | 'REJECTED';
+
+export type FlightReissueStatus =
+  | 'REQUESTED'
+  | 'AWAITING_PAYMENT'
+  | 'PAID'
+  | 'COMPLETED'
+  | 'FAILED'
+  | 'REJECTED';
 export type TripType = 'ONE_WAY' | 'ROUND_TRIP' | 'MULTI_CITY';
 
 export interface FlightSegment {
@@ -175,6 +200,20 @@ export interface FlightLegOffer {
   segments: FlightSegment[];
 }
 
+export interface FareWarning {
+  message: string;
+  verified: boolean;
+}
+
+export interface FareConditions {
+  refundable: 'REFUNDABLE' | 'PARTIALLY_REFUNDABLE' | 'NON_REFUNDABLE' | 'UNKNOWN';
+  changePenaltyDescription?: string;
+  cancellationPenaltyDescription?: string;
+  baggageAllowance?: { checked?: string; cabin?: string };
+  fareBrand?: string;
+  warnings: FareWarning[];
+}
+
 export interface FlightOffer {
   id: string;
   provider: string;
@@ -185,6 +224,7 @@ export interface FlightOffer {
   totalAmount: number;
   seatsAvailable: number;
   expiresAt: string;
+  fareConditions?: FareConditions;
 }
 
 export interface FlightLegCriteria {
@@ -225,6 +265,51 @@ export interface FlightBooking {
   createdAt: string;
   passengers: FlightBookingPassengerRecord[];
   customer?: { firstName: string; lastName: string };
+  pnr: string | null;
+  ticketedAt: string | null;
+  providerWarnings: FareWarning[] | null;
+  fareRules: FareConditions | null;
+  refundable: boolean | null;
+  baggageAllowance: { checked?: string; cabin?: string } | null;
+  providerCost: number | null;
+  markupAmount: number | null;
+}
+
+export interface FlightRefund {
+  id: string;
+  bookingId: string;
+  ticketPrice: number;
+  providerPenalty: number;
+  agencyFee: number;
+  refundableTaxes: number;
+  refundAmount: number;
+  currency: string;
+  status: FlightRefundStatus;
+  reason: string | null;
+  createdAt: string;
+  completedAt: string | null;
+}
+
+export interface FlightReissue {
+  id: string;
+  bookingId: string;
+  fareDifference: number;
+  changePenalty: number;
+  totalDue: number;
+  currency: string;
+  status: FlightReissueStatus;
+  createdAt: string;
+  completedAt: string | null;
+}
+
+export interface RefundPreview {
+  ticketPrice: number;
+  estimatedProviderPenalty: number;
+  agencyFee: number;
+  estimatedRefundAmount: number;
+  currency: string;
+  refundable: boolean | null;
+  fareRules: FareConditions | null;
 }
 
 export type InvoiceStatus = 'ISSUED' | 'PARTIALLY_PAID' | 'PAID' | 'VOID';
