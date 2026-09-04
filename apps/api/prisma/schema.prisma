@@ -267,6 +267,11 @@ model Staff {
   reviewedVisaDocuments    VisaDocument[]
   verifiedGuarantors       Guarantor[]
   assignedVisaApplications VisaApplication[]         @relation("AssignedVisaApplications")
+  ticketedFlightBookings   FlightBooking[]           @relation("TicketedFlightBookings")
+  requestedFlightRefunds   FlightRefund[]            @relation("RequestedFlightRefunds")
+  requestedFlightReissues  FlightReissue[]           @relation("RequestedFlightReissues")
+  flightPricingRules       FlightPricingRule[]
+  createdGroupBookings     FlightGroupBooking[]      @relation("CreatedGroupBookings")
 
   @@index([companyId])
   @@index([branchId])
@@ -313,9 +318,12 @@ model Branch {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  staff             Staff[]
-  assignedCustomers Customer[]
-  corporateAccounts CorporateAccount[]
+  staff               Staff[]
+  assignedCustomers   Customer[]
+  corporateAccounts   CorporateAccount[]
+  flightBookings      FlightBooking[]
+  flightPricingRules  FlightPricingRule[]
+  flightGroupBookings FlightGroupBooking[]
 
   @@unique([companyId, code])
   @@index([companyId])
@@ -427,13 +435,68 @@ enum FlightProviderName {
   DUFFEL
   SABRE
   AMADEUS
+  TRAVELPORT
+  TBO
 }
 
 enum FlightBookingStatus {
   PENDING
   CONFIRMED
+  // Phase 4 additions — appended, not renamed/removed, so every earlier
+  // reference to PENDING/CONFIRMED/CANCELLED/FAILED keeps working exactly
+  // as before (see FlightsService.spec's existing assertions).
+  TICKETED
+  REFUND_REQUESTED
+  REFUNDED
+  REISSUE_REQUESTED
+  REISSUED
   CANCELLED
   FAILED
+}
+
+enum FlightRefundStatus {
+  REQUESTED
+  APPROVED
+  PROCESSING
+  COMPLETED
+  FAILED
+  REJECTED
+}
+
+enum FlightReissueStatus {
+  REQUESTED
+  AWAITING_PAYMENT
+  PAID
+  COMPLETED
+  FAILED
+  REJECTED
+}
+
+enum FlightPricingRuleType {
+  FIXED
+  PERCENTAGE
+}
+
+enum FlightGroupBookingStatus {
+  DRAFT
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+enum ProviderOperation {
+  SEARCH
+  GET_OFFER
+  CREATE_ORDER
+  ISSUE_TICKET
+  CANCEL_ORDER
+  REFUND
+  REISSUE
+}
+
+enum ProviderTransactionStatus {
+  SUCCESS
+  FAILURE
 }
 
 enum TripType {
@@ -491,16 +554,268 @@ model FlightBooking {
   // actually purchased even if the provider's own record later changes.
   itinerary Json
 
+  // Costing/markup snapshot, same "never recompute later" principle as
+  // VisaApplication.companyCostSnapshot — a later pricing-rule edit must
+  // never retroactively change an already-booked price. totalAmount above
+  // is what the customer actually pays; providerCost is what the provider
+  // charged the agency for it, and markupAmount is the difference the
+  // pricing rule added (totalAmount = providerCost + markupAmount).
+  providerCost  Int?
+  markupAmount  Int?
+  pricingRuleId String?
+  pricingRule   FlightPricingRule? @relation(fields: [pricingRuleId], references: [id], onDelete: SetNull)
+
+  branchId String?
+  branch   Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
+
+  // Populated once ticketing succeeds (see FlightTicketingService.issueTicket) —
+  // never before, per the spec's "do not mark a booking as ticketed until
+  // ticket issuance is actually confirmed."
+  pnr               String?
+  ticketedAt        DateTime?
+  ticketedByStaffId String?
+  ticketedByStaff   Staff?    @relation("TicketedFlightBookings", fields: [ticketedByStaffId], references: [id], onDelete: SetNull)
+
+  // Provider-supplied restriction/fare messages and rules, captured at
+  // search/offer time and carried through to the booking so a staff member
+  // reviewing a completed booking still sees exactly what the customer was
+  // shown before they booked — never invented, only ever copied from what
+  // the provider actually returned (see FLIGHT_PROVIDER_WARNING_FALLBACK).
+  providerWarnings Json?
+  fareRules        Json?
+  refundable       Boolean?
+  baggageAllowance Json?
+
+  // Set on the first successful booking attempt for a given client-supplied
+  // key; a retried submission with the same key returns the existing
+  // booking instead of creating a duplicate (spec #9's "prevent duplicate
+  // payment and duplicate ticket issuance... use idempotency keys").
+  idempotencyKey String? @unique
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   passengers FlightBookingPassenger[]
   invoice    Invoice?
+  refunds    FlightRefund[]
+  reissues   FlightReissue[]
+  logs       ProviderTransactionLog[]
 
   @@index([customerId])
   @@index([status])
   @@index([bookedByStaffId])
+  @@index([branchId])
+  @@index([pricingRuleId])
   @@map("flight_bookings")
+}
+
+/**
+ * Refund workflow for a cancelled/partially-cancelled FlightBooking (spec
+ * #15). refundAmount is always computed, never assumed to equal the full
+ * ticket price — see FlightRefundsService.calculateRefund:
+ * refundAmount = ticketPrice − providerPenalty − agencyFee (+ refundableTaxes)
+ */
+model FlightRefund {
+  id String @id @default(cuid())
+
+  bookingId String
+  booking   FlightBooking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  requestedByStaffId  String?
+  requestedByStaff    Staff?  @relation("RequestedFlightRefunds", fields: [requestedByStaffId], references: [id], onDelete: SetNull)
+  requestedByCustomer Boolean @default(false)
+
+  ticketPrice     Int
+  providerPenalty Int    @default(0)
+  agencyFee       Int    @default(0)
+  refundableTaxes Int    @default(0)
+  refundAmount    Int
+  currency        String
+
+  status           FlightRefundStatus @default(REQUESTED)
+  reason           String?
+  providerResponse Json?
+
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  @@index([bookingId])
+  @@map("flight_refunds")
+}
+
+/**
+ * Flight-change/reissue workflow (spec #16). Every request creates its own
+ * row rather than mutating the booking in place, so the full change history
+ * is preserved exactly as the spec asks — a booking can be reissued more
+ * than once, each with its own before/after snapshot and fare math.
+ */
+model FlightReissue {
+  id String @id @default(cuid())
+
+  bookingId String
+  booking   FlightBooking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  requestedByStaffId String?
+  requestedByStaff   Staff?  @relation("RequestedFlightReissues", fields: [requestedByStaffId], references: [id], onDelete: SetNull)
+
+  originalOfferSnapshot Json
+  newOfferSnapshot      Json
+  fareDifference        Int
+  changePenalty         Int    @default(0)
+  totalDue              Int
+  currency              String
+
+  status           FlightReissueStatus @default(REQUESTED)
+  providerResponse Json?
+
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  @@index([bookingId])
+  @@map("flight_reissues")
+}
+
+/**
+ * Configurable agency markup rule (spec #18) — resolved by
+ * FlightPricingService against a search/offer's route, airline, cabin,
+ * booking staff, and branch. The most specific match (highest `priority`
+ * among every rule whose scope fields all match or are left blank) wins;
+ * see FlightPricingService.resolveRule. Never hard-coded: a booking with no
+ * matching rule at all gets zero markup, which the seed data deliberately
+ * avoids by always keeping one active global-default rule around.
+ */
+model FlightPricingRule {
+  id   String @id @default(cuid())
+  name String
+
+  type    FlightPricingRuleType
+  amount  Int? // whole currency units, for FIXED
+  percent Float? // e.g. 5 = 5%, for PERCENTAGE
+
+  // Scope — every non-null field here must match for the rule to apply;
+  // leaving a field null makes the rule indifferent to it.
+  airlineCode String?
+  origin      String?
+  destination String?
+  cabinClass  CabinClass?
+  staffId     String?
+  staff       Staff?      @relation(fields: [staffId], references: [id], onDelete: SetNull)
+  branchId    String?
+  branch      Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+
+  isPromotional Boolean   @default(false)
+  validFrom     DateTime?
+  validTo       DateTime?
+
+  priority Int     @default(0)
+  isActive Boolean @default(true)
+
+  // Optional: route/airline-specific incentive policy override, falling
+  // back to the platform default IncentivePolicy when unset — reuses the
+  // exact same policy engine Phase 3 built for visa incentives rather than
+  // inventing a second one (see FlightIncentivesService).
+  incentivePolicyId String?
+  incentivePolicy   IncentivePolicy? @relation(fields: [incentivePolicyId], references: [id], onDelete: SetNull)
+
+  bookings FlightBooking[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive])
+  @@index([priority])
+  @@map("flight_pricing_rules")
+}
+
+/**
+ * Internal record-keeping for a negotiated group reservation (spec #17).
+ * Deliberately not modeled as a live provider order — no provider in this
+ * abstraction exposes an automated group-booking API, so this is staff-
+ * managed: negotiate the fare and deposit terms outside the ERP, then
+ * record the agreement and manifest here against a deposit/balance invoice.
+ */
+model FlightGroupBooking {
+  id             String @id @default(cuid())
+  groupReference String @unique
+
+  groupName         String
+  groupContactName  String
+  groupContactPhone String
+  groupContactEmail String?
+
+  numberOfPassengers Int
+  origin             String?
+  destination        String
+  travelDate         DateTime
+  airline            String?
+
+  negotiatedPrice Int
+  currency        String
+  deposit         Int    @default(0)
+  balance         Int
+
+  status FlightGroupBookingStatus @default(DRAFT)
+
+  createdByStaffId String?
+  createdByStaff   Staff?  @relation("CreatedGroupBookings", fields: [createdByStaffId], references: [id], onDelete: SetNull)
+  branchId         String?
+  branch           Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
+
+  invoiceId String?  @unique
+  invoice   Invoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+
+  passengers FlightGroupPassenger[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("flight_group_bookings")
+}
+
+model FlightGroupPassenger {
+  id             String             @id @default(cuid())
+  groupBookingId String
+  groupBooking   FlightGroupBooking @relation(fields: [groupBookingId], references: [id], onDelete: Cascade)
+
+  firstName      String
+  lastName       String
+  dateOfBirth    DateTime?
+  passportNumber String?
+
+  createdAt DateTime @default(now())
+
+  @@index([groupBookingId])
+  @@map("flight_group_passengers")
+}
+
+/**
+ * Every provider round-trip, for diagnostics and the admin "Provider
+ * Success Rate / Provider Errors" report (spec #24/#25). Deliberately thin:
+ * safeMessage is a sanitized, human-readable summary — never the raw
+ * request/response body, which could carry API secrets or passenger PII.
+ */
+model ProviderTransactionLog {
+  id String @id @default(cuid())
+
+  provider  FlightProviderName
+  operation ProviderOperation
+
+  requestId  String?
+  responseId String?
+
+  bookingId String?
+  booking   FlightBooking? @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+
+  status      ProviderTransactionStatus
+  errorCode   String?
+  safeMessage String?
+
+  createdAt DateTime @default(now())
+
+  @@index([provider])
+  @@index([bookingId])
+  @@index([createdAt])
+  @@map("provider_transaction_logs")
 }
 
 model FlightBookingPassenger {
@@ -598,6 +913,10 @@ model Invoice {
   visaApplication    VisaApplication?  @relation(fields: [visaApplicationId], references: [id], onDelete: SetNull)
   corporateBookingId String?           @unique
   corporateBooking   CorporateBooking? @relation(fields: [corporateBookingId], references: [id], onDelete: SetNull)
+
+  // Same nullable/unique shape again — an invoice generated from a flight
+  // group booking's deposit/balance agreement.
+  flightGroupBooking FlightGroupBooking?
 
   status InvoiceStatus @default(ISSUED)
 
@@ -1233,8 +1552,9 @@ model IncentivePolicy {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  visaServices VisaService[]
-  incentives   StaffIncentive[]
+  visaServices       VisaService[]
+  incentives         StaffIncentive[]
+  flightPricingRules FlightPricingRule[]
 
   @@map("incentive_policies")
 }

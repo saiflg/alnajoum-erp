@@ -3,6 +3,7 @@ import { Transform, TransformFnParams, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayMinSize,
+  IsBoolean,
   IsDateString,
   IsEnum,
   IsInt,
@@ -63,4 +64,8 @@ export class SearchFlightsDto {
   @IsOptional()
   @IsEnum(CabinClass)
   cabinClass?: CabinClass;
+
+  @IsOptional()
+  @IsBoolean()
+  directOnly?: boolean;
 }

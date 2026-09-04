@@ -13,7 +13,9 @@ import {
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { InvoicesService } from '../payments/invoices.service';
+import { FlightPricingService } from './flight-pricing.service';
 import { FlightsService } from './flights.service';
+import { ProviderTransactionLogService } from './provider-transaction-log.service';
 import { FLIGHT_PROVIDER } from './providers/flight-provider.port';
 
 const baseOffer = {
@@ -41,6 +43,7 @@ describe('FlightsService', () => {
   let prisma: {
     customer: { findUnique: jest.Mock };
     familyMember: { findUnique: jest.Mock };
+    staff: { findUnique: jest.Mock };
     flightBooking: {
       create: jest.Mock;
       findMany: jest.Mock;
@@ -60,11 +63,14 @@ describe('FlightsService', () => {
     voidIfUnpaid: jest.Mock;
   };
   let notificationsService: { sendBookingConfirmation: jest.Mock };
+  let pricingService: { priceOffer: jest.Mock };
+  let providerLog: { record: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
       customer: { findUnique: jest.fn() },
       familyMember: { findUnique: jest.fn() },
+      staff: { findUnique: jest.fn() },
       flightBooking: {
         create: jest.fn(),
         findMany: jest.fn(),
@@ -86,6 +92,14 @@ describe('FlightsService', () => {
       voidIfUnpaid: jest.fn(),
     };
     notificationsService = { sendBookingConfirmation: jest.fn() };
+    pricingService = {
+      priceOffer: jest.fn().mockResolvedValue({
+        customerPrice: 50_000,
+        markupAmount: 0,
+        rule: null,
+      }),
+    };
+    providerLog = { record: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -94,6 +108,8 @@ describe('FlightsService', () => {
         { provide: FLIGHT_PROVIDER, useValue: provider },
         { provide: InvoicesService, useValue: invoicesService },
         { provide: NotificationsService, useValue: notificationsService },
+        { provide: FlightPricingService, useValue: pricingService },
+        { provide: ProviderTransactionLogService, useValue: providerLog },
       ],
     }).compile();
 
@@ -170,6 +186,26 @@ describe('FlightsService', () => {
       });
 
       expect(provider.searchOffers).toHaveBeenCalled();
+    });
+  });
+
+  describe('revalidate', () => {
+    it('reports no price change when the provider returns the same amount', async () => {
+      provider.getOffer.mockResolvedValue(baseOffer);
+      const result = await service.revalidate('offer-1', 50_000);
+      expect(result.priceChanged).toBe(false);
+      expect(result.currentAmount).toBe(50_000);
+    });
+
+    it('reports a price change and returns the new amount', async () => {
+      provider.getOffer.mockResolvedValue({
+        ...baseOffer,
+        totalAmount: 55_000,
+      });
+      const result = await service.revalidate('offer-1', 50_000);
+      expect(result.priceChanged).toBe(true);
+      expect(result.previousAmount).toBe(50_000);
+      expect(result.currentAmount).toBe(55_000);
     });
   });
 
@@ -272,6 +308,43 @@ describe('FlightsService', () => {
       ).rejects.toThrow(NotFoundException);
     });
 
+    it('returns the existing booking instead of creating a duplicate for a repeated idempotency key', async () => {
+      prisma.flightBooking.findUnique.mockResolvedValue({
+        id: 'booking-existing',
+      });
+
+      const result = await service.createBooking(
+        'customer-1',
+        'offer-1',
+        [{ type: 'ADULT' as const }],
+        undefined,
+        'idem-key-1',
+      );
+
+      expect(result).toEqual({ id: 'booking-existing' });
+      expect(provider.createOrder).not.toHaveBeenCalled();
+      expect(prisma.flightBooking.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects booking when the live price no longer matches what the customer was shown', async () => {
+      provider.getOffer.mockResolvedValue({
+        ...baseOffer,
+        totalAmount: 60_000,
+      });
+
+      await expect(
+        service.createBooking(
+          'customer-1',
+          'offer-1',
+          [{ type: 'ADULT' as const }],
+          undefined,
+          undefined,
+          50_000, // stale expected price
+        ),
+      ).rejects.toThrow(ConflictException);
+      expect(provider.createOrder).not.toHaveBeenCalled();
+    });
+
     it('throws Conflict when the provider rejects the order', async () => {
       provider.getOffer.mockResolvedValue(baseOffer);
       prisma.customer.findUnique.mockResolvedValue({
@@ -321,6 +394,19 @@ describe('FlightsService', () => {
         id: 'booking-1',
         customerId: 'customer-1',
         status: FlightBookingStatus.CANCELLED,
+      });
+
+      await expect(
+        service.cancelBooking('booking-1', 'customer-1'),
+      ).rejects.toThrow(ConflictException);
+      expect(provider.cancelOrder).not.toHaveBeenCalled();
+    });
+
+    it('rejects a plain cancellation once the booking is ticketed — refund workflow required instead', async () => {
+      prisma.flightBooking.findUnique.mockResolvedValue({
+        id: 'booking-1',
+        customerId: 'customer-1',
+        status: FlightBookingStatus.TICKETED,
       });
 
       await expect(

@@ -4,6 +4,10 @@ import {
   CreateOrderResult,
   FlightOffer,
   FlightProviderPort,
+  IssueTicketResult,
+  ProviderCapabilities,
+  ProviderRefundResult,
+  ReissueResult,
   SearchFlightsCriteria,
 } from './flight-provider.port';
 
@@ -32,6 +36,10 @@ export class SabreFlightProviderService implements FlightProviderPort {
     );
   }
 
+  capabilities(): Promise<ProviderCapabilities> {
+    return Promise.resolve({ ticketing: false, refund: false, reissue: false });
+  }
+
   searchOffers(_criteria: SearchFlightsCriteria): Promise<FlightOffer[]> {
     this.notImplemented();
   }
@@ -47,7 +55,30 @@ export class SabreFlightProviderService implements FlightProviderPort {
     this.notImplemented();
   }
 
+  issueTicket(
+    _providerOrderId: string,
+    _offer: FlightOffer,
+  ): Promise<IssueTicketResult> {
+    this.notImplemented();
+  }
+
   cancelOrder(_providerOrderId: string): Promise<void> {
+    this.notImplemented();
+  }
+
+  requestRefund(
+    _providerOrderId: string,
+    _amount: number,
+    _currency: string,
+  ): Promise<ProviderRefundResult> {
+    this.notImplemented();
+  }
+
+  reissue(
+    _providerOrderId: string,
+    _newOffer: FlightOffer,
+    _passengers: BookingPassengerSnapshot[],
+  ): Promise<ReissueResult> {
     this.notImplemented();
   }
 }

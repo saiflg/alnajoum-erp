@@ -31,6 +31,13 @@ export const PERMISSIONS = {
     BOOK: 'flight:book',
     READ: 'flight:read',
     CANCEL: 'flight:cancel',
+    // Phase 4 — enterprise flight search/booking/ticketing engine.
+    TICKET_ISSUE: 'flight:ticket_issue',
+    REISSUE: 'flight:reissue',
+    REFUND: 'flight:refund',
+    PRICING_MANAGE: 'flight:pricing_manage', // configure markup rules
+    GROUP_MANAGE: 'flight:group_manage', // group bookings
+    REPORTS_VIEW: 'flight:reports_view', // admin flight dashboard
   },
   HOTEL: {
     BOOK: 'hotel:book',

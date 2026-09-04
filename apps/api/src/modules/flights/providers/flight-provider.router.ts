@@ -8,10 +8,16 @@ import {
   CreateOrderResult,
   FlightOffer,
   FlightProviderPort,
+  IssueTicketResult,
+  ProviderCapabilities,
+  ProviderRefundResult,
+  ReissueResult,
   SearchFlightsCriteria,
 } from './flight-provider.port';
 import { MockFlightProviderService } from './mock-flight-provider.service';
 import { SabreFlightProviderService } from './sabre-flight-provider.service';
+import { TboFlightProviderService } from './tbo-flight-provider.service';
+import { TravelportFlightProviderService } from './travelport-flight-provider.service';
 
 /**
  * Resolves which concrete FlightProviderPort implementation handles each
@@ -31,6 +37,8 @@ export class FlightProviderRouter implements FlightProviderPort {
     private readonly duffelProvider: DuffelFlightProviderService,
     private readonly sabreProvider: SabreFlightProviderService,
     private readonly amadeusProvider: AmadeusFlightProviderService,
+    private readonly travelportProvider: TravelportFlightProviderService,
+    private readonly tboProvider: TboFlightProviderService,
   ) {}
 
   private async resolve(): Promise<FlightProviderPort> {
@@ -44,9 +52,17 @@ export class FlightProviderRouter implements FlightProviderPort {
         return this.sabreProvider;
       case 'amadeus':
         return this.amadeusProvider;
+      case 'travelport':
+        return this.travelportProvider;
+      case 'tbo':
+        return this.tboProvider;
       default:
         return this.mockProvider;
     }
+  }
+
+  async capabilities(): Promise<ProviderCapabilities> {
+    return (await this.resolve()).capabilities();
   }
 
   async searchOffers(criteria: SearchFlightsCriteria): Promise<FlightOffer[]> {
@@ -64,7 +80,38 @@ export class FlightProviderRouter implements FlightProviderPort {
     return (await this.resolve()).createOrder(offer, passengers);
   }
 
+  async issueTicket(
+    providerOrderId: string,
+    offer: FlightOffer,
+  ): Promise<IssueTicketResult> {
+    return (await this.resolve()).issueTicket(providerOrderId, offer);
+  }
+
   async cancelOrder(providerOrderId: string): Promise<void> {
     return (await this.resolve()).cancelOrder(providerOrderId);
+  }
+
+  async requestRefund(
+    providerOrderId: string,
+    amount: number,
+    currency: string,
+  ): Promise<ProviderRefundResult> {
+    return (await this.resolve()).requestRefund(
+      providerOrderId,
+      amount,
+      currency,
+    );
+  }
+
+  async reissue(
+    providerOrderId: string,
+    newOffer: FlightOffer,
+    passengers: BookingPassengerSnapshot[],
+  ): Promise<ReissueResult> {
+    return (await this.resolve()).reissue(
+      providerOrderId,
+      newOffer,
+      passengers,
+    );
   }
 }

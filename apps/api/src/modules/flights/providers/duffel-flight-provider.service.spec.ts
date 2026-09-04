@@ -45,7 +45,9 @@ describe('DuffelFlightProviderService', () => {
   beforeEach(async () => {
     fetchMock = jest.fn();
     global.fetch = fetchMock;
-    integrationsService = { getCredentialConfig: jest.fn().mockResolvedValue(null) };
+    integrationsService = {
+      getCredentialConfig: jest.fn().mockResolvedValue(null),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -75,7 +77,9 @@ describe('DuffelFlightProviderService', () => {
 
       const result = await service.searchOffers({
         tripType: 'ONE_WAY',
-        legs: [{ origin: 'LOS', destination: 'ABV', departureDate: '2026-09-05' }],
+        legs: [
+          { origin: 'LOS', destination: 'ABV', departureDate: '2026-09-05' },
+        ],
         adults: 1,
         cabinClass: 'ECONOMY',
       });
@@ -135,12 +139,16 @@ describe('DuffelFlightProviderService', () => {
 
       const result = await service.searchOffers({
         tripType: 'ONE_WAY',
-        legs: [{ origin: 'LOS', destination: 'ABV', departureDate: '2026-09-05' }],
+        legs: [
+          { origin: 'LOS', destination: 'ABV', departureDate: '2026-09-05' },
+        ],
         adults: 1,
       });
 
       expect(fetchMock).toHaveBeenCalledTimes(2);
-      expect(fetchMock.mock.calls[1][0]).toContain('/air/offers?offer_request_id=orq_1');
+      expect(fetchMock.mock.calls[1][0]).toContain(
+        '/air/offers?offer_request_id=orq_1',
+      );
       expect(result).toHaveLength(1);
     });
 
@@ -148,13 +156,18 @@ describe('DuffelFlightProviderService', () => {
       fetchMock.mockResolvedValue({
         ok: false,
         statusText: 'Unauthorized',
-        json: () => Promise.resolve({ errors: [{ title: 'unauthorized', message: 'Invalid token' }] }),
+        json: () =>
+          Promise.resolve({
+            errors: [{ title: 'unauthorized', message: 'Invalid token' }],
+          }),
       });
 
       await expect(
         service.searchOffers({
           tripType: 'ONE_WAY',
-          legs: [{ origin: 'LOS', destination: 'ABV', departureDate: '2026-09-05' }],
+          legs: [
+            { origin: 'LOS', destination: 'ABV', departureDate: '2026-09-05' },
+          ],
           adults: 1,
         }),
       ).rejects.toThrow(ServiceUnavailableException);
@@ -164,10 +177,15 @@ describe('DuffelFlightProviderService', () => {
       const module: TestingModule = await Test.createTestingModule({
         providers: [
           DuffelFlightProviderService,
-          { provide: ConfigService, useValue: { get: jest.fn(() => undefined) } },
+          {
+            provide: ConfigService,
+            useValue: { get: jest.fn(() => undefined) },
+          },
           {
             provide: IntegrationsService,
-            useValue: { getCredentialConfig: jest.fn().mockResolvedValue(null) },
+            useValue: {
+              getCredentialConfig: jest.fn().mockResolvedValue(null),
+            },
           },
         ],
       }).compile();
@@ -176,29 +194,38 @@ describe('DuffelFlightProviderService', () => {
       await expect(
         unconfigured.searchOffers({
           tripType: 'ONE_WAY',
-          legs: [{ origin: 'LOS', destination: 'ABV', departureDate: '2026-09-05' }],
+          legs: [
+            { origin: 'LOS', destination: 'ABV', departureDate: '2026-09-05' },
+          ],
           adults: 1,
         }),
       ).rejects.toThrow(ServiceUnavailableException);
     });
 
     it('prefers a DB-saved API key over the env var', async () => {
-      integrationsService.getCredentialConfig.mockResolvedValue({ apiKey: 'duffel_db_key' });
+      integrationsService.getCredentialConfig.mockResolvedValue({
+        apiKey: 'duffel_db_key',
+      });
       fetchMock.mockResolvedValue({
         ok: true,
-        json: () => Promise.resolve({ data: { id: 'orq_1', offers: [duffelOffer] } }),
+        json: () =>
+          Promise.resolve({ data: { id: 'orq_1', offers: [duffelOffer] } }),
       });
 
       await service.searchOffers({
         tripType: 'ONE_WAY',
-        legs: [{ origin: 'LOS', destination: 'ABV', departureDate: '2026-09-05' }],
+        legs: [
+          { origin: 'LOS', destination: 'ABV', departureDate: '2026-09-05' },
+        ],
         adults: 1,
       });
 
       expect(fetchMock).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
-          headers: expect.objectContaining({ Authorization: 'Bearer duffel_db_key' }),
+          headers: expect.objectContaining({
+            Authorization: 'Bearer duffel_db_key',
+          }),
         }),
       );
     });
@@ -206,7 +233,11 @@ describe('DuffelFlightProviderService', () => {
 
   describe('getOffer', () => {
     it('returns null on a 404', async () => {
-      fetchMock.mockResolvedValue({ status: 404, ok: false, json: () => Promise.resolve({}) });
+      fetchMock.mockResolvedValue({
+        status: 404,
+        ok: false,
+        json: () => Promise.resolve({}),
+      });
 
       const result = await service.getOffer('off_missing');
 
@@ -231,7 +262,8 @@ describe('DuffelFlightProviderService', () => {
     it('books via the balance payment type and returns CONFIRMED', async () => {
       fetchMock.mockResolvedValue({
         ok: true,
-        json: () => Promise.resolve({ data: { id: 'ord_00009hthhsUZ8W4LxQgkjo' } }),
+        json: () =>
+          Promise.resolve({ data: { id: 'ord_00009hthhsUZ8W4LxQgkjo' } }),
       });
 
       const result = await service.createOrder(
@@ -249,7 +281,10 @@ describe('DuffelFlightProviderService', () => {
         [{ type: 'ADULT', firstName: 'Amina', lastName: 'Yusuf' }],
       );
 
-      expect(result).toEqual({ providerOrderId: 'ord_00009hthhsUZ8W4LxQgkjo', status: 'CONFIRMED' });
+      expect(result).toEqual({
+        providerOrderId: 'ord_00009hthhsUZ8W4LxQgkjo',
+        status: 'CONFIRMED',
+      });
       const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
       expect(body.data.payments).toEqual([
         { type: 'balance', currency: 'NGN', amount: '250000' },
@@ -265,7 +300,10 @@ describe('DuffelFlightProviderService', () => {
       fetchMock.mockResolvedValue({
         ok: false,
         statusText: 'Unprocessable Entity',
-        json: () => Promise.resolve({ errors: [{ title: 'invalid', message: 'Offer expired' }] }),
+        json: () =>
+          Promise.resolve({
+            errors: [{ title: 'invalid', message: 'Offer expired' }],
+          }),
       });
 
       const result = await service.createOrder(
@@ -309,7 +347,10 @@ describe('DuffelFlightProviderService', () => {
       fetchMock.mockResolvedValue({
         ok: false,
         statusText: 'Not Found',
-        json: () => Promise.resolve({ errors: [{ title: 'not_found', message: 'Order not found' }] }),
+        json: () =>
+          Promise.resolve({
+            errors: [{ title: 'not_found', message: 'Order not found' }],
+          }),
       });
 
       await expect(service.cancelOrder('ord_missing')).rejects.toThrow(

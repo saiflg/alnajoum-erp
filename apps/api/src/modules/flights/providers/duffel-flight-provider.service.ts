@@ -1,4 +1,8 @@
-import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { CabinClass, FlightProviderName, PassengerType } from '@prisma/client';
 import { IntegrationsService } from '../../integrations/integrations.service';
@@ -8,6 +12,10 @@ import {
   FlightLegOffer,
   FlightOffer,
   FlightProviderPort,
+  IssueTicketResult,
+  ProviderCapabilities,
+  ProviderRefundResult,
+  ReissueResult,
   SearchFlightsCriteria,
 } from './flight-provider.port';
 
@@ -86,7 +94,10 @@ function isoDurationToMinutes(duration: string): number {
   return hours * 60 + minutes;
 }
 
-function mapDuffelOffer(offer: DuffelOffer, cabinClass: CabinClass): FlightOffer {
+function mapDuffelOffer(
+  offer: DuffelOffer,
+  cabinClass: CabinClass,
+): FlightOffer {
   const legs: FlightLegOffer[] = offer.slices.map((slice) => ({
     origin: slice.origin.iata_code,
     destination: slice.destination.iata_code,
@@ -109,7 +120,11 @@ function mapDuffelOffer(offer: DuffelOffer, cabinClass: CabinClass): FlightOffer
     id: offer.id,
     provider: FlightProviderName.DUFFEL,
     tripType:
-      legs.length === 1 ? 'ONE_WAY' : legs.length === 2 ? 'ROUND_TRIP' : 'MULTI_CITY',
+      legs.length === 1
+        ? 'ONE_WAY'
+        : legs.length === 2
+          ? 'ROUND_TRIP'
+          : 'MULTI_CITY',
     legs,
     cabinClass,
     currency: offer.total_currency,
@@ -160,7 +175,8 @@ export class DuffelFlightProviderService implements FlightProviderPort {
       'FLIGHT',
       'duffel',
     );
-    const key = dbConfig?.apiKey || this.configService.get<string>('DUFFEL_API_KEY');
+    const key =
+      dbConfig?.apiKey || this.configService.get<string>('DUFFEL_API_KEY');
     if (!key) {
       throw new ServiceUnavailableException(
         'Duffel is selected as the flight provider but no API key is configured. Add one at /admin/integrations.',
@@ -178,6 +194,74 @@ export class DuffelFlightProviderService implements FlightProviderPort {
     };
   }
 
+  /** Reads the configurable Timeout/Retry Policy fields saved at
+   * /admin/integrations (spec #2), defaulting sanely when nothing's been
+   * saved yet so an untouched install still works. */
+  private async runtimeConfig(): Promise<{
+    timeoutMs: number;
+    retryCount: number;
+  }> {
+    const dbConfig = await this.integrationsService.getCredentialConfig(
+      'FLIGHT',
+      'duffel',
+    );
+    const timeoutMs = Number(dbConfig?.timeoutMs) || 15_000;
+    const retryCount = Number(dbConfig?.retryCount) || 1;
+    return { timeoutMs, retryCount };
+  }
+
+  /** Every Duffel call goes through here instead of raw fetch — applies the
+   * configured request timeout and retries a timeout/5xx once (or as many
+   * times as configured) before giving up, rather than a single fetch with
+   * no time bound. */
+  private async duffelFetch(url: string, init: RequestInit): Promise<Response> {
+    const { timeoutMs, retryCount } = await this.runtimeConfig();
+    let lastError: unknown;
+
+    for (let attempt = 0; attempt <= retryCount; attempt += 1) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const res = await fetch(url, { ...init, signal: controller.signal });
+        clearTimeout(timer);
+        if (res.status >= 500 && attempt < retryCount) {
+          this.logger.warn(
+            `Duffel ${url} returned ${res.status}, retrying (attempt ${attempt + 1}/${retryCount})`,
+          );
+          continue;
+        }
+        return res;
+      } catch (error) {
+        clearTimeout(timer);
+        lastError = error;
+        if (attempt < retryCount) {
+          this.logger.warn(
+            `Duffel ${url} failed (${(error as Error).message}), retrying (attempt ${attempt + 1}/${retryCount})`,
+          );
+          continue;
+        }
+      }
+    }
+    throw new ServiceUnavailableException(
+      `The flight provider did not respond in time. ${lastError instanceof Error ? lastError.message : ''}`.trim(),
+    );
+  }
+
+  capabilities(): Promise<ProviderCapabilities> {
+    return Promise.resolve({
+      ticketing: true,
+      refund: true,
+      // Duffel's real change flow (order_change_requests -> offers ->
+      // order_changes) is genuinely multi-step and hasn't been implemented
+      // against a live account — see this class's doc comment. Reissue is
+      // deliberately marked unsupported here rather than shipping untested
+      // guesses at Duffel's change-offer shape; spec #10 explicitly allows
+      // this ("show the operation as unavailable... controlled manual
+      // workflow").
+      reissue: false,
+    });
+  }
+
   async searchOffers(criteria: SearchFlightsCriteria): Promise<FlightOffer[]> {
     const cabinClass = criteria.cabinClass ?? CabinClass.ECONOMY;
     const passengers = [
@@ -186,7 +270,7 @@ export class DuffelFlightProviderService implements FlightProviderPort {
       ...Array(criteria.infants ?? 0).fill({ type: 'infant_without_seat' }),
     ];
 
-    const res = await fetch(
+    const res = await this.duffelFetch(
       `${this.baseUrl}/air/offer_requests?return_offers=true`,
       {
         method: 'POST',
@@ -218,16 +302,17 @@ export class DuffelFlightProviderService implements FlightProviderPort {
     // return_offers=true inlines them; fall back to a separate list call on
     // the rare chance a given account/route needs the async flow instead.
     const offers =
-      body.data.offers ??
-      (await this.listOffersForRequest(body.data.id));
+      body.data.offers ?? (await this.listOffersForRequest(body.data.id));
 
     return offers
       .map((offer) => mapDuffelOffer(offer, cabinClass))
       .sort((a, b) => a.totalAmount - b.totalAmount);
   }
 
-  private async listOffersForRequest(offerRequestId: string): Promise<DuffelOffer[]> {
-    const res = await fetch(
+  private async listOffersForRequest(
+    offerRequestId: string,
+  ): Promise<DuffelOffer[]> {
+    const res = await this.duffelFetch(
       `${this.baseUrl}/air/offers?offer_request_id=${encodeURIComponent(offerRequestId)}`,
       { headers: await this.headers() },
     );
@@ -244,9 +329,12 @@ export class DuffelFlightProviderService implements FlightProviderPort {
   }
 
   async getOffer(offerId: string): Promise<FlightOffer | null> {
-    const res = await fetch(`${this.baseUrl}/air/offers/${encodeURIComponent(offerId)}`, {
-      headers: await this.headers(),
-    });
+    const res = await this.duffelFetch(
+      `${this.baseUrl}/air/offers/${encodeURIComponent(offerId)}`,
+      {
+        headers: await this.headers(),
+      },
+    );
     if (res.status === 404) {
       return null;
     }
@@ -272,7 +360,7 @@ export class DuffelFlightProviderService implements FlightProviderPort {
     offer: FlightOffer,
     passengers: BookingPassengerSnapshot[],
   ): Promise<CreateOrderResult> {
-    const res = await fetch(`${this.baseUrl}/air/orders`, {
+    const res = await this.duffelFetch(`${this.baseUrl}/air/orders`, {
       method: 'POST',
       headers: await this.headers(),
       body: JSON.stringify({
@@ -293,7 +381,11 @@ export class DuffelFlightProviderService implements FlightProviderPort {
           // would need a real funding/payment method configured on the
           // Duffel account itself.
           payments: [
-            { type: 'balance', currency: offer.currency, amount: String(offer.totalAmount) },
+            {
+              type: 'balance',
+              currency: offer.currency,
+              amount: String(offer.totalAmount),
+            },
           ],
         },
       }),
@@ -310,31 +402,112 @@ export class DuffelFlightProviderService implements FlightProviderPort {
     return { providerOrderId: body.data.id, status: 'CONFIRMED' };
   }
 
+  /** Fetches the order and pulls out its booking reference (PNR) and any
+   * per-document ticket numbers — the actual "ticket confirmed" step in our
+   * own state machine, even though Duffel's `type: 'instant'` orders are
+   * already ticketed provider-side the moment createOrder succeeds (see the
+   * FlightProviderPort doc comment on issueTicket). */
+  async issueTicket(providerOrderId: string): Promise<IssueTicketResult> {
+    const res = await this.duffelFetch(
+      `${this.baseUrl}/air/orders/${encodeURIComponent(providerOrderId)}`,
+      {
+        headers: await this.headers(),
+      },
+    );
+    const body = (await res.json()) as {
+      data?: {
+        booking_reference?: string;
+        documents?: Array<{ unique_identifier?: string }>;
+      };
+      errors?: Array<{ title: string; message: string }>;
+    };
+    if (!res.ok || !body.data) {
+      this.logger.error(
+        `Duffel get order failed for ${providerOrderId}: ${body.errors?.[0]?.message ?? res.statusText}`,
+      );
+      return {
+        pnr: '',
+        status: 'FAILED',
+        errorMessage: 'Could not retrieve the ticket from the provider.',
+      };
+    }
+    const ticketNumbers = (body.data.documents ?? [])
+      .map((d) => d.unique_identifier)
+      .filter((v): v is string => Boolean(v));
+    return {
+      pnr: body.data.booking_reference ?? '',
+      ticketNumbers: ticketNumbers.length > 0 ? ticketNumbers : undefined,
+      status: body.data.booking_reference ? 'TICKETED' : 'FAILED',
+    };
+  }
+
   async cancelOrder(providerOrderId: string): Promise<void> {
-    const createRes = await fetch(`${this.baseUrl}/air/order_cancellations`, {
-      method: 'POST',
-      headers: await this.headers(),
-      body: JSON.stringify({ data: { order_id: providerOrderId } }),
-    });
+    const result = await this.requestCancellation(providerOrderId);
+    if (result.status === 'FAILED') {
+      throw new ServiceUnavailableException(
+        result.errorMessage ??
+          'The flight provider could not cancel this order right now.',
+      );
+    }
+  }
+
+  async requestRefund(
+    providerOrderId: string,
+    amount: number,
+  ): Promise<ProviderRefundResult> {
+    const result = await this.requestCancellation(providerOrderId);
+    if (result.status === 'FAILED') {
+      return {
+        providerPenalty: 0,
+        status: 'FAILED',
+        errorMessage: result.errorMessage,
+      };
+    }
+    const providerPenalty = Math.max(
+      0,
+      amount - (result.refundAmount ?? amount),
+    );
+    return {
+      providerPenalty,
+      providerRefundId: result.cancellationId,
+      status: 'REFUNDED',
+    };
+  }
+
+  /** Duffel's cancellation is two-step: request a quote (which carries the
+   * refund amount), then confirm it. Confirming immediately rather than
+   * surfacing the quote as a separate approval step matches how the rest of
+   * this app models cancellation today — the refund math itself is still
+   * shown to the customer beforehand by FlightRefundsService.previewRefund,
+   * which calls this same endpoint read-only-style before the real request. */
+  private async requestCancellation(providerOrderId: string): Promise<{
+    status: 'CONFIRMED' | 'FAILED';
+    refundAmount?: number;
+    cancellationId?: string;
+    errorMessage?: string;
+  }> {
+    const createRes = await this.duffelFetch(
+      `${this.baseUrl}/air/order_cancellations`,
+      {
+        method: 'POST',
+        headers: await this.headers(),
+        body: JSON.stringify({ data: { order_id: providerOrderId } }),
+      },
+    );
     const createBody = (await createRes.json()) as {
-      data?: { id: string };
+      data?: { id: string; refund_amount?: string };
       errors?: Array<{ title: string; message: string }>;
     };
 
     if (!createRes.ok || !createBody.data) {
+      const message = createBody.errors?.[0]?.message ?? createRes.statusText;
       this.logger.error(
-        `Duffel cancellation request failed for order ${providerOrderId}: ${createBody.errors?.[0]?.message ?? createRes.statusText}`,
+        `Duffel cancellation request failed for order ${providerOrderId}: ${message}`,
       );
-      throw new ServiceUnavailableException(
-        'The flight provider could not cancel this order right now. Please try again shortly.',
-      );
+      return { status: 'FAILED', errorMessage: message };
     }
 
-    // Duffel's cancellation is two-step: request a quote, then confirm it.
-    // Confirming immediately (rather than showing the refund quote first)
-    // matches how the rest of this app cancels a booking today — a single
-    // action, no separate refund-review step.
-    const confirmRes = await fetch(
+    const confirmRes = await this.duffelFetch(
       `${this.baseUrl}/air/order_cancellations/${createBody.data.id}/actions/confirm`,
       { method: 'POST', headers: await this.headers() },
     );
@@ -342,12 +515,29 @@ export class DuffelFlightProviderService implements FlightProviderPort {
       const confirmBody = (await confirmRes.json()) as {
         errors?: Array<{ title: string; message: string }>;
       };
+      const message = confirmBody.errors?.[0]?.message ?? confirmRes.statusText;
       this.logger.error(
-        `Duffel cancellation confirm failed for order ${providerOrderId}: ${confirmBody.errors?.[0]?.message ?? confirmRes.statusText}`,
+        `Duffel cancellation confirm failed for order ${providerOrderId}: ${message}`,
       );
-      throw new ServiceUnavailableException(
-        'The flight provider accepted the cancellation request but could not confirm it. Please check the Duffel dashboard.',
-      );
+      return { status: 'FAILED', errorMessage: message };
     }
+
+    return {
+      status: 'CONFIRMED',
+      refundAmount: createBody.data.refund_amount
+        ? Number(createBody.data.refund_amount)
+        : undefined,
+      cancellationId: createBody.data.id,
+    };
+  }
+
+  reissue(): Promise<ReissueResult> {
+    return Promise.resolve({
+      providerOrderId: '',
+      pnr: '',
+      status: 'FAILED',
+      errorMessage:
+        'Reissue is not available for Duffel through this integration yet — use the manual reissue workflow instead.',
+    });
   }
 }

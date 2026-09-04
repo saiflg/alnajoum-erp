@@ -4,11 +4,22 @@ import { randomUUID } from 'crypto';
 import {
   BookingPassengerSnapshot,
   CreateOrderResult,
+  FareConditions,
   FlightLegOffer,
   FlightOffer,
   FlightProviderPort,
+  IssueTicketResult,
+  ProviderCapabilities,
+  ProviderRefundResult,
+  ReissueResult,
   SearchFlightsCriteria,
 } from './flight-provider.port';
+
+const REFUNDABILITY: FareConditions['refundable'][] = [
+  'REFUNDABLE',
+  'PARTIALLY_REFUNDABLE',
+  'NON_REFUNDABLE',
+];
 
 const OFFER_TTL_MS = 30 * 60 * 1000; // 30 minutes, matching typical GDS offer TTLs
 
@@ -58,10 +69,31 @@ interface CachedOffer {
   expiresAt: number;
 }
 
+interface BookedOrder {
+  offer: FlightOffer;
+  ticketed: boolean;
+  cancelled: boolean;
+}
+
+/** Deterministic-length alphanumeric code, e.g. a 6-char PNR. */
+function randomCode(rand: () => number, length: number): string {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I ambiguity
+  let out = '';
+  for (let i = 0; i < length; i += 1) {
+    out += alphabet[randInt(rand, 0, alphabet.length - 1)];
+  }
+  return out;
+}
+
 @Injectable()
 export class MockFlightProviderService implements FlightProviderPort {
   private readonly logger = new Logger(MockFlightProviderService.name);
   private readonly offerCache = new Map<string, CachedOffer>();
+  private readonly bookedOrders = new Map<string, BookedOrder>();
+
+  capabilities(): Promise<ProviderCapabilities> {
+    return Promise.resolve({ ticketing: true, refund: true, reissue: true });
+  }
 
   searchOffers(criteria: SearchFlightsCriteria): Promise<FlightOffer[]> {
     const cabinClass = criteria.cabinClass ?? CabinClass.ECONOMY;
@@ -128,6 +160,28 @@ export class MockFlightProviderService implements FlightProviderPort {
           ? Math.round(legsTotal * 0.9)
           : legsTotal;
 
+      const refundable =
+        REFUNDABILITY[randInt(rand, 0, REFUNDABILITY.length - 1)];
+      const warnings: FareConditions['warnings'] = [];
+      if (
+        legs.some((leg) => ['SA', 'AE'].includes(leg.destination.slice(0, 2)))
+      ) {
+        // Deliberately not a real rule lookup — a mock stand-in for "the
+        // provider returned a restriction," never invented for a real
+        // provider (see FareWarning's doc comment).
+        warnings.push({
+          message:
+            'Passenger must meet the applicable destination entry/residency requirements.',
+          verified: true,
+        });
+      }
+      if (cabinClass !== CabinClass.ECONOMY && randInt(rand, 0, 3) === 0) {
+        warnings.push({
+          message: 'Fare includes a same-day itinerary change restriction.',
+          verified: true,
+        });
+      }
+
       const offer: FlightOffer = {
         id: randomUUID(),
         provider: FlightProviderName.MOCK,
@@ -138,6 +192,29 @@ export class MockFlightProviderService implements FlightProviderPort {
         totalAmount,
         seatsAvailable: randInt(rand, 1, 9),
         expiresAt: new Date(Date.now() + OFFER_TTL_MS).toISOString(),
+        fareConditions: {
+          refundable,
+          changePenaltyDescription:
+            refundable === 'NON_REFUNDABLE'
+              ? 'Non-refundable fare — changes subject to a penalty plus fare difference.'
+              : 'Free date change up to 24 hours before departure; penalty applies after.',
+          cancellationPenaltyDescription:
+            refundable === 'REFUNDABLE'
+              ? 'Fully refundable up to 24 hours before departure.'
+              : refundable === 'PARTIALLY_REFUNDABLE'
+                ? 'Refundable minus a cancellation penalty and non-refundable taxes.'
+                : 'Non-refundable — taxes only may be recoverable.',
+          baggageAllowance: {
+            checked:
+              cabinClass === CabinClass.ECONOMY ? '1 x 23kg' : '2 x 32kg',
+            cabin: '1 x 7kg',
+          },
+          fareBrand:
+            cabinClass === CabinClass.ECONOMY
+              ? 'Economy Basic'
+              : `${cabinClass} Flex`,
+          warnings,
+        },
       };
 
       this.offerCache.set(offer.id, {
@@ -168,21 +245,116 @@ export class MockFlightProviderService implements FlightProviderPort {
   ): Promise<CreateOrderResult> {
     const cached = this.offerCache.get(offer.id);
     if (!cached || cached.expiresAt < Date.now()) {
-      return Promise.resolve({ providerOrderId: '', status: 'FAILED' });
+      return Promise.resolve({
+        providerOrderId: '',
+        status: 'FAILED',
+        errorMessage: 'This offer has expired or was already booked.',
+      });
     }
     this.logger.log(
       `Mock order created for offer ${offer.id} with ${passengers.length} passenger(s)`,
     );
     // Offers are single-use in a real GDS; drop it from the cache once booked.
     this.offerCache.delete(offer.id);
-    return Promise.resolve({
-      providerOrderId: `MOCK-${randomUUID()}`,
-      status: 'CONFIRMED',
+    const providerOrderId = `MOCK-${randomUUID()}`;
+    this.bookedOrders.set(providerOrderId, {
+      offer,
+      ticketed: false,
+      cancelled: false,
     });
+    return Promise.resolve({ providerOrderId, status: 'CONFIRMED' });
+  }
+
+  issueTicket(
+    providerOrderId: string,
+    _offer: FlightOffer,
+  ): Promise<IssueTicketResult> {
+    const order = this.bookedOrders.get(providerOrderId);
+    if (!order || order.cancelled) {
+      return Promise.resolve({
+        pnr: '',
+        status: 'FAILED',
+        errorMessage: 'No active order found for this booking.',
+      });
+    }
+    const rand = mulberry32(hashString(providerOrderId));
+    const pnr = randomCode(rand, 6);
+    order.ticketed = true;
+    this.logger.log(
+      `Mock ticket issued for order ${providerOrderId}: PNR ${pnr}`,
+    );
+    return Promise.resolve({ pnr, status: 'TICKETED' });
   }
 
   cancelOrder(providerOrderId: string): Promise<void> {
+    const order = this.bookedOrders.get(providerOrderId);
+    if (order) order.cancelled = true;
     this.logger.log(`Mock order ${providerOrderId} cancelled`);
     return Promise.resolve();
+  }
+
+  requestRefund(
+    providerOrderId: string,
+    amount: number,
+    _currency: string,
+  ): Promise<ProviderRefundResult> {
+    const order = this.bookedOrders.get(providerOrderId);
+    if (!order) {
+      return Promise.resolve({
+        providerPenalty: 0,
+        status: 'FAILED',
+        errorMessage: 'No order found for this booking.',
+      });
+    }
+    const refundable =
+      order.offer.fareConditions?.refundable ?? 'PARTIALLY_REFUNDABLE';
+    const penaltyRate =
+      refundable === 'REFUNDABLE'
+        ? 0
+        : refundable === 'NON_REFUNDABLE'
+          ? 1
+          : 0.25;
+    const providerPenalty = Math.round(amount * penaltyRate);
+    this.logger.log(
+      `Mock refund for order ${providerOrderId}: penalty ${providerPenalty} of ${amount}`,
+    );
+    return Promise.resolve({
+      providerPenalty,
+      providerRefundId: `MOCKREFUND-${randomUUID()}`,
+      status: 'REFUNDED',
+    });
+  }
+
+  reissue(
+    providerOrderId: string,
+    newOffer: FlightOffer,
+    passengers: BookingPassengerSnapshot[],
+  ): Promise<ReissueResult> {
+    const order = this.bookedOrders.get(providerOrderId);
+    if (!order || order.cancelled) {
+      return Promise.resolve({
+        providerOrderId: '',
+        pnr: '',
+        status: 'FAILED',
+        errorMessage: 'No active order found for this booking.',
+      });
+    }
+    const newProviderOrderId = `MOCK-${randomUUID()}`;
+    const rand = mulberry32(hashString(newProviderOrderId));
+    const pnr = randomCode(rand, 6);
+    this.bookedOrders.set(newProviderOrderId, {
+      offer: newOffer,
+      ticketed: true,
+      cancelled: false,
+    });
+    order.cancelled = true;
+    this.logger.log(
+      `Mock reissue: order ${providerOrderId} -> ${newProviderOrderId} (${passengers.length} passenger(s)), new PNR ${pnr}`,
+    );
+    return Promise.resolve({
+      providerOrderId: newProviderOrderId,
+      pnr,
+      status: 'REISSUED',
+    });
   }
 }

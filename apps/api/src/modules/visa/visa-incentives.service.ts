@@ -5,76 +5,26 @@ import {
 } from '@nestjs/common';
 import {
   IncentivePolicy,
-  IncentivePolicyType,
   IncentiveStatus,
   VisaApplication,
 } from '@prisma/client';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { calculateStaffIncentiveAmount } from '../incentives/incentive-calculator';
 import { NotificationsService } from '../notifications/notifications.service';
 
 function generateIncentiveReference(): string {
   return `INC-${randomBytes(4).toString('hex').toUpperCase()}`;
 }
 
-interface PolicyConfig {
-  percent?: number;
-  amount?: number;
-  staffPercent?: number;
-  branchPercent?: number;
-}
-
-/**
- * Pure calculation, split out from the DB-touching methods below so its
- * arithmetic is trivially unit-testable without mocking Prisma — see
- * visa-incentives.service.spec.ts.
- *
- * Deliberately conservative when a policy is missing or its config is
- * incomplete: returns 0 rather than guessing, per the spec's "IMPORTANT
- * FINANCIAL CONTROL — do not automatically treat every difference between
- * selling price and cost as staff profit" requirement. A margin of 0 or
- * less also always yields 0 — there's no such thing as a negative
- * incentive.
- */
-export function calculateStaffIncentiveAmount(
-  margin: number,
-  policy: { type: IncentivePolicyType; config: unknown } | null,
-): number {
-  if (margin <= 0 || !policy) {
-    return 0;
-  }
-  const config = (policy.config ?? {}) as PolicyConfig;
-
-  switch (policy.type) {
-    case IncentivePolicyType.FULL_MARGIN:
-      return margin;
-    case IncentivePolicyType.PERCENT_OF_MARGIN:
-    case IncentivePolicyType.CUSTOM: {
-      if (typeof config.amount === 'number') {
-        return Math.min(config.amount, margin);
-      }
-      if (typeof config.percent === 'number') {
-        return Math.round((margin * config.percent) / 100);
-      }
-      return 0;
-    }
-    case IncentivePolicyType.FIXED_AMOUNT:
-      return typeof config.amount === 'number'
-        ? Math.min(config.amount, margin)
-        : 0;
-    case IncentivePolicyType.STAFF_COMPANY_SPLIT:
-      return typeof config.staffPercent === 'number'
-        ? Math.round((margin * config.staffPercent) / 100)
-        : 0;
-    case IncentivePolicyType.STAFF_BRANCH_COMPANY_SPLIT:
-      return typeof config.staffPercent === 'number'
-        ? Math.round((margin * config.staffPercent) / 100)
-        : 0;
-    default:
-      return 0;
-  }
-}
+// Re-exported for backward compatibility — every existing import of this
+// function from visa-incentives.service.ts (including
+// visa-incentives.service.spec.ts) keeps working unchanged. The
+// implementation itself now lives in incentives/incentive-calculator.ts so
+// Phase 4's flight incentives can reuse the exact same math instead of
+// duplicating it (see FlightIncentivesService).
+export { calculateStaffIncentiveAmount };
 
 @Injectable()
 export class VisaIncentivesService {

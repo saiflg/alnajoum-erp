@@ -1224,9 +1224,454 @@ async function seedPhase3Visa() {
   console.log('--------------------------------------------------------');
 }
 
+/**
+ * Phase 4 demo data — flight pricing rules, bookings across the full
+ * PENDING/CONFIRMED/TICKETED/CANCELLED/REFUNDED spread, a reissue history,
+ * a group booking, staff incentives earned on ticketed flights, and a
+ * handful of provider transaction log rows (mixed MOCK success/failure) so
+ * the Flight Reports dashboard has something to show. Independently
+ * idempotent (own existence check) and re-fetches Phase 1/2's demo
+ * customers/staff by their known identifiers rather than relying on
+ * in-process variables, same reasoning as seedPhase3Visa.
+ */
+async function seedPhase4Flights() {
+  const existing = await prisma.flightBooking.findFirst({
+    where: { bookingReference: { startsWith: 'ANJ-DEMO' } },
+  });
+  if (existing) {
+    console.log('Phase 4 flight demo data already present — skipping');
+    return;
+  }
+
+  const aminaIdentity = await prisma.identity.findUniqueOrThrow({
+    where: { email: MARKER_EMAIL },
+    include: { customer: true },
+  });
+  const chineduIdentity = await prisma.identity.findUniqueOrThrow({
+    where: { email: 'chinedu.okafor@demo.alnajoum.travel' },
+    include: { customer: true },
+  });
+  const agentIdentity = await prisma.identity.findUniqueOrThrow({
+    where: { email: 'fatima.sule@demo.alnajoum.travel' },
+    include: { staff: true },
+  });
+  const financeIdentity = await prisma.identity.findUniqueOrThrow({
+    where: { email: 'ibrahim.musa@demo.alnajoum.travel' },
+    include: { staff: true },
+  });
+  const branch = await prisma.branch.findFirstOrThrow();
+
+  // --- Pricing rules: one global default, one route-specific override ------
+  const defaultIncentivePolicy = await prisma.incentivePolicy.findFirst({
+    where: { isDefault: true, isActive: true },
+  });
+
+  const globalRule = await prisma.flightPricingRule.create({
+    data: {
+      name: 'Global default markup',
+      type: 'PERCENTAGE',
+      percent: 5,
+      priority: 0,
+      isActive: true,
+      incentivePolicyId: defaultIncentivePolicy?.id,
+    },
+  });
+  await prisma.flightPricingRule.create({
+    data: {
+      name: 'Lagos → Dubai promo',
+      type: 'FIXED',
+      amount: 15_000,
+      origin: 'LOS',
+      destination: 'DXB',
+      priority: 10,
+      isPromotional: true,
+      isActive: true,
+      incentivePolicyId: defaultIncentivePolicy?.id,
+    },
+  });
+
+  function itinerary(origin: string, destination: string, airline: string, airlineCode: string, days: number, amount: number) {
+    const departureAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+    return {
+      id: ref('offer'),
+      provider: 'MOCK',
+      tripType: 'ONE_WAY',
+      cabinClass: 'ECONOMY',
+      currency: 'NGN',
+      totalAmount: amount,
+      seatsAvailable: 4,
+      expiresAt: departureAt,
+      legs: [
+        {
+          origin,
+          destination,
+          departureAt,
+          arrivalAt: departureAt,
+          segments: [
+            {
+              origin,
+              destination,
+              departureAt,
+              arrivalAt: departureAt,
+              airline,
+              airlineCode,
+              flightNumber: `${airlineCode}${100 + days}`,
+              cabinClass: 'ECONOMY',
+              durationMinutes: 180,
+            },
+          ],
+        },
+      ],
+      fareConditions: {
+        refundable: 'PARTIALLY_REFUNDABLE',
+        cancellationPenaltyDescription: 'Refundable minus a 25% cancellation penalty and non-refundable taxes.',
+        baggageAllowance: { checked: '1 x 23kg', cabin: '1 x 7kg' },
+        fareBrand: 'Economy Basic',
+        warnings: [],
+      },
+    };
+  }
+
+  async function makeBooking(opts: {
+    ref: string;
+    customerId: string;
+    customerFirst: string;
+    customerLast: string;
+    origin: string;
+    destination: string;
+    airline: string;
+    airlineCode: string;
+    days: number;
+    providerCost: number;
+    markupAmount: number;
+    status: 'PENDING' | 'CONFIRMED' | 'TICKETED' | 'CANCELLED' | 'REFUNDED';
+    pnr?: string;
+    bookedByStaffId?: string;
+  }) {
+    const totalAmount = opts.providerCost + opts.markupAmount;
+    const offer = itinerary(opts.origin, opts.destination, opts.airline, opts.airlineCode, opts.days, totalAmount);
+    const booking = await prisma.flightBooking.create({
+      data: {
+        bookingReference: opts.ref,
+        customerId: opts.customerId,
+        bookedByStaffId: opts.bookedByStaffId,
+        branchId: opts.bookedByStaffId ? branch.id : undefined,
+        provider: 'MOCK',
+        providerOfferId: offer.id,
+        providerOrderId: `MOCK-${ref('order')}`,
+        status: opts.status,
+        currency: 'NGN',
+        totalAmount,
+        providerCost: opts.providerCost,
+        markupAmount: opts.markupAmount,
+        pricingRuleId: globalRule.id,
+        tripType: 'ONE_WAY',
+        origin: opts.origin,
+        destination: opts.destination,
+        departureAt: new Date(offer.legs[0].departureAt),
+        cabinClass: 'ECONOMY',
+        itinerary: offer,
+        fareRules: offer.fareConditions,
+        refundable: false,
+        baggageAllowance: offer.fareConditions.baggageAllowance,
+        pnr: opts.pnr,
+        ticketedAt: opts.status === 'TICKETED' || opts.status === 'REFUNDED' ? new Date() : undefined,
+        ticketedByStaffId: opts.status === 'TICKETED' || opts.status === 'REFUNDED' ? opts.bookedByStaffId : undefined,
+        passengers: {
+          create: [
+            {
+              type: 'ADULT',
+              customerId: opts.customerId,
+              firstName: opts.customerFirst,
+              lastName: opts.customerLast,
+              ticketNumber: opts.pnr ? `${opts.pnr}-01` : undefined,
+            },
+          ],
+        },
+      },
+    });
+
+    await prisma.invoice.create({
+      data: {
+        invoiceNumber: ref('INV'),
+        customerId: opts.customerId,
+        flightBookingId: booking.id,
+        status: opts.status === 'PENDING' ? InvoiceStatus.ISSUED : InvoiceStatus.PAID,
+        currency: 'NGN',
+        totalAmount,
+        issuedByStaffId: opts.bookedByStaffId,
+        payments:
+          opts.status === 'PENDING'
+            ? undefined
+            : {
+                create: [
+                  {
+                    paymentReference: ref('PAY'),
+                    amount: totalAmount,
+                    method: PaymentMethod.CARD,
+                    recordedByStaffId: financeIdentity.staff!.id,
+                  },
+                ],
+              },
+        lineItems: {
+          create: [{ description: `Flight ${opts.ref}: ${opts.origin} → ${opts.destination}`, amount: totalAmount }],
+        },
+      },
+    });
+
+    return booking;
+  }
+
+  // 1) Amina — PENDING (customer self-service, not yet paid).
+  await makeBooking({
+    ref: 'ANJ-DEMO0001',
+    customerId: aminaIdentity.customer!.id,
+    customerFirst: 'Amina',
+    customerLast: 'Yusuf',
+    origin: 'LOS',
+    destination: 'ABV',
+    airline: 'Air Peace',
+    airlineCode: 'P4',
+    days: 20,
+    providerCost: 65_000,
+    markupAmount: 3_250,
+    status: 'PENDING',
+  });
+
+  // 2) Chinedu — CONFIRMED, paid, awaiting ticket issuance.
+  await makeBooking({
+    ref: 'ANJ-DEMO0002',
+    customerId: chineduIdentity.customer!.id,
+    customerFirst: 'Chinedu',
+    customerLast: 'Okafor',
+    origin: 'LOS',
+    destination: 'DXB',
+    airline: 'Qatar Airways',
+    airlineCode: 'QR',
+    days: 30,
+    providerCost: 380_000,
+    markupAmount: 15_000,
+    status: 'CONFIRMED',
+    bookedByStaffId: agentIdentity.staff!.id,
+  });
+
+  // 3) Amina — TICKETED, booked by staff, earns a staff incentive below.
+  const ticketed1 = await makeBooking({
+    ref: 'ANJ-DEMO0003',
+    customerId: aminaIdentity.customer!.id,
+    customerFirst: 'Amina',
+    customerLast: 'Yusuf',
+    origin: 'ABV',
+    destination: 'LHR',
+    airline: 'British Airways',
+    airlineCode: 'BA',
+    days: 45,
+    providerCost: 620_000,
+    markupAmount: 31_000,
+    status: 'TICKETED',
+    pnr: 'DEM001',
+    bookedByStaffId: agentIdentity.staff!.id,
+  });
+
+  // 4) Chinedu — TICKETED, self-service (no staff, no incentive to credit).
+  await makeBooking({
+    ref: 'ANJ-DEMO0004',
+    customerId: chineduIdentity.customer!.id,
+    customerFirst: 'Chinedu',
+    customerLast: 'Okafor',
+    origin: 'LOS',
+    destination: 'ADD',
+    airline: 'Ethiopian Airlines',
+    airlineCode: 'ET',
+    days: 10,
+    providerCost: 210_000,
+    markupAmount: 10_500,
+    status: 'TICKETED',
+    pnr: 'DEM002',
+  });
+
+  // 5) Amina — CANCELLED before ticketing (no refund workflow needed).
+  await makeBooking({
+    ref: 'ANJ-DEMO0005',
+    customerId: aminaIdentity.customer!.id,
+    customerFirst: 'Amina',
+    customerLast: 'Yusuf',
+    origin: 'LOS',
+    destination: 'CAI',
+    airline: 'Ibom Air',
+    airlineCode: 'QI',
+    days: 15,
+    providerCost: 150_000,
+    markupAmount: 7_500,
+    status: 'CANCELLED',
+  });
+
+  // 6) Chinedu — TICKETED then REFUNDED, with a full FlightRefund record
+  // showing the penalty/agency-fee math (never assumes the full price
+  // comes back).
+  const refundedBooking = await makeBooking({
+    ref: 'ANJ-DEMO0006',
+    customerId: chineduIdentity.customer!.id,
+    customerFirst: 'Chinedu',
+    customerLast: 'Okafor',
+    origin: 'LOS',
+    destination: 'ABV',
+    airline: 'Arik Air',
+    airlineCode: 'W3',
+    days: 5,
+    providerCost: 70_000,
+    markupAmount: 3_500,
+    status: 'REFUNDED',
+    pnr: 'DEM003',
+    bookedByStaffId: agentIdentity.staff!.id,
+  });
+  await prisma.flightRefund.create({
+    data: {
+      bookingId: refundedBooking.id,
+      requestedByStaffId: agentIdentity.staff!.id,
+      ticketPrice: refundedBooking.totalAmount,
+      providerPenalty: Math.round(refundedBooking.totalAmount * 0.25),
+      agencyFee: Math.round(refundedBooking.totalAmount * 0.05),
+      refundAmount: Math.round(refundedBooking.totalAmount * 0.7),
+      currency: 'NGN',
+      status: 'COMPLETED',
+      reason: 'Customer travel plans changed',
+      completedAt: new Date(),
+    },
+  });
+
+  // 7) Amina — TICKETED, later reissued to a new date/fare — a completed
+  // FlightReissue with the full fare-difference/penalty math, so the
+  // history is visible even though the booking itself now just shows the
+  // new (post-reissue) itinerary.
+  const reissuedBooking = await makeBooking({
+    ref: 'ANJ-DEMO0007',
+    customerId: aminaIdentity.customer!.id,
+    customerFirst: 'Amina',
+    customerLast: 'Yusuf',
+    origin: 'LOS',
+    destination: 'JED',
+    airline: 'Qatar Airways',
+    airlineCode: 'QR',
+    days: 60,
+    providerCost: 550_000,
+    markupAmount: 27_500,
+    status: 'TICKETED',
+    pnr: 'DEM004',
+    bookedByStaffId: agentIdentity.staff!.id,
+  });
+  const newOffer = itinerary('LOS', 'JED', 'Qatar Airways', 'QR', 65, 605_000);
+  await prisma.flightReissue.create({
+    data: {
+      bookingId: reissuedBooking.id,
+      requestedByStaffId: agentIdentity.staff!.id,
+      originalOfferSnapshot: reissuedBooking.itinerary as object,
+      newOfferSnapshot: newOffer,
+      fareDifference: 27_500,
+      changePenalty: Math.round(reissuedBooking.totalAmount * 0.03),
+      totalDue: 27_500 + Math.round(reissuedBooking.totalAmount * 0.03),
+      currency: 'NGN',
+      status: 'COMPLETED',
+      completedAt: new Date(),
+    },
+  });
+
+  // --- Staff incentive on the completed ticketed/staff-booked flight -------
+  if (defaultIncentivePolicy) {
+    const margin = ticketed1.totalAmount - (ticketed1.providerCost ?? 0);
+    await prisma.staffIncentive.create({
+      data: {
+        staffId: agentIdentity.staff!.id,
+        sourceType: 'FLIGHT_BOOKING',
+        sourceId: ticketed1.id,
+        amount: Math.round((margin * 50) / 100),
+        currency: 'NGN',
+        description: `Incentive on flight booking ${ticketed1.bookingReference}`,
+        status: IncentiveStatus.PENDING,
+        referenceNumber: ref('INC'),
+        companyCost: ticketed1.providerCost,
+        sellingPrice: ticketed1.totalAmount,
+        margin,
+        policyId: defaultIncentivePolicy.id,
+        customerId: ticketed1.customerId,
+      },
+    });
+  }
+
+  // --- Group booking: a 12-person Umrah group, part-paid deposit ----------
+  const groupInvoice = await prisma.invoice.create({
+    data: {
+      invoiceNumber: ref('INV'),
+      status: InvoiceStatus.PARTIALLY_PAID,
+      currency: 'NGN',
+      totalAmount: 12 * 750_000,
+      issuedByStaffId: agentIdentity.staff!.id,
+      payments: {
+        create: [
+          {
+            paymentReference: ref('PAY'),
+            amount: 3_000_000,
+            method: PaymentMethod.BANK_TRANSFER,
+            recordedByStaffId: financeIdentity.staff!.id,
+          },
+        ],
+      },
+      lineItems: { create: [{ description: 'Group flight booking: Kaduna Umrah Group 2026 (12 passengers, Jeddah)', amount: 12 * 750_000 }] },
+    },
+  });
+  await prisma.flightGroupBooking.create({
+    data: {
+      groupReference: ref('GRP'),
+      groupName: 'Kaduna Umrah Group 2026',
+      groupContactName: 'Fatima Sule',
+      groupContactPhone: '+2348000000900',
+      groupContactEmail: 'fatima.sule@demo.alnajoum.travel',
+      numberOfPassengers: 12,
+      origin: 'KAD',
+      destination: 'JED',
+      travelDate: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
+      airline: 'Saudia',
+      negotiatedPrice: 12 * 750_000,
+      currency: 'NGN',
+      deposit: 3_000_000,
+      balance: 12 * 750_000 - 3_000_000,
+      status: 'CONFIRMED',
+      createdByStaffId: agentIdentity.staff!.id,
+      branchId: branch.id,
+      invoiceId: groupInvoice.id,
+      passengers: {
+        create: Array.from({ length: 12 }, (_, i) => ({
+          firstName: `Pilgrim${i + 1}`,
+          lastName: 'Kaduna Group',
+        })),
+      },
+    },
+  });
+
+  // --- Provider transaction logs, for the Reports "Provider Success Rate" --
+  await prisma.providerTransactionLog.createMany({
+    data: [
+      { provider: 'MOCK', operation: 'SEARCH', status: 'SUCCESS', safeMessage: '4 offer(s) returned' },
+      { provider: 'MOCK', operation: 'SEARCH', status: 'SUCCESS', safeMessage: '3 offer(s) returned' },
+      { provider: 'MOCK', operation: 'CREATE_ORDER', status: 'SUCCESS', safeMessage: 'Order created' },
+      { provider: 'DUFFEL', operation: 'SEARCH', status: 'FAILURE', errorCode: 'INVALID_TOKEN', safeMessage: 'Invalid API token' },
+    ],
+  });
+
+  console.log(
+    'Created 7 flight bookings (PENDING, CONFIRMED, TICKETED x3, CANCELLED, REFUNDED with reissue history), ' +
+      '2 pricing rules, 1 staff incentive, 1 group booking (12 passengers), and 4 provider transaction logs.',
+  );
+
+  console.log('--------------------------------------------------------');
+  console.log('Phase 4 flight demo data seeded successfully.');
+  console.log('--------------------------------------------------------');
+}
+
 async function main() {
   await seedPhase1And2();
   await seedPhase3Visa();
+  await seedPhase4Flights();
 }
 
 main()
