@@ -62,7 +62,9 @@ describe('HotelsService', () => {
         findUnique: jest.fn(),
         update: jest.fn(),
       },
-      $transaction: jest.fn((callback: (tx: unknown) => unknown) => callback(prisma)),
+      $transaction: jest.fn((callback: (tx: unknown) => unknown) =>
+        callback(prisma),
+      ),
     };
     provider = {
       searchOffers: jest.fn(),
@@ -128,7 +130,9 @@ describe('HotelsService', () => {
     it('throws NotFound when the provider has no such offer', async () => {
       provider.getOffer.mockResolvedValue(null);
 
-      await expect(service.getOffer('missing')).rejects.toThrow(NotFoundException);
+      await expect(service.getOffer('missing')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -175,11 +179,14 @@ describe('HotelsService', () => {
 
     it('throws Conflict when the provider rejects the order (offer expired)', async () => {
       provider.getOffer.mockResolvedValue(baseOffer);
-      provider.createOrder.mockResolvedValue({ providerOrderId: '', status: 'FAILED' });
+      provider.createOrder.mockResolvedValue({
+        providerOrderId: '',
+        status: 'FAILED',
+      });
 
-      await expect(service.createBooking('customer-1', 'offer-1')).rejects.toThrow(
-        ConflictException,
-      );
+      await expect(
+        service.createBooking('customer-1', 'offer-1'),
+      ).rejects.toThrow(ConflictException);
       expect(prisma.hotelBooking.create).not.toHaveBeenCalled();
     });
   });
@@ -191,15 +198,17 @@ describe('HotelsService', () => {
         customerId: 'customer-a',
       });
 
-      await expect(service.getBooking('booking-1', 'customer-b')).rejects.toThrow(
-        ForbiddenException,
-      );
+      await expect(
+        service.getBooking('booking-1', 'customer-b'),
+      ).rejects.toThrow(ForbiddenException);
     });
 
     it('throws NotFound when the booking does not exist', async () => {
       prisma.hotelBooking.findUnique.mockResolvedValue(null);
 
-      await expect(service.getBooking('missing')).rejects.toThrow(NotFoundException);
+      await expect(service.getBooking('missing')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -220,9 +229,13 @@ describe('HotelsService', () => {
 
       expect(provider.cancelOrder).toHaveBeenCalledWith('MOCK-1');
       expect(prisma.hotelBooking.update).toHaveBeenCalledWith(
-        expect.objectContaining({ data: { status: HotelBookingStatus.CANCELLED } }),
+        expect.objectContaining({
+          data: { status: HotelBookingStatus.CANCELLED },
+        }),
       );
-      expect(invoicesService.voidHotelBookingIfUnpaid).toHaveBeenCalledWith('booking-1');
+      expect(invoicesService.voidHotelBookingIfUnpaid).toHaveBeenCalledWith(
+        'booking-1',
+      );
     });
 
     it('rejects cancelling an already-cancelled booking', async () => {
@@ -232,7 +245,9 @@ describe('HotelsService', () => {
         status: HotelBookingStatus.CANCELLED,
       });
 
-      await expect(service.cancelBooking('booking-1')).rejects.toThrow(ConflictException);
+      await expect(service.cancelBooking('booking-1')).rejects.toThrow(
+        ConflictException,
+      );
     });
   });
 });

@@ -162,6 +162,33 @@ export const INTEGRATION_CATALOG: Record<
       ],
     },
   ],
+  HOTEL: [
+    {
+      provider: 'mock',
+      label: 'Mock (built-in, no credentials needed — external search demo)',
+      fields: [
+        {
+          key: 'freeCancellationDays',
+          label: 'Free Cancellation Window (days before check-in)',
+          secret: false,
+          placeholder: '2',
+        },
+        {
+          key: 'cancellationPenaltyPercent',
+          label: 'Cancellation Penalty % (after the free window)',
+          secret: false,
+          placeholder: '25',
+        },
+        {
+          key: 'agencyFeePercent',
+          label: 'Agency Cancellation Fee % (deducted from every refund)',
+          secret: false,
+          placeholder: '5',
+        },
+      ],
+      implemented: true,
+    },
+  ],
   PAYMENT: [
     {
       provider: 'mock',

@@ -1668,10 +1668,346 @@ async function seedPhase4Flights() {
   console.log('--------------------------------------------------------');
 }
 
+/**
+ * Phase 5 demo data — a small hotel catalog (2 hotels, 4 room types),
+ * bookings across PENDING/CONFIRMED/COMPLETED/CANCELLED/REFUNDED (mixing
+ * CATALOG-provider and MOCK-provider bookings so the markup/supplierCost
+ * snapshot's nullability is exercised both ways), a staff incentive on a
+ * completed booking, and one multi-component travel package. Independently
+ * idempotent, same pattern as seedPhase3Visa/seedPhase4Flights.
+ */
+async function seedPhase5Hotels() {
+  const existing = await prisma.hotel.findFirst({ where: { name: 'Alnajoum Demo Grand Hotel' } });
+  if (existing) {
+    console.log('Phase 5 hotel demo data already present — skipping');
+    return;
+  }
+
+  const aminaIdentity = await prisma.identity.findUniqueOrThrow({
+    where: { email: MARKER_EMAIL },
+    include: { customer: true },
+  });
+  const chineduIdentity = await prisma.identity.findUniqueOrThrow({
+    where: { email: 'chinedu.okafor@demo.alnajoum.travel' },
+    include: { customer: true },
+  });
+  const agentIdentity = await prisma.identity.findUniqueOrThrow({
+    where: { email: 'fatima.sule@demo.alnajoum.travel' },
+    include: { staff: true },
+  });
+  const financeIdentity = await prisma.identity.findUniqueOrThrow({
+    where: { email: 'ibrahim.musa@demo.alnajoum.travel' },
+    include: { staff: true },
+  });
+  const branch = await prisma.branch.findFirstOrThrow();
+  const defaultIncentivePolicy = await prisma.incentivePolicy.findFirst({ where: { isDefault: true, isActive: true } });
+
+  // --- Catalog: 2 hotels, 4 room types --------------------------------------
+  const grandHotel = await prisma.hotel.create({
+    data: {
+      name: 'Alnajoum Demo Grand Hotel',
+      description: 'A fictional 5-star demo hotel in Lagos, for seed data only.',
+      country: 'Nigeria',
+      city: 'Lagos',
+      address: '12 Ahmadu Bello Way, Victoria Island',
+      starRating: 5,
+      contactPhone: '+2348000000700',
+      checkInTime: '14:00',
+      checkOutTime: '12:00',
+      amenities: ['Free WiFi', 'Pool', 'Gym', 'Airport Shuttle', 'Breakfast Included'],
+      images: [],
+      cancellationPolicy: 'Free cancellation up to 2 days before check-in; 25% penalty thereafter.',
+      paymentPolicy: 'Full payment required at booking.',
+      status: 'ACTIVE',
+    },
+  });
+  const madinahHotel = await prisma.hotel.create({
+    data: {
+      name: 'Alnajoum Demo Madinah Suites',
+      description: 'A fictional demo hotel near the Prophet\'s Mosque, for Umrah/Hajj package seed data only.',
+      country: 'Saudi Arabia',
+      city: 'Madinah',
+      address: 'King Fahd Road',
+      starRating: 4,
+      contactPhone: '+9660000000701',
+      checkInTime: '15:00',
+      checkOutTime: '12:00',
+      amenities: ['Free WiFi', 'Prayer Hall', 'Breakfast Included'],
+      images: [],
+      cancellationPolicy: 'Free cancellation up to 7 days before check-in; 30% penalty thereafter.',
+      status: 'ACTIVE',
+    },
+  });
+
+  const doubleRoom = await prisma.hotelRoomType.create({
+    data: {
+      hotelId: grandHotel.id,
+      name: 'Deluxe Double',
+      category: 'DOUBLE',
+      capacity: 2,
+      bedType: 'Queen',
+      numberOfBeds: 1,
+      mealPlan: 'BED_AND_BREAKFAST',
+      supplierCost: 45_000,
+      sellingPrice: 60_000,
+      currency: 'NGN',
+      totalRooms: 10,
+      cancellationRules: 'Matches hotel policy.',
+    },
+  });
+  const suiteRoom = await prisma.hotelRoomType.create({
+    data: {
+      hotelId: grandHotel.id,
+      name: 'Executive Suite',
+      category: 'SUITE',
+      capacity: 3,
+      bedType: 'King',
+      numberOfBeds: 1,
+      mealPlan: 'HALF_BOARD',
+      supplierCost: 90_000,
+      sellingPrice: 125_000,
+      currency: 'NGN',
+      totalRooms: 4,
+    },
+  });
+  await prisma.hotelRoomType.create({
+    data: {
+      hotelId: grandHotel.id,
+      name: 'Family Room',
+      category: 'FAMILY',
+      capacity: 5,
+      bedType: 'Mixed',
+      numberOfBeds: 3,
+      mealPlan: 'BED_AND_BREAKFAST',
+      supplierCost: 70_000,
+      sellingPrice: 95_000,
+      currency: 'NGN',
+      totalRooms: 3,
+    },
+  });
+  const madinahDouble = await prisma.hotelRoomType.create({
+    data: {
+      hotelId: madinahHotel.id,
+      name: 'Standard Double',
+      category: 'DOUBLE',
+      capacity: 2,
+      mealPlan: 'FULL_BOARD',
+      supplierCost: 35_000,
+      sellingPrice: 48_000,
+      currency: 'NGN',
+      totalRooms: 20,
+    },
+  });
+
+  // --- Bookings across statuses ---------------------------------------------
+  async function makeHotelBooking(opts: {
+    ref: string;
+    customerId: string;
+    hotel: typeof grandHotel;
+    roomType: typeof doubleRoom;
+    nights: number;
+    rooms: number;
+    status: 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED' | 'REFUNDED';
+    bookedByStaffId?: string;
+  }) {
+    const checkInDate = new Date(Date.now() + 20 * 24 * 60 * 60 * 1000);
+    const checkOutDate = new Date(checkInDate.getTime() + opts.nights * 24 * 60 * 60 * 1000);
+    const supplierCost = opts.roomType.supplierCost * opts.nights * opts.rooms;
+    const totalAmount = opts.roomType.sellingPrice * opts.nights * opts.rooms;
+    const markupAmount = totalAmount - supplierCost;
+
+    const booking = await prisma.hotelBooking.create({
+      data: {
+        bookingReference: opts.ref,
+        customerId: opts.customerId,
+        bookedByStaffId: opts.bookedByStaffId,
+        branchId: opts.bookedByStaffId ? branch.id : undefined,
+        provider: 'CATALOG',
+        providerOfferId: `${opts.roomType.id}::seed`,
+        providerOrderId: `CATALOG-seed-${opts.ref}`,
+        status: opts.status,
+        currency: 'NGN',
+        totalAmount,
+        hotelName: opts.hotel.name,
+        city: opts.hotel.city,
+        country: opts.hotel.country,
+        starRating: opts.hotel.starRating,
+        roomType: opts.roomType.name,
+        checkInDate,
+        checkOutDate,
+        rooms: opts.rooms,
+        guests: opts.roomType.capacity * opts.rooms,
+        offerSnapshot: {},
+        hotelId: opts.hotel.id,
+        roomTypeId: opts.roomType.id,
+        supplierCost,
+        markupAmount,
+        completedAt: opts.status === 'COMPLETED' || opts.status === 'REFUNDED' ? new Date() : undefined,
+        completedByStaffId: opts.status === 'COMPLETED' || opts.status === 'REFUNDED' ? opts.bookedByStaffId : undefined,
+      },
+    });
+
+    await prisma.invoice.create({
+      data: {
+        invoiceNumber: ref('INV'),
+        customerId: opts.customerId,
+        hotelBookingId: booking.id,
+        status: opts.status === 'PENDING' ? InvoiceStatus.ISSUED : InvoiceStatus.PAID,
+        currency: 'NGN',
+        totalAmount,
+        issuedByStaffId: opts.bookedByStaffId,
+        payments:
+          opts.status === 'PENDING'
+            ? undefined
+            : { create: [{ paymentReference: ref('PAY'), amount: totalAmount, method: PaymentMethod.CARD, recordedByStaffId: financeIdentity.staff!.id }] },
+        lineItems: { create: [{ description: `Hotel ${opts.ref}: ${opts.hotel.name}, ${opts.roomType.name}`, amount: totalAmount }] },
+      },
+    });
+
+    return booking;
+  }
+
+  await makeHotelBooking({
+    ref: 'HTL-DEMO0001',
+    customerId: aminaIdentity.customer!.id,
+    hotel: grandHotel,
+    roomType: doubleRoom,
+    nights: 3,
+    rooms: 1,
+    status: 'PENDING',
+  });
+  await makeHotelBooking({
+    ref: 'HTL-DEMO0002',
+    customerId: chineduIdentity.customer!.id,
+    hotel: grandHotel,
+    roomType: suiteRoom,
+    nights: 2,
+    rooms: 1,
+    status: 'CONFIRMED',
+    bookedByStaffId: agentIdentity.staff!.id,
+  });
+  const completedBooking = await makeHotelBooking({
+    ref: 'HTL-DEMO0003',
+    customerId: aminaIdentity.customer!.id,
+    hotel: grandHotel,
+    roomType: doubleRoom,
+    nights: 4,
+    rooms: 2,
+    status: 'COMPLETED',
+    bookedByStaffId: agentIdentity.staff!.id,
+  });
+  await makeHotelBooking({
+    ref: 'HTL-DEMO0004',
+    customerId: chineduIdentity.customer!.id,
+    hotel: madinahHotel,
+    roomType: madinahDouble,
+    nights: 5,
+    rooms: 1,
+    status: 'CANCELLED',
+  });
+  const refundedBooking = await makeHotelBooking({
+    ref: 'HTL-DEMO0005',
+    customerId: aminaIdentity.customer!.id,
+    hotel: grandHotel,
+    roomType: doubleRoom,
+    nights: 2,
+    rooms: 1,
+    status: 'REFUNDED',
+    bookedByStaffId: agentIdentity.staff!.id,
+  });
+  await prisma.hotelRefund.create({
+    data: {
+      bookingId: refundedBooking.id,
+      requestedByStaffId: agentIdentity.staff!.id,
+      bookingPrice: refundedBooking.totalAmount,
+      supplierPenalty: Math.round(refundedBooking.totalAmount * 0.25),
+      agencyFee: Math.round(refundedBooking.totalAmount * 0.05),
+      refundAmount: Math.round(refundedBooking.totalAmount * 0.7),
+      currency: 'NGN',
+      status: 'COMPLETED',
+      reason: 'Customer travel plans changed',
+      completedAt: new Date(),
+    },
+  });
+
+  // --- Staff incentive on the completed booking -----------------------------
+  if (defaultIncentivePolicy) {
+    const margin = completedBooking.totalAmount - (completedBooking.supplierCost ?? 0);
+    await prisma.staffIncentive.create({
+      data: {
+        staffId: agentIdentity.staff!.id,
+        sourceType: 'HOTEL_BOOKING',
+        sourceId: completedBooking.id,
+        amount: Math.round((margin * 50) / 100),
+        currency: 'NGN',
+        description: `Incentive on hotel booking ${completedBooking.bookingReference}`,
+        status: IncentiveStatus.PENDING,
+        referenceNumber: ref('INC'),
+        companyCost: completedBooking.supplierCost,
+        sellingPrice: completedBooking.totalAmount,
+        margin,
+        policyId: defaultIncentivePolicy.id,
+        customerId: completedBooking.customerId,
+      },
+    });
+  }
+
+  // --- A multi-component travel package (spec #11) --------------------------
+  const packageInvoice = await prisma.invoice.create({
+    data: {
+      invoiceNumber: ref('INV'),
+      customerId: chineduIdentity.customer!.id,
+      status: InvoiceStatus.PAID,
+      currency: 'NGN',
+      totalAmount: 250_000 + 60_000 + 5_000,
+      issuedByStaffId: agentIdentity.staff!.id,
+      payments: { create: [{ paymentReference: ref('PAY'), amount: 315_000, method: PaymentMethod.BANK_TRANSFER, recordedByStaffId: financeIdentity.staff!.id }] },
+      lineItems: {
+        create: [
+          { description: 'Custom package: Lagos -> Dubai flight', amount: 250_000 },
+          { description: 'Custom package: 2 nights hotel', amount: 60_000 },
+          { description: 'Custom package: Airport transfer', amount: 5_000 },
+        ],
+      },
+    },
+  });
+  await prisma.travelPackage.create({
+    data: {
+      packageReference: ref('PKG'),
+      name: 'Chinedu — Custom Lagos to Dubai getaway',
+      category: 'STANDARD',
+      description: 'Flight + hotel + transfer, built by a staff member for a customer request.',
+      customerId: chineduIdentity.customer!.id,
+      totalCost: 210_000 + 45_000 + 3_000,
+      totalPrice: 250_000 + 60_000 + 5_000,
+      currency: 'NGN',
+      createdByStaffId: agentIdentity.staff!.id,
+      branchId: branch.id,
+      invoiceId: packageInvoice.id,
+      components: {
+        create: [
+          { type: 'FLIGHT', description: 'Lagos -> Dubai round trip flight', cost: 210_000, price: 250_000 },
+          { type: 'HOTEL', description: '2 nights at a Dubai hotel', cost: 45_000, price: 60_000 },
+          { type: 'TRANSPORT', description: 'Airport transfer both ways', cost: 3_000, price: 5_000 },
+        ],
+      },
+    },
+  });
+
+  console.log(
+    'Created 2 hotels, 4 room types, 5 hotel bookings (PENDING/CONFIRMED/COMPLETED/CANCELLED/REFUNDED), ' +
+      '1 staff incentive, and 1 multi-component travel package.',
+  );
+  console.log('--------------------------------------------------------');
+  console.log('Phase 5 hotel demo data seeded successfully.');
+  console.log('--------------------------------------------------------');
+}
+
 async function main() {
   await seedPhase1And2();
   await seedPhase3Visa();
   await seedPhase4Flights();
+  await seedPhase5Hotels();
 }
 
 main()

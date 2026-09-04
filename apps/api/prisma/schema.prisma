@@ -119,6 +119,8 @@ model Customer {
   vehicleRentals           VehicleRental[]
   visaApplications         VisaApplication[]
   visaIncentivesEarned     StaffIncentive[]
+  hotelBookingGuests       HotelBookingGuest[]
+  travelPackages           TravelPackage[]
 
   @@index([assignedStaffId])
   @@index([assignedBranchId])
@@ -195,6 +197,7 @@ model FamilyMember {
   hajjRegistrationPilgrim  HajjRegistrationPilgrim[]
   umrahRegistrationPilgrim UmrahRegistrationPilgrim[]
   visaApplications         VisaApplication[]
+  hotelBookingGuests       HotelBookingGuest[]
 
   @@index([customerId])
   @@map("family_members")
@@ -272,6 +275,9 @@ model Staff {
   requestedFlightReissues  FlightReissue[]           @relation("RequestedFlightReissues")
   flightPricingRules       FlightPricingRule[]
   createdGroupBookings     FlightGroupBooking[]      @relation("CreatedGroupBookings")
+  requestedHotelRefunds    HotelRefund[]             @relation("RequestedHotelRefunds")
+  completedHotelBookings   HotelBooking[]            @relation("CompletedHotelBookings")
+  createdTravelPackages    TravelPackage[]           @relation("CreatedTravelPackages")
 
   @@index([companyId])
   @@index([branchId])
@@ -324,6 +330,8 @@ model Branch {
   flightBookings      FlightBooking[]
   flightPricingRules  FlightPricingRule[]
   flightGroupBookings FlightGroupBooking[]
+  hotelBookings       HotelBooking[]
+  travelPackages      TravelPackage[]
 
   @@unique([companyId, code])
   @@index([companyId])
@@ -917,6 +925,10 @@ model Invoice {
   // Same nullable/unique shape again — an invoice generated from a flight
   // group booking's deposit/balance agreement.
   flightGroupBooking FlightGroupBooking?
+
+  // Same shape again — an invoice generated from a staff-built travel
+  // package (spec #11-#14).
+  travelPackage TravelPackage?
 
   status InvoiceStatus @default(ISSUED)
 
@@ -1622,6 +1634,7 @@ enum IntegrationCategory {
   FLIGHT
   PAYMENT
   NOTIFICATION
+  HOTEL
 }
 
 model IntegrationCredential {
@@ -1646,12 +1659,255 @@ model IntegrationCredential {
 
 enum HotelProviderName {
   MOCK
+  CATALOG
 }
 
 enum HotelBookingStatus {
   PENDING
   CONFIRMED
+  COMPLETED
+  REFUND_REQUESTED
+  REFUNDED
   CANCELLED
+}
+
+enum HotelStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  ARCHIVED
+}
+
+enum MealPlan {
+  ROOM_ONLY
+  BED_AND_BREAKFAST
+  HALF_BOARD
+  FULL_BOARD
+  ALL_INCLUSIVE
+}
+
+enum HotelRefundStatus {
+  REQUESTED
+  COMPLETED
+  FAILED
+  REJECTED
+}
+
+enum PackageComponentType {
+  FLIGHT
+  HOTEL
+  VISA
+  TRANSPORT
+  MEALS
+  INSURANCE
+  TOUR
+  OTHER
+}
+
+enum TravelPackageCategory {
+  ECONOMY
+  STANDARD
+  PREMIUM
+  VIP
+  FAMILY
+  GROUP
+}
+
+/**
+ * Admin-managed hotel catalog (spec #1) — the "Manual hotel inventory"
+ * branch of the provider abstraction (spec #4): CatalogHotelProviderService
+ * implements the exact same HotelProviderPort as the mock/future-real
+ * providers, searching these rows instead of a remote API. Same reasoning
+ * as VisaService in Phase 3: a real internal catalog, not just a live
+ * search pass-through.
+ */
+model Hotel {
+  id          String  @id @default(cuid())
+  name        String
+  description String?
+
+  country   String
+  city      String
+  address   String?
+  latitude  Float?
+  longitude Float?
+
+  starRating   Int
+  contactPhone String?
+  contactEmail String?
+  website      String?
+  checkInTime  String? // "14:00"
+  checkOutTime String? // "12:00"
+  amenities    String[]
+  images       String[]
+
+  cancellationPolicy String?
+  paymentPolicy      String?
+
+  status HotelStatus @default(ACTIVE)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  roomTypes HotelRoomType[]
+  bookings  HotelBooking[]
+
+  @@index([city])
+  @@index([status])
+  @@map("hotels")
+}
+
+/**
+ * One bookable room product at a Hotel — cost/price live here exactly like
+ * VisaService.companyCost/sellingPrice; margin is computed at read time
+ * (never stored), same "never hard-coded" principle as Phase 4's flight
+ * markup. Prices are per room-night; HotelsService multiplies by nights x
+ * rooms at booking/search time.
+ */
+model HotelRoomType {
+  id      String @id @default(cuid())
+  hotelId String
+  hotel   Hotel  @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+
+  name         String // "Deluxe Double", "Executive Suite", ...
+  category     String // SINGLE/DOUBLE/TWIN/TRIPLE/QUAD/SUITE/FAMILY/VIP — free text, not an enum, so a hotel can name its own categories
+  description  String?
+  capacity     Int
+  bedType      String?
+  numberOfBeds Int      @default(1)
+  mealPlan     MealPlan @default(ROOM_ONLY)
+
+  supplierCost Int // per room-night, whole currency units
+  sellingPrice Int // per room-night — margin = sellingPrice - supplierCost
+  currency     String @default("NGN")
+
+  totalRooms        Int     @default(1) // simple availability count, not date-ranged inventory
+  cancellationRules String?
+
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  bookings HotelBooking[]
+
+  @@index([hotelId])
+  @@index([isActive])
+  @@map("hotel_room_types")
+}
+
+model HotelBookingGuest {
+  id        String       @id @default(cuid())
+  bookingId String
+  booking   HotelBooking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  // Exactly one of these is set, same pattern as FlightBookingPassenger.
+  customerId     String?
+  customer       Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  familyMemberId String?
+  familyMember   FamilyMember? @relation(fields: [familyMemberId], references: [id], onDelete: SetNull)
+
+  firstName String
+  lastName  String
+
+  createdAt DateTime @default(now())
+
+  @@index([bookingId])
+  @@map("hotel_booking_guests")
+}
+
+model HotelRefund {
+  id String @id @default(cuid())
+
+  bookingId String
+  booking   HotelBooking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  requestedByStaffId  String?
+  requestedByStaff    Staff?  @relation("RequestedHotelRefunds", fields: [requestedByStaffId], references: [id], onDelete: SetNull)
+  requestedByCustomer Boolean @default(false)
+
+  bookingPrice    Int
+  supplierPenalty Int    @default(0)
+  agencyFee       Int    @default(0)
+  refundAmount    Int
+  currency        String
+
+  status HotelRefundStatus @default(REQUESTED)
+  reason String?
+
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  @@index([bookingId])
+  @@map("hotel_refunds")
+}
+
+/**
+ * Package builder (spec #11-#14) — a staff-composed bundle of components
+ * (flight/hotel/visa/transport/...), each snapshotted with its own
+ * cost/price so the package total, margin, and staff incentive all derive
+ * from the same numbers a customer sees, never a second guess at pricing.
+ * A component optionally references an existing FlightBooking/
+ * HotelBooking/VisaApplication row when one already exists (booked through
+ * their own module), or stands alone as a priced line item (e.g. "Ziyarat
+ * tour", "Airport transfer") when it doesn't.
+ */
+model TravelPackage {
+  id               String @id @default(cuid())
+  packageReference String @unique
+
+  name        String
+  category    TravelPackageCategory @default(STANDARD)
+  description String?
+
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  hajjPackageId  String?
+  umrahPackageId String?
+
+  totalCost  Int // sum of component costs — computed at creation, snapshotted
+  totalPrice Int // sum of component selling prices
+  currency   String @default("NGN")
+
+  createdByStaffId String?
+  createdByStaff   Staff?  @relation("CreatedTravelPackages", fields: [createdByStaffId], references: [id], onDelete: SetNull)
+  branchId         String?
+  branch           Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
+
+  invoiceId String?  @unique
+  invoice   Invoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+
+  isOfflineEntry Boolean @default(false)
+  offlineReason  String?
+
+  components TravelPackageComponent[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("travel_packages")
+}
+
+model TravelPackageComponent {
+  id        String        @id @default(cuid())
+  packageId String
+  package   TravelPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+
+  type        PackageComponentType
+  description String
+
+  cost  Int // internal cost for this component
+  price Int // what the customer is charged for this component
+
+  flightBookingId   String?
+  hotelBookingId    String?
+  visaApplicationId String?
+
+  createdAt DateTime @default(now())
+
+  @@index([packageId])
+  @@map("travel_package_components")
 }
 
 model HotelBooking {
@@ -1688,13 +1944,44 @@ model HotelBooking {
   // reasoning as FlightBooking.itinerary.
   offerSnapshot Json
 
+  // Set when the offer came from the internal Hotel/HotelRoomType catalog
+  // (the CATALOG provider) rather than an external search provider — null
+  // for a MOCK-provider booking, same nullable/optional shape as
+  // FlightBooking.pricingRuleId.
+  hotelId       String?
+  hotel         Hotel?         @relation(fields: [hotelId], references: [id], onDelete: SetNull)
+  roomTypeId    String?
+  hotelRoomType HotelRoomType? @relation(fields: [roomTypeId], references: [id], onDelete: SetNull)
+
+  // Costing snapshot — same "never recompute later" principle as every
+  // other module's *Snapshot fields. Null for a MOCK-provider booking
+  // (no internal cost to know), always set for a CATALOG booking.
+  supplierCost Int?
+  markupAmount Int?
+
+  branchId String?
+  branch   Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
+
+  isOfflineEntry Boolean @default(false)
+  offlineReason  String?
+
+  idempotencyKey String? @unique
+
+  completedAt        DateTime?
+  completedByStaffId String?
+  completedByStaff   Staff?    @relation("CompletedHotelBookings", fields: [completedByStaffId], references: [id], onDelete: SetNull)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  invoice Invoice?
+  invoice      Invoice?
+  guestRecords HotelBookingGuest[]
+  refunds      HotelRefund[]
 
   @@index([customerId])
   @@index([bookedByStaffId])
+  @@index([hotelId])
+  @@index([roomTypeId])
   @@map("hotel_bookings")
 }
 

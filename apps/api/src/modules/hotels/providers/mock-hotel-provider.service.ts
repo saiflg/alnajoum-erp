@@ -19,7 +19,12 @@ const HOTEL_NAMES = [
   'Emerald Palm Hotel',
 ];
 
-const ROOM_TYPES = ['Standard Room', 'Deluxe Room', 'Executive Suite', 'Family Room'];
+const ROOM_TYPES = [
+  'Standard Room',
+  'Deluxe Room',
+  'Executive Suite',
+  'Family Room',
+];
 
 const AMENITY_POOL = [
   'Free WiFi',
@@ -105,7 +110,8 @@ export class MockHotelProviderService implements HotelProviderPort {
       const amenityCount = randInt(rand, 3, 5);
       const amenities: string[] = [];
       while (amenities.length < amenityCount) {
-        const candidate = AMENITY_POOL[randInt(rand, 0, AMENITY_POOL.length - 1)];
+        const candidate =
+          AMENITY_POOL[randInt(rand, 0, AMENITY_POOL.length - 1)];
         if (!amenities.includes(candidate)) amenities.push(candidate);
       }
 
@@ -127,11 +133,16 @@ export class MockHotelProviderService implements HotelProviderPort {
         expiresAt: new Date(Date.now() + OFFER_TTL_MS).toISOString(),
       };
 
-      this.offerCache.set(offer.id, { offer, expiresAt: Date.now() + OFFER_TTL_MS });
+      this.offerCache.set(offer.id, {
+        offer,
+        expiresAt: Date.now() + OFFER_TTL_MS,
+      });
       offers.push(offer);
     }
 
-    return Promise.resolve(offers.sort((a, b) => a.totalAmount - b.totalAmount));
+    return Promise.resolve(
+      offers.sort((a, b) => a.totalAmount - b.totalAmount),
+    );
   }
 
   getOffer(offerId: string): Promise<HotelOffer | null> {
@@ -149,9 +160,14 @@ export class MockHotelProviderService implements HotelProviderPort {
     if (!cached || cached.expiresAt < Date.now()) {
       return Promise.resolve({ providerOrderId: '', status: 'FAILED' });
     }
-    this.logger.log(`Mock hotel order created for offer ${offer.id} (${offer.hotelName})`);
+    this.logger.log(
+      `Mock hotel order created for offer ${offer.id} (${offer.hotelName})`,
+    );
     this.offerCache.delete(offer.id);
-    return Promise.resolve({ providerOrderId: `MOCK-${randomUUID()}`, status: 'CONFIRMED' });
+    return Promise.resolve({
+      providerOrderId: `MOCK-${randomUUID()}`,
+      status: 'CONFIRMED',
+    });
   }
 
   cancelOrder(providerOrderId: string): Promise<void> {

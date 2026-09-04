@@ -43,6 +43,12 @@ export const PERMISSIONS = {
     BOOK: 'hotel:book',
     READ: 'hotel:read',
     CANCEL: 'hotel:cancel',
+    // Phase 5 — enterprise hotel/accommodation/package management.
+    MANAGE_CATALOG: 'hotel:manage_catalog', // create/edit hotels and room types
+    COMPLETE: 'hotel:complete', // confirm/complete a booking (fires the staff incentive)
+    REFUND: 'hotel:refund',
+    REPORTS_VIEW: 'hotel:reports_view',
+    PACKAGE_MANAGE: 'hotel:package_manage', // build/manage travel packages
   },
   VEHICLE_RENTAL: {
     BOOK: 'vehicle_rental:book',
