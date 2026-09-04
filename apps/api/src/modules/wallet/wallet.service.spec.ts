@@ -1,4 +1,9 @@
-import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import {
@@ -9,6 +14,8 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { FinancePostingService } from '../finance/finance-posting.service';
+import { LedgerService } from '../finance/ledger.service';
 import { IncentivesService } from '../incentives/incentives.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { InvoicesService } from '../payments/invoices.service';
@@ -25,7 +32,10 @@ describe('WalletService', () => {
   };
   let auditService: { record: jest.Mock };
   let incentivesService: { applyForInvoicePayment: jest.Mock };
-  let paymentProvider: { initiateCheckout: jest.Mock; verifyCheckout: jest.Mock };
+  let paymentProvider: {
+    initiateCheckout: jest.Mock;
+    verifyCheckout: jest.Mock;
+  };
   let configService: { get: jest.Mock };
 
   beforeEach(async () => {
@@ -34,7 +44,13 @@ describe('WalletService', () => {
       walletTransaction: {
         aggregate: jest.fn(),
         findMany: jest.fn(),
-        create: jest.fn(),
+        // Default so tests that don't care about the created row's shape
+        // (most of the `adjust`/`creditManual` ones) still get an `id` to
+        // post the ledger entry against — override per-test where the
+        // actual returned row matters.
+        create: jest
+          .fn()
+          .mockResolvedValue({ id: 'wallet-tx-1', description: '' }),
         findUnique: jest.fn(),
         findUniqueOrThrow: jest.fn(),
         update: jest.fn(),
@@ -45,8 +61,9 @@ describe('WalletService', () => {
       payment: { create: jest.fn() },
       // Handles both $transaction call shapes: a callback (payInvoiceWithWallet)
       // and an array of already-built promises (transferBetweenWallets).
-      $transaction: jest.fn((arg) =>
-        Array.isArray(arg) ? Promise.all(arg) : arg(prisma),
+      $transaction: jest.fn(
+        (arg: unknown[] | ((tx: unknown) => Promise<unknown>)) =>
+          Array.isArray(arg) ? Promise.all(arg) : arg(prisma),
       ),
     };
     invoicesService = { recomputeStatus: jest.fn() };
@@ -56,8 +73,13 @@ describe('WalletService', () => {
     };
     auditService = { record: jest.fn() };
     incentivesService = { applyForInvoicePayment: jest.fn() };
-    paymentProvider = { initiateCheckout: jest.fn(), verifyCheckout: jest.fn() };
-    configService = { get: jest.fn((_key: string, fallback?: unknown) => fallback) };
+    paymentProvider = {
+      initiateCheckout: jest.fn(),
+      verifyCheckout: jest.fn(),
+    };
+    configService = {
+      get: jest.fn((_key: string, fallback?: unknown) => fallback),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -69,6 +91,11 @@ describe('WalletService', () => {
         { provide: AuditService, useValue: auditService },
         { provide: IncentivesService, useValue: incentivesService },
         { provide: PAYMENT_PROVIDER, useValue: paymentProvider },
+        {
+          provide: FinancePostingService,
+          useValue: { postRevenueForPayment: jest.fn(), postRefund: jest.fn() },
+        },
+        { provide: LedgerService, useValue: { post: jest.fn() } },
       ],
     }).compile();
 
@@ -77,19 +104,26 @@ describe('WalletService', () => {
 
   describe('computeBalance', () => {
     it('sums only COMPLETED transactions', async () => {
-      prisma.walletTransaction.aggregate.mockResolvedValue({ _sum: { amount: 15_000 } });
+      prisma.walletTransaction.aggregate.mockResolvedValue({
+        _sum: { amount: 15_000 },
+      });
 
       const balance = await service.computeBalance('wallet-1');
 
       expect(prisma.walletTransaction.aggregate).toHaveBeenCalledWith({
-        where: { walletId: 'wallet-1', status: WalletTransactionStatus.COMPLETED },
+        where: {
+          walletId: 'wallet-1',
+          status: WalletTransactionStatus.COMPLETED,
+        },
         _sum: { amount: true },
       });
       expect(balance).toBe(15_000);
     });
 
     it('returns 0 when there are no transactions yet', async () => {
-      prisma.walletTransaction.aggregate.mockResolvedValue({ _sum: { amount: null } });
+      prisma.walletTransaction.aggregate.mockResolvedValue({
+        _sum: { amount: null },
+      });
 
       expect(await service.computeBalance('wallet-1')).toBe(0);
     });
@@ -97,11 +131,17 @@ describe('WalletService', () => {
 
   describe('payInvoiceWithWallet', () => {
     beforeEach(() => {
-      prisma.wallet.findUnique.mockResolvedValue({ id: 'wallet-1', customerId: 'customer-1', currency: 'NGN' });
+      prisma.wallet.findUnique.mockResolvedValue({
+        id: 'wallet-1',
+        customerId: 'customer-1',
+        currency: 'NGN',
+      });
     });
 
     it('rejects when the wallet balance is less than the requested amount', async () => {
-      prisma.walletTransaction.aggregate.mockResolvedValue({ _sum: { amount: 5_000 } });
+      prisma.walletTransaction.aggregate.mockResolvedValue({
+        _sum: { amount: 5_000 },
+      });
 
       await expect(
         service.payInvoiceWithWallet('customer-1', 'invoice-1', 10_000),
@@ -110,7 +150,9 @@ describe('WalletService', () => {
     });
 
     it('rejects when the invoice does not exist', async () => {
-      prisma.walletTransaction.aggregate.mockResolvedValue({ _sum: { amount: 50_000 } });
+      prisma.walletTransaction.aggregate.mockResolvedValue({
+        _sum: { amount: 50_000 },
+      });
       prisma.invoice.findUnique.mockResolvedValue(null);
 
       await expect(
@@ -119,7 +161,9 @@ describe('WalletService', () => {
     });
 
     it('rejects when the invoice belongs to a different customer', async () => {
-      prisma.walletTransaction.aggregate.mockResolvedValue({ _sum: { amount: 50_000 } });
+      prisma.walletTransaction.aggregate.mockResolvedValue({
+        _sum: { amount: 50_000 },
+      });
       prisma.invoice.findUnique.mockResolvedValue({
         id: 'invoice-1',
         customerId: 'someone-else',
@@ -134,7 +178,9 @@ describe('WalletService', () => {
     });
 
     it('rejects paying a VOID invoice', async () => {
-      prisma.walletTransaction.aggregate.mockResolvedValue({ _sum: { amount: 50_000 } });
+      prisma.walletTransaction.aggregate.mockResolvedValue({
+        _sum: { amount: 50_000 },
+      });
       prisma.invoice.findUnique.mockResolvedValue({
         id: 'invoice-1',
         customerId: 'customer-1',
@@ -149,7 +195,9 @@ describe('WalletService', () => {
     });
 
     it('rejects an amount exceeding the outstanding balance', async () => {
-      prisma.walletTransaction.aggregate.mockResolvedValue({ _sum: { amount: 50_000 } });
+      prisma.walletTransaction.aggregate.mockResolvedValue({
+        _sum: { amount: 50_000 },
+      });
       prisma.invoice.findUnique.mockResolvedValue({
         id: 'invoice-1',
         customerId: 'customer-1',
@@ -164,7 +212,9 @@ describe('WalletService', () => {
     });
 
     it('debits the wallet and creates a WALLET payment atomically, then recomputes the invoice', async () => {
-      prisma.walletTransaction.aggregate.mockResolvedValue({ _sum: { amount: 50_000 } });
+      prisma.walletTransaction.aggregate.mockResolvedValue({
+        _sum: { amount: 50_000 },
+      });
       prisma.invoice.findUnique.mockResolvedValue({
         id: 'invoice-1',
         invoiceNumber: 'INV-ABCD1234',
@@ -183,7 +233,11 @@ describe('WalletService', () => {
         status: InvoiceStatus.PARTIALLY_PAID,
       });
 
-      const result = await service.payInvoiceWithWallet('customer-1', 'invoice-1', 20_000);
+      const result = await service.payInvoiceWithWallet(
+        'customer-1',
+        'invoice-1',
+        20_000,
+      );
 
       expect(prisma.walletTransaction.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -204,45 +258,90 @@ describe('WalletService', () => {
           }),
         }),
       );
-      expect(incentivesService.applyForInvoicePayment).toHaveBeenCalledWith('invoice-1', 20_000);
+      expect(incentivesService.applyForInvoicePayment).toHaveBeenCalledWith(
+        'invoice-1',
+        20_000,
+      );
       expect(result.status).toBe(InvoiceStatus.PARTIALLY_PAID);
     });
   });
 
   describe('adjust', () => {
     it('rejects a debit that would take the balance negative', async () => {
-      prisma.wallet.findUnique.mockResolvedValue({ id: 'wallet-1', customerId: 'customer-1', currency: 'NGN' });
-      prisma.walletTransaction.aggregate.mockResolvedValue({ _sum: { amount: 5_000 } });
+      prisma.wallet.findUnique.mockResolvedValue({
+        id: 'wallet-1',
+        customerId: 'customer-1',
+        currency: 'NGN',
+      });
+      prisma.walletTransaction.aggregate.mockResolvedValue({
+        _sum: { amount: 5_000 },
+      });
 
       await expect(
-        service.adjust('customer-1', -10_000, WalletTransactionType.WITHDRAWAL, 'over-withdrawal', 'staff-1', 'identity-1'),
+        service.adjust(
+          'customer-1',
+          -10_000,
+          WalletTransactionType.WITHDRAWAL,
+          'over-withdrawal',
+          'staff-1',
+          'identity-1',
+        ),
       ).rejects.toThrow(BadRequestException);
       expect(prisma.walletTransaction.create).not.toHaveBeenCalled();
     });
 
     it('allows a debit that leaves the balance at exactly zero', async () => {
-      prisma.wallet.findUnique.mockResolvedValue({ id: 'wallet-1', customerId: 'customer-1', currency: 'NGN' });
-      prisma.walletTransaction.aggregate.mockResolvedValue({ _sum: { amount: 10_000 } });
+      prisma.wallet.findUnique.mockResolvedValue({
+        id: 'wallet-1',
+        customerId: 'customer-1',
+        currency: 'NGN',
+      });
+      prisma.walletTransaction.aggregate.mockResolvedValue({
+        _sum: { amount: 10_000 },
+      });
       prisma.customer.findUnique.mockResolvedValue(null);
 
-      await service.adjust('customer-1', -10_000, WalletTransactionType.WITHDRAWAL, 'full withdrawal', 'staff-1', 'identity-1');
+      await service.adjust(
+        'customer-1',
+        -10_000,
+        WalletTransactionType.WITHDRAWAL,
+        'full withdrawal',
+        'staff-1',
+        'identity-1',
+      );
 
       expect(prisma.walletTransaction.create).toHaveBeenCalled();
     });
 
     it('records the audit entry against the acting staff identity, not the customer', async () => {
-      prisma.wallet.findUnique.mockResolvedValue({ id: 'wallet-1', customerId: 'customer-1', currency: 'NGN' });
-      prisma.walletTransaction.aggregate.mockResolvedValue({ _sum: { amount: 0 } });
+      prisma.wallet.findUnique.mockResolvedValue({
+        id: 'wallet-1',
+        customerId: 'customer-1',
+        currency: 'NGN',
+      });
+      prisma.walletTransaction.aggregate.mockResolvedValue({
+        _sum: { amount: 0 },
+      });
       prisma.customer.findUnique.mockResolvedValue({
         id: 'customer-1',
         identityId: 'customer-identity',
         identity: { email: 'amina@example.com' },
       });
 
-      await service.adjust('customer-1', 5_000, WalletTransactionType.ADJUSTMENT, 'correction', 'staff-1', 'staff-identity');
+      await service.adjust(
+        'customer-1',
+        5_000,
+        WalletTransactionType.ADJUSTMENT,
+        'correction',
+        'staff-1',
+        'staff-identity',
+      );
 
       expect(auditService.record).toHaveBeenCalledWith(
-        expect.objectContaining({ identityId: 'staff-identity', action: 'wallet.adjusted' }),
+        expect.objectContaining({
+          identityId: 'staff-identity',
+          action: 'wallet.adjusted',
+        }),
       );
     });
   });
@@ -279,7 +378,12 @@ describe('WalletService', () => {
       prisma.walletTransaction.findUnique.mockResolvedValue(pendingTransaction);
       prisma.walletTransaction.findUniqueOrThrow.mockResolvedValue({
         ...pendingTransaction,
-        wallet: { customer: { identityId: 'identity-1', identity: { email: 'a@example.com' } } },
+        wallet: {
+          customer: {
+            identityId: 'identity-1',
+            identity: { email: 'a@example.com' },
+          },
+        },
       });
       paymentProvider.verifyCheckout.mockResolvedValue({
         reference: 'WDEP-ABC123',
@@ -287,8 +391,14 @@ describe('WalletService', () => {
         amount: 0,
         currency: '',
       });
-      prisma.wallet.findUnique.mockResolvedValue({ id: 'wallet-1', customerId: 'customer-1', currency: 'NGN' });
-      prisma.walletTransaction.aggregate.mockResolvedValue({ _sum: { amount: 0 } });
+      prisma.wallet.findUnique.mockResolvedValue({
+        id: 'wallet-1',
+        customerId: 'customer-1',
+        currency: 'NGN',
+      });
+      prisma.walletTransaction.aggregate.mockResolvedValue({
+        _sum: { amount: 0 },
+      });
       prisma.walletTransaction.findMany.mockResolvedValue([]);
       prisma.walletTransaction.updateMany.mockResolvedValue({ count: 1 });
 
@@ -307,7 +417,12 @@ describe('WalletService', () => {
       prisma.walletTransaction.findUnique.mockResolvedValue(pendingTransaction);
       prisma.walletTransaction.findUniqueOrThrow.mockResolvedValue({
         ...pendingTransaction,
-        wallet: { customer: { identityId: 'identity-1', identity: { email: 'a@example.com' } } },
+        wallet: {
+          customer: {
+            identityId: 'identity-1',
+            identity: { email: 'a@example.com' },
+          },
+        },
       });
       paymentProvider.verifyCheckout.mockResolvedValue({
         reference: 'WDEP-ABC123',
@@ -315,8 +430,14 @@ describe('WalletService', () => {
         amount: 0,
         currency: '',
       });
-      prisma.wallet.findUnique.mockResolvedValue({ id: 'wallet-1', customerId: 'customer-1', currency: 'NGN' });
-      prisma.walletTransaction.aggregate.mockResolvedValue({ _sum: { amount: 20_000 } });
+      prisma.wallet.findUnique.mockResolvedValue({
+        id: 'wallet-1',
+        customerId: 'customer-1',
+        currency: 'NGN',
+      });
+      prisma.walletTransaction.aggregate.mockResolvedValue({
+        _sum: { amount: 20_000 },
+      });
       prisma.walletTransaction.findMany.mockResolvedValue([]);
       prisma.walletTransaction.updateMany.mockResolvedValue({ count: 0 });
 
@@ -343,8 +464,14 @@ describe('WalletService', () => {
         amount: 0,
         currency: '',
       });
-      prisma.wallet.findUnique.mockResolvedValue({ id: 'wallet-1', customerId: 'customer-1', currency: 'NGN' });
-      prisma.walletTransaction.aggregate.mockResolvedValue({ _sum: { amount: 20_000 } });
+      prisma.wallet.findUnique.mockResolvedValue({
+        id: 'wallet-1',
+        customerId: 'customer-1',
+        currency: 'NGN',
+      });
+      prisma.walletTransaction.aggregate.mockResolvedValue({
+        _sum: { amount: 20_000 },
+      });
       prisma.walletTransaction.findMany.mockResolvedValue([]);
       prisma.walletTransaction.updateMany.mockResolvedValue({ count: 1 });
 
@@ -369,8 +496,14 @@ describe('WalletService', () => {
         ...pendingTransaction,
         status: WalletTransactionStatus.COMPLETED,
       });
-      prisma.wallet.findUnique.mockResolvedValue({ id: 'wallet-1', customerId: 'customer-1', currency: 'NGN' });
-      prisma.walletTransaction.aggregate.mockResolvedValue({ _sum: { amount: 20_000 } });
+      prisma.wallet.findUnique.mockResolvedValue({
+        id: 'wallet-1',
+        customerId: 'customer-1',
+        currency: 'NGN',
+      });
+      prisma.walletTransaction.aggregate.mockResolvedValue({
+        _sum: { amount: 20_000 },
+      });
       prisma.walletTransaction.findMany.mockResolvedValue([]);
 
       await service.verifyDeposit('customer-1', 'WDEP-ABC123');
@@ -399,7 +532,9 @@ describe('WalletService', () => {
           ? { id: 'wallet-from', customerId: 'customer-1', currency: 'NGN' }
           : { id: 'wallet-to', customerId: 'customer-2', currency: 'NGN' },
       );
-      prisma.walletTransaction.aggregate.mockResolvedValue({ _sum: { amount: 5_000 } });
+      prisma.walletTransaction.aggregate.mockResolvedValue({
+        _sum: { amount: 5_000 },
+      });
 
       await expect(
         service.transferBetweenWallets(
@@ -420,12 +555,20 @@ describe('WalletService', () => {
           ? { id: 'wallet-from', customerId: 'customer-1', currency: 'NGN' }
           : { id: 'wallet-to', customerId: 'customer-2', currency: 'NGN' },
       );
-      prisma.walletTransaction.aggregate.mockResolvedValue({ _sum: { amount: 50_000 } });
+      prisma.walletTransaction.aggregate.mockResolvedValue({
+        _sum: { amount: 50_000 },
+      });
       prisma.walletTransaction.findMany.mockResolvedValue([]);
       prisma.customer.findUnique.mockImplementation(({ where }: any) =>
         where.id === 'customer-1'
-          ? { identityId: 'identity-from', identity: { email: 'from@example.com' } }
-          : { identityId: 'identity-to', identity: { email: 'to@example.com' } },
+          ? {
+              identityId: 'identity-from',
+              identity: { email: 'from@example.com' },
+            }
+          : {
+              identityId: 'identity-to',
+              identity: { email: 'to@example.com' },
+            },
       );
 
       const result = await service.transferBetweenWallets(

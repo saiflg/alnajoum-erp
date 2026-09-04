@@ -1,5 +1,6 @@
 import {
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -11,8 +12,11 @@ import {
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { FinancePostingService } from '../finance/finance-posting.service';
+import { FinanceSettingsService } from '../finance/finance-settings.service';
 import { calculateStaffIncentiveAmount } from '../incentives/incentive-calculator';
 import { NotificationsService } from '../notifications/notifications.service';
+import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 
 function generateIncentiveReference(): string {
   return `INC-${randomBytes(4).toString('hex').toUpperCase()}`;
@@ -32,6 +36,8 @@ export class VisaIncentivesService {
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
     private readonly notificationsService: NotificationsService,
+    private readonly financePostingService: FinancePostingService,
+    private readonly financeSettingsService: FinanceSettingsService,
   ) {}
 
   private async resolvePolicy(
@@ -81,6 +87,14 @@ export class VisaIncentivesService {
     if (existing) {
       return;
     }
+
+    await this.financePostingService.postCostOfServiceForBooking({
+      sourceModule: 'VISA_APPLICATION',
+      sourceId: application.id,
+      supplierName: 'Visa service provider',
+      amount: application.companyCostSnapshot,
+      currency: application.currency,
+    });
 
     const margin =
       application.sellingPriceSnapshot - application.companyCostSnapshot;
@@ -178,13 +192,44 @@ export class VisaIncentivesService {
     return incentive;
   }
 
-  async approve(id: string, approvedByStaffId: string) {
+  /**
+   * `actorPermissions` gates spec #14's tiered approval — the endpoint-level
+   * @RequirePermissions(VISA.INCENTIVE_APPROVE) already confirms the caller
+   * can approve incentives at all; this checks whether they can approve
+   * THIS amount specifically.
+   */
+  async approve(
+    id: string,
+    approvedByStaffId: string,
+    actorPermissions: string[] = [],
+  ) {
     const incentive = await this.get(id);
     if (incentive.status !== IncentiveStatus.PENDING) {
       throw new ConflictException(
         `This incentive is already ${incentive.status.toLowerCase()} and cannot be approved`,
       );
     }
+
+    const { payoutApprovalTier1Max, payoutApprovalTier2Max } =
+      await this.financeSettingsService.get();
+    if (
+      incentive.amount > payoutApprovalTier2Max &&
+      !actorPermissions.includes(PERMISSIONS.FINANCE.APPROVE_EXECUTIVE)
+    ) {
+      throw new ForbiddenException(
+        `Incentives above ${incentive.currency} ${payoutApprovalTier2Max.toLocaleString()} require Super Admin approval`,
+      );
+    }
+    if (
+      incentive.amount > payoutApprovalTier1Max &&
+      !actorPermissions.includes(PERMISSIONS.FINANCE.APPROVE_HIGH_VALUE) &&
+      !actorPermissions.includes(PERMISSIONS.FINANCE.APPROVE_EXECUTIVE)
+    ) {
+      throw new ForbiddenException(
+        `Incentives above ${incentive.currency} ${payoutApprovalTier1Max.toLocaleString()} require Company Admin approval`,
+      );
+    }
+
     const updated = await this.prisma.staffIncentive.update({
       where: { id },
       data: {
@@ -193,6 +238,11 @@ export class VisaIncentivesService {
         approvedAt: new Date(),
       },
     });
+    // Recognizes the incentive as an owed expense the moment it's approved,
+    // regardless of which module (visa/flight/hotel/travel package) earned
+    // it — this is the ONE approve() every incentive flows through (spec
+    // #10's "do not create a second incentive system").
+    await this.financePostingService.postIncentiveApproved(updated);
     await this.auditService.record({
       action: 'visa_incentive.approved',
       entityType: 'StaffIncentive',

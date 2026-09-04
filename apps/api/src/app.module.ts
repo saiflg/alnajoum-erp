@@ -31,6 +31,7 @@ import { HotelsModule } from './modules/hotels/hotels.module';
 import { VehicleRentalsModule } from './modules/vehicle-rentals/vehicle-rentals.module';
 import { VisaModule } from './modules/visa/visa.module';
 import { CorporateTravelModule } from './modules/corporate-travel/corporate-travel.module';
+import { FinanceModule } from './modules/finance/finance.module';
 
 @Module({
   imports: [
@@ -62,6 +63,7 @@ import { CorporateTravelModule } from './modules/corporate-travel/corporate-trav
     VehicleRentalsModule,
     VisaModule,
     CorporateTravelModule,
+    FinanceModule,
   ],
   controllers: [AppController],
   providers: [

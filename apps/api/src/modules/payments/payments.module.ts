@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { CustomersModule } from '../customers/customers.module';
+import { FinanceModule } from '../finance/finance.module';
 import { IncentivesModule } from '../incentives/incentives.module';
 import { IntegrationsModule } from '../integrations/integrations.module';
 import { NotificationsModule } from '../notifications/notifications.module';
@@ -25,6 +26,7 @@ import { ReceiptsService } from './receipts.service';
     NotificationsModule,
     IncentivesModule,
     IntegrationsModule,
+    FinanceModule,
   ],
   // Order matters: the static "invoices/me" routes must be registered
   // before the dynamic "invoices/:id" ones, otherwise Express would match

@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { IncentivePolicyType } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { FinancePostingService } from '../finance/finance-posting.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { FlightIncentivesService } from './flight-incentives.service';
 
@@ -48,6 +49,10 @@ describe('FlightIncentivesService', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: AuditService, useValue: auditService },
         { provide: NotificationsService, useValue: notificationsService },
+        {
+          provide: FinancePostingService,
+          useValue: { postCostOfServiceForBooking: jest.fn() },
+        },
       ],
     }).compile();
     service = module.get(FlightIncentivesService);

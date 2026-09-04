@@ -4,6 +4,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { FlightBookingStatus, FlightRefundStatus } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { FinancePostingService } from '../finance/finance-posting.service';
 import { IntegrationsService } from '../integrations/integrations.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { InvoicesService } from '../payments/invoices.service';
@@ -71,6 +72,10 @@ describe('FlightRefundsService', () => {
         {
           provide: ProviderTransactionLogService,
           useValue: { record: jest.fn() },
+        },
+        {
+          provide: FinancePostingService,
+          useValue: { postRefund: jest.fn(), cancelIncentivesForSource: jest.fn() },
         },
       ],
     }).compile();

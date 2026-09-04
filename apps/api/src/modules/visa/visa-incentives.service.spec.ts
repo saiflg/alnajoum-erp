@@ -2,20 +2,28 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { IncentivePolicyType, IncentiveStatus } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { FinancePostingService } from '../finance/finance-posting.service';
+import { FinanceSettingsService } from '../finance/finance-settings.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import {
   calculateStaffIncentiveAmount,
   VisaIncentivesService,
 } from './visa-incentives.service';
-import { ConflictException } from '@nestjs/common';
+import { ConflictException, ForbiddenException } from '@nestjs/common';
 
 describe('calculateStaffIncentiveAmount (pure)', () => {
   it('returns 0 when there is no margin', () => {
     expect(
-      calculateStaffIncentiveAmount(0, { type: IncentivePolicyType.FULL_MARGIN, config: {} }),
+      calculateStaffIncentiveAmount(0, {
+        type: IncentivePolicyType.FULL_MARGIN,
+        config: {},
+      }),
     ).toBe(0);
     expect(
-      calculateStaffIncentiveAmount(-5000, { type: IncentivePolicyType.FULL_MARGIN, config: {} }),
+      calculateStaffIncentiveAmount(-5000, {
+        type: IncentivePolicyType.FULL_MARGIN,
+        config: {},
+      }),
     ).toBe(0);
   });
 
@@ -27,7 +35,10 @@ describe('calculateStaffIncentiveAmount (pure)', () => {
     // Company cost ₦600,000, selling price ₦800,000 -> margin ₦200,000 -> 100% -> ₦200,000
     const margin = 800_000 - 600_000;
     expect(
-      calculateStaffIncentiveAmount(margin, { type: IncentivePolicyType.FULL_MARGIN, config: {} }),
+      calculateStaffIncentiveAmount(margin, {
+        type: IncentivePolicyType.FULL_MARGIN,
+        config: {},
+      }),
     ).toBe(200_000);
   });
 
@@ -109,7 +120,12 @@ describe('VisaIncentivesService', () => {
   let prisma: {
     visaService: { findUnique: jest.Mock };
     incentivePolicy: { findFirst: jest.Mock };
-    staffIncentive: { findFirst: jest.Mock; create: jest.Mock; findUnique: jest.Mock; update: jest.Mock };
+    staffIncentive: {
+      findFirst: jest.Mock;
+      create: jest.Mock;
+      findUnique: jest.Mock;
+      update: jest.Mock;
+    };
     staff: { findUnique: jest.Mock };
   };
   let auditService: { record: jest.Mock };
@@ -148,6 +164,24 @@ describe('VisaIncentivesService', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: AuditService, useValue: auditService },
         { provide: NotificationsService, useValue: notificationsService },
+        {
+          provide: FinancePostingService,
+          useValue: {
+            postCostOfServiceForBooking: jest.fn(),
+            postIncentiveApproved: jest.fn(),
+          },
+        },
+        {
+          provide: FinanceSettingsService,
+          // High thresholds so the tier-gating (tested separately below)
+          // doesn't interfere with these state-machine tests' 200_000 amount.
+          useValue: {
+            get: jest.fn().mockResolvedValue({
+              payoutApprovalTier1Max: 1_000_000,
+              payoutApprovalTier2Max: 5_000_000,
+            }),
+          },
+        },
       ],
     }).compile();
 
@@ -157,9 +191,17 @@ describe('VisaIncentivesService', () => {
   describe('createForCompletedApplication', () => {
     it('creates a PENDING incentive using the service-level policy, and notifies the staff', async () => {
       prisma.visaService.findUnique.mockResolvedValue({
-        incentivePolicy: { id: 'policy-1', isActive: true, type: 'FULL_MARGIN', config: {} },
+        incentivePolicy: {
+          id: 'policy-1',
+          isActive: true,
+          type: 'FULL_MARGIN',
+          config: {},
+        },
       });
-      prisma.staffIncentive.create.mockResolvedValue({ id: 'inc-1', referenceNumber: 'INC-ABC123' });
+      prisma.staffIncentive.create.mockResolvedValue({
+        id: 'inc-1',
+        referenceNumber: 'INC-ABC123',
+      });
       prisma.staff.findUnique.mockResolvedValue({
         identity: { id: 'staff-identity-1', email: 'staff@example.com' },
       });
@@ -186,7 +228,9 @@ describe('VisaIncentivesService', () => {
     });
 
     it('falls back to the platform default policy when the service has none', async () => {
-      prisma.visaService.findUnique.mockResolvedValue({ incentivePolicy: null });
+      prisma.visaService.findUnique.mockResolvedValue({
+        incentivePolicy: null,
+      });
       prisma.incentivePolicy.findFirst.mockResolvedValue({
         id: 'default-policy',
         type: 'PERCENT_OF_MARGIN',
@@ -201,12 +245,16 @@ describe('VisaIncentivesService', () => {
         where: { isDefault: true, isActive: true },
       });
       expect(prisma.staffIncentive.create).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ amount: 100_000 }) }),
+        expect.objectContaining({
+          data: expect.objectContaining({ amount: 100_000 }),
+        }),
       );
     });
 
     it('creates no incentive (and does not touch the DB write) when no policy resolves at all', async () => {
-      prisma.visaService.findUnique.mockResolvedValue({ incentivePolicy: null });
+      prisma.visaService.findUnique.mockResolvedValue({
+        incentivePolicy: null,
+      });
       prisma.incentivePolicy.findFirst.mockResolvedValue(null);
 
       await service.createForCompletedApplication(application as never);
@@ -244,6 +292,32 @@ describe('VisaIncentivesService', () => {
     });
   });
 
+  async function buildServiceWithThresholds(thresholds: {
+    payoutApprovalTier1Max: number;
+    payoutApprovalTier2Max: number;
+  }): Promise<VisaIncentivesService> {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        VisaIncentivesService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: AuditService, useValue: auditService },
+        { provide: NotificationsService, useValue: notificationsService },
+        {
+          provide: FinancePostingService,
+          useValue: {
+            postCostOfServiceForBooking: jest.fn(),
+            postIncentiveApproved: jest.fn(),
+          },
+        },
+        {
+          provide: FinanceSettingsService,
+          useValue: { get: jest.fn().mockResolvedValue(thresholds) },
+        },
+      ],
+    }).compile();
+    return module.get(VisaIncentivesService);
+  }
+
   describe('approve / reject', () => {
     const pendingIncentive = {
       id: 'inc-1',
@@ -262,13 +336,19 @@ describe('VisaIncentivesService', () => {
     });
 
     it('approves a PENDING incentive and notifies the staff member', async () => {
-      prisma.staffIncentive.update.mockResolvedValue({ ...pendingIncentive, status: IncentiveStatus.APPROVED });
+      prisma.staffIncentive.update.mockResolvedValue({
+        ...pendingIncentive,
+        status: IncentiveStatus.APPROVED,
+      });
 
       await service.approve('inc-1', 'approver-1');
 
       expect(prisma.staffIncentive.update).toHaveBeenCalledWith({
         where: { id: 'inc-1' },
-        data: expect.objectContaining({ status: IncentiveStatus.APPROVED, approvedByStaffId: 'approver-1' }),
+        data: expect.objectContaining({
+          status: IncentiveStatus.APPROVED,
+          approvedByStaffId: 'approver-1',
+        }),
       });
       expect(notificationsService.sendIncentiveUpdate).toHaveBeenCalledWith(
         'staff@example.com',
@@ -278,9 +358,44 @@ describe('VisaIncentivesService', () => {
     });
 
     it('rejects approving a non-PENDING incentive', async () => {
-      prisma.staffIncentive.findUnique.mockResolvedValue({ ...pendingIncentive, status: IncentiveStatus.PAID });
+      prisma.staffIncentive.findUnique.mockResolvedValue({
+        ...pendingIncentive,
+        status: IncentiveStatus.PAID,
+      });
 
-      await expect(service.approve('inc-1', 'approver-1')).rejects.toThrow(ConflictException);
+      await expect(service.approve('inc-1', 'approver-1')).rejects.toThrow(
+        ConflictException,
+      );
+    });
+
+    it('spec #14: blocks approval above tier 1 without FINANCE.APPROVE_HIGH_VALUE', async () => {
+      const highValueService = await buildServiceWithThresholds({
+        payoutApprovalTier1Max: 100_000,
+        payoutApprovalTier2Max: 500_000,
+      });
+      prisma.staffIncentive.findUnique.mockResolvedValue(pendingIncentive); // amount 200_000 > tier1Max
+      await expect(
+        highValueService.approve('inc-1', 'approver-1', []),
+      ).rejects.toThrow(ForbiddenException);
+      expect(prisma.staffIncentive.update).not.toHaveBeenCalled();
+    });
+
+    it('spec #14: allows approval above tier 1 when the actor holds FINANCE.APPROVE_HIGH_VALUE', async () => {
+      const highValueService = await buildServiceWithThresholds({
+        payoutApprovalTier1Max: 100_000,
+        payoutApprovalTier2Max: 500_000,
+      });
+      prisma.staffIncentive.findUnique.mockResolvedValue(pendingIncentive);
+      prisma.staffIncentive.update.mockResolvedValue({
+        ...pendingIncentive,
+        status: IncentiveStatus.APPROVED,
+      });
+
+      await highValueService.approve('inc-1', 'approver-1', [
+        'finance:approve_high_value',
+      ]);
+
+      expect(prisma.staffIncentive.update).toHaveBeenCalled();
     });
 
     it('rejects a PENDING incentive with a reason', async () => {
@@ -294,7 +409,10 @@ describe('VisaIncentivesService', () => {
 
       expect(prisma.staffIncentive.update).toHaveBeenCalledWith({
         where: { id: 'inc-1' },
-        data: { status: IncentiveStatus.REJECTED, rejectionReason: 'Duplicate application' },
+        data: {
+          status: IncentiveStatus.REJECTED,
+          rejectionReason: 'Duplicate application',
+        },
       });
     });
   });

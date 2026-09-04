@@ -3,6 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { InvoiceStatus, ManualPaymentStatus, PaymentMethod } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { FinancePostingService } from '../finance/finance-posting.service';
 import { IncentivesService } from '../incentives/incentives.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { InvoicesService } from '../payments/invoices.service';
@@ -46,6 +47,10 @@ describe('ManualPaymentsService', () => {
         { provide: NotificationsService, useValue: notificationsService },
         { provide: AuditService, useValue: auditService },
         { provide: IncentivesService, useValue: incentivesService },
+        {
+          provide: FinancePostingService,
+          useValue: { postRevenueForPayment: jest.fn() },
+        },
       ],
     }).compile();
 

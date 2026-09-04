@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AuditModule } from '../audit/audit.module';
 import { CustomersModule } from '../customers/customers.module';
+import { FinanceModule } from '../finance/finance.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { UsersModule } from '../users/users.module';
@@ -37,6 +38,7 @@ import { VisaService } from './visa.service';
     PaymentsModule,
     NotificationsModule,
     AuditModule,
+    FinanceModule,
   ],
   controllers: [
     VisaApplicationsOwnController,

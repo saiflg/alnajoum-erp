@@ -12,6 +12,7 @@ import {
   PaymentMethod,
 } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
+import { FinancePostingService } from '../finance/finance-posting.service';
 import { IncentivesService } from '../incentives/incentives.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { InvoicesService } from './invoices.service';
@@ -32,7 +33,7 @@ describe('PaymentsService', () => {
 
   beforeEach(async () => {
     prisma = {
-      invoice: { findUnique: jest.fn() },
+      invoice: { findUnique: jest.fn(), findUniqueOrThrow: jest.fn() },
       payment: { create: jest.fn() },
       paymentIntent: {
         create: jest.fn(),
@@ -65,6 +66,10 @@ describe('PaymentsService', () => {
         { provide: IncentivesService, useValue: incentivesService },
         { provide: ConfigService, useValue: configService },
         { provide: PAYMENT_PROVIDER, useValue: paymentProvider },
+        {
+          provide: FinancePostingService,
+          useValue: { postRevenueForPayment: jest.fn() },
+        },
       ],
     }).compile();
 

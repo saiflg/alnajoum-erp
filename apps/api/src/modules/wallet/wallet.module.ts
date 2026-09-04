@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AuditModule } from '../audit/audit.module';
 import { CustomersModule } from '../customers/customers.module';
+import { FinanceModule } from '../finance/finance.module';
 import { IncentivesModule } from '../incentives/incentives.module';
 import { IntegrationsModule } from '../integrations/integrations.module';
 import { NotificationsModule } from '../notifications/notifications.module';
@@ -28,6 +29,7 @@ import { WalletService } from './wallet.service';
     AuditModule,
     IncentivesModule,
     IntegrationsModule,
+    FinanceModule,
   ],
   controllers: [WalletOwnController, WalletAdminController],
   providers: [

@@ -17,6 +17,9 @@ import {
 import { randomBytes } from 'crypto';
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
+import { ACCOUNT_CODES } from '../finance/constants/account-codes.constant';
+import { FinancePostingService } from '../finance/finance-posting.service';
+import { LedgerService } from '../finance/ledger.service';
 import { IncentivesService } from '../incentives/incentives.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { InvoicesService } from '../payments/invoices.service';
@@ -39,6 +42,8 @@ export class WalletService {
     private readonly notificationsService: NotificationsService,
     private readonly auditService: AuditService,
     private readonly incentivesService: IncentivesService,
+    private readonly financePostingService: FinancePostingService,
+    private readonly ledgerService: LedgerService,
     @Inject(PAYMENT_PROVIDER)
     private readonly paymentProvider: PaymentProviderPort,
   ) {}
@@ -129,7 +134,10 @@ export class WalletService {
       callbackUrl,
     });
 
-    return { authorizationUrl: result.authorizationUrl, reference: transaction.reference };
+    return {
+      authorizationUrl: result.authorizationUrl,
+      reference: transaction.reference,
+    };
   }
 
   /** Called when the browser returns from the provider's hosted checkout page. */
@@ -142,7 +150,9 @@ export class WalletService {
       throw new NotFoundException('No wallet deposit found for this reference');
     }
     if (transaction.wallet.customerId !== customerId) {
-      throw new ForbiddenException('This deposit does not belong to this customer');
+      throw new ForbiddenException(
+        'This deposit does not belong to this customer',
+      );
     }
     if (transaction.type !== WalletTransactionType.DEPOSIT) {
       throw new BadRequestException('This reference is not a wallet deposit');
@@ -163,7 +173,9 @@ export class WalletService {
   ): Promise<void> {
     const transaction = await this.prisma.walletTransaction.findUniqueOrThrow({
       where: { id: transactionId },
-      include: { wallet: { include: { customer: { include: { identity: true } } } } },
+      include: {
+        wallet: { include: { customer: { include: { identity: true } } } },
+      },
     });
     if (transaction.status !== WalletTransactionStatus.PENDING) return;
 
@@ -195,6 +207,17 @@ export class WalletService {
     });
     if (claim.count === 0 || !succeeded) return;
 
+    await this.ledgerService.post({
+      debitCode: ACCOUNT_CODES.BANK_ACCOUNTS,
+      creditCode: ACCOUNT_CODES.CUSTOMER_WALLET_LIABILITY,
+      amount: transaction.amount,
+      currency: transaction.currency,
+      reference: transaction.reference,
+      description: transaction.description,
+      sourceModule: 'WALLET',
+      sourceId: transaction.id,
+    });
+
     await this.notificationsService.sendWalletUpdate(
       transaction.wallet.customer.identity.email,
       transaction.wallet.customer.identityId,
@@ -211,7 +234,10 @@ export class WalletService {
       action: 'wallet.deposit.completed',
       entityType: 'Wallet',
       entityId: transaction.walletId,
-      metadata: { amount: transaction.amount, reference: transaction.reference },
+      metadata: {
+        amount: transaction.amount,
+        reference: transaction.reference,
+      },
     });
   }
 
@@ -242,7 +268,9 @@ export class WalletService {
       throw new NotFoundException('Invoice not found');
     }
     if (invoice.customerId !== customerId) {
-      throw new ForbiddenException('This invoice does not belong to this customer');
+      throw new ForbiddenException(
+        'This invoice does not belong to this customer',
+      );
     }
     if (invoice.status === InvoiceStatus.VOID) {
       throw new ConflictException('Cannot pay a voided invoice');
@@ -260,7 +288,7 @@ export class WalletService {
 
     const reference = generateWalletReference('WPAY');
 
-    await this.prisma.$transaction(async (tx) => {
+    const walletPayment = await this.prisma.$transaction(async (tx) => {
       await tx.walletTransaction.create({
         data: {
           walletId: wallet.id,
@@ -273,7 +301,7 @@ export class WalletService {
           invoiceId: invoice.id,
         },
       });
-      await tx.payment.create({
+      return tx.payment.create({
         data: {
           paymentReference: reference,
           invoiceId: invoice.id,
@@ -284,7 +312,16 @@ export class WalletService {
       });
     });
 
-    const updatedInvoice = await this.invoicesService.recomputeStatus(invoiceId);
+    // Clears the wallet liability into recognized revenue — no separate
+    // Cash/Bank movement, since the money already sat inside the wallet
+    // liability from an earlier deposit (see finalizeDeposit's own entry).
+    await this.financePostingService.postRevenueForPayment(
+      walletPayment,
+      invoice,
+    );
+
+    const updatedInvoice =
+      await this.invoicesService.recomputeStatus(invoiceId);
 
     const customer = await this.prisma.customer.findUnique({
       where: { id: customerId },
@@ -292,12 +329,15 @@ export class WalletService {
     });
     if (customer) {
       const newTotalPaid = totalPaid + amount;
-      await this.notificationsService.sendPaymentReceipt(customer.identity.email, {
-        invoiceNumber: invoice.invoiceNumber,
-        amount,
-        balance: invoice.totalAmount - newTotalPaid,
-        currency: invoice.currency,
-      });
+      await this.notificationsService.sendPaymentReceipt(
+        customer.identity.email,
+        {
+          invoiceNumber: invoice.invoiceNumber,
+          amount,
+          balance: invoice.totalAmount - newTotalPaid,
+          currency: invoice.currency,
+        },
+      );
     }
 
     await this.auditService.record({
@@ -324,7 +364,7 @@ export class WalletService {
     const wallet = await this.getOrCreateWallet(customerId);
     const reference = generateWalletReference('WMDEP');
 
-    await this.prisma.walletTransaction.create({
+    const walletTx = await this.prisma.walletTransaction.create({
       data: {
         walletId: wallet.id,
         type: WalletTransactionType.DEPOSIT,
@@ -335,6 +375,16 @@ export class WalletService {
         reference,
         createdByStaffId: staffId,
       },
+    });
+    await this.ledgerService.post({
+      debitCode: ACCOUNT_CODES.BANK_ACCOUNTS,
+      creditCode: ACCOUNT_CODES.CUSTOMER_WALLET_LIABILITY,
+      amount,
+      currency: wallet.currency,
+      reference,
+      description: walletTx.description,
+      sourceModule: 'WALLET',
+      sourceId: walletTx.id,
     });
 
     const customer = await this.prisma.customer.findUnique({
@@ -385,7 +435,7 @@ export class WalletService {
     }
 
     const reference = generateWalletReference('WADJ');
-    await this.prisma.walletTransaction.create({
+    const adjustmentTx = await this.prisma.walletTransaction.create({
       data: {
         walletId: wallet.id,
         type,
@@ -398,6 +448,36 @@ export class WalletService {
       },
     });
 
+    if (type === WalletTransactionType.REFUND && amount > 0) {
+      // A real company loss, not just a liability shuffle — same Refund
+      // Losses treatment as a flight/hotel refund (see FinancePostingService.postRefund).
+      await this.financePostingService.postRefund({
+        amount,
+        currency: wallet.currency,
+        reference,
+        description,
+        sourceModule: 'WALLET',
+        sourceId: adjustmentTx.id,
+        toWallet: true,
+      });
+    } else if (amount !== 0) {
+      const inflow = amount > 0;
+      await this.ledgerService.post({
+        debitCode: inflow
+          ? ACCOUNT_CODES.BANK_ACCOUNTS
+          : ACCOUNT_CODES.CUSTOMER_WALLET_LIABILITY,
+        creditCode: inflow
+          ? ACCOUNT_CODES.CUSTOMER_WALLET_LIABILITY
+          : ACCOUNT_CODES.BANK_ACCOUNTS,
+        amount: Math.abs(amount),
+        currency: wallet.currency,
+        reference,
+        description,
+        sourceModule: 'WALLET',
+        sourceId: adjustmentTx.id,
+      });
+    }
+
     const customer = await this.prisma.customer.findUnique({
       where: { id: customerId },
       include: { identity: true },
@@ -406,7 +486,12 @@ export class WalletService {
       await this.notificationsService.sendWalletUpdate(
         customer.identity.email,
         customer.identityId,
-        { type: amount >= 0 ? 'DEPOSIT' : 'DEBIT', amount: Math.abs(amount), currency: wallet.currency, description },
+        {
+          type: amount >= 0 ? 'DEPOSIT' : 'DEBIT',
+          amount: Math.abs(amount),
+          currency: wallet.currency,
+          description,
+        },
       );
     }
 
@@ -429,6 +514,13 @@ export class WalletService {
    * reference prefix so they're recognizable as one transfer in either
    * wallet's history, exactly like payInvoiceWithWallet keeps its debit
    * and the resulting Payment row atomically in sync.
+   *
+   * No general-ledger entry is posted: the aggregate Customer Wallet
+   * Liability account doesn't fragment by customer, so moving a balance
+   * between two customers' wallets is a net-zero change to it — nothing
+   * for the ledger to record. WalletTransaction remains the durable
+   * per-customer record of the transfer (see Wallet's doc comment in
+   * schema.prisma).
    */
   async transferBetweenWallets(
     fromCustomerId: string,

@@ -16,6 +16,7 @@ import {
 } from '@prisma/client';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
+import { FinancePostingService } from '../finance/finance-posting.service';
 import { IncentivesService } from '../incentives/incentives.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { RecordPaymentDto } from './dto/record-payment.dto';
@@ -49,6 +50,7 @@ export class PaymentsService {
     private readonly notificationsService: NotificationsService,
     private readonly configService: ConfigService,
     private readonly incentivesService: IncentivesService,
+    private readonly financePostingService: FinancePostingService,
     @Inject(PAYMENT_PROVIDER)
     private readonly paymentProvider: PaymentProviderPort,
   ) {}
@@ -82,7 +84,7 @@ export class PaymentsService {
       );
     }
 
-    await this.prisma.payment.create({
+    const payment = await this.prisma.payment.create({
       data: {
         paymentReference: generatePaymentReference(),
         invoiceId,
@@ -92,6 +94,8 @@ export class PaymentsService {
         recordedByStaffId: staffId,
       },
     });
+
+    await this.financePostingService.postRevenueForPayment(payment, invoice);
 
     const updatedInvoice =
       await this.invoicesService.recomputeStatus(invoiceId);
@@ -320,7 +324,7 @@ export class PaymentsService {
       return { ok: true };
     }
 
-    await this.prisma.payment.create({
+    const onlinePayment = await this.prisma.payment.create({
       data: {
         paymentReference: intent.reference,
         invoiceId: intent.invoiceId,
@@ -330,6 +334,14 @@ export class PaymentsService {
         recordedByStaffId: null,
       },
     });
+
+    const invoiceForLedger = await this.prisma.invoice.findUniqueOrThrow({
+      where: { id: intent.invoiceId },
+    });
+    await this.financePostingService.postRevenueForPayment(
+      onlinePayment,
+      invoiceForLedger,
+    );
 
     const updatedInvoice = await this.invoicesService.recomputeStatus(
       intent.invoiceId,

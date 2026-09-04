@@ -50,7 +50,7 @@ export class VisaIncentivesController {
   @RequirePermissions(PERMISSIONS.VISA.INCENTIVE_APPROVE)
   async approve(@CurrentUser() user: AuthContext, @Param('id') id: string) {
     const staffId = await this.requireStaffId(user);
-    return this.visaIncentivesService.approve(id, staffId);
+    return this.visaIncentivesService.approve(id, staffId, user.permissions);
   }
 
   @Post(':id/reject')

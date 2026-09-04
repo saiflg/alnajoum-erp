@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AuditModule } from '../audit/audit.module';
 import { CustomersModule } from '../customers/customers.module';
+import { FinanceModule } from '../finance/finance.module';
 import { IntegrationsModule } from '../integrations/integrations.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { PaymentsModule } from '../payments/payments.module';
@@ -33,6 +34,7 @@ import { TravelPackagesService } from './travel-packages.service';
     NotificationsModule,
     IntegrationsModule,
     AuditModule,
+    FinanceModule,
   ],
   controllers: [
     HotelsController,

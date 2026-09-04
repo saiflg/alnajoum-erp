@@ -14,6 +14,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { FinancePostingService } from '../finance/finance-posting.service';
 import { IntegrationsService } from '../integrations/integrations.service';
 import { InvoicesService } from '../payments/invoices.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -55,6 +56,7 @@ export class FlightRefundsService {
     private readonly notificationsService: NotificationsService,
     private readonly auditService: AuditService,
     private readonly providerLog: ProviderTransactionLogService,
+    private readonly financePostingService: FinancePostingService,
   ) {}
 
   private async agencyFeePercent(): Promise<number> {
@@ -251,6 +253,25 @@ export class FlightRefundsService {
     ]);
 
     await this.invoicesService.voidIfUnpaid(bookingId);
+
+    if (refundAmount > 0) {
+      await this.financePostingService.postRefund({
+        amount: refundAmount,
+        currency: booking.currency,
+        reference: `FREFUND-${refund.id}`,
+        description: `Flight refund for booking ${booking.bookingReference}`,
+        sourceModule: 'FLIGHT_REFUND',
+        sourceId: refund.id,
+      });
+    }
+    // The booking earned no valid sale once refunded — any staff incentive
+    // already generated (or approved-but-not-yet-paid) on it must not
+    // remain payable (spec #29).
+    await this.financePostingService.cancelIncentivesForSource(
+      'FLIGHT_BOOKING',
+      bookingId,
+      `Booking ${booking.bookingReference} was refunded`,
+    );
 
     await this.auditService.record({
       action: 'flight_refund.completed',

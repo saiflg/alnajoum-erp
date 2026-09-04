@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { IncentivePolicyType } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { FinancePostingService } from '../finance/finance-posting.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { HotelIncentivesService } from './hotel-incentives.service';
 
@@ -42,6 +43,10 @@ describe('HotelIncentivesService', () => {
         {
           provide: NotificationsService,
           useValue: { sendIncentiveUpdate: jest.fn() },
+        },
+        {
+          provide: FinancePostingService,
+          useValue: { postCostOfServiceForBooking: jest.fn() },
         },
       ],
     }).compile();

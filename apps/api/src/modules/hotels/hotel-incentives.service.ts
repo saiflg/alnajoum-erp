@@ -3,6 +3,7 @@ import { HotelBooking, IncentiveStatus } from '@prisma/client';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { FinancePostingService } from '../finance/finance-posting.service';
 import { calculateStaffIncentiveAmount } from '../incentives/incentive-calculator';
 import { NotificationsService } from '../notifications/notifications.service';
 
@@ -23,6 +24,7 @@ export class HotelIncentivesService {
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
     private readonly notificationsService: NotificationsService,
+    private readonly financePostingService: FinancePostingService,
   ) {}
 
   async createForCompletedBooking(booking: HotelBooking): Promise<void> {
@@ -34,6 +36,14 @@ export class HotelIncentivesService {
       where: { sourceType: 'HOTEL_BOOKING', sourceId: booking.id },
     });
     if (existing) return;
+
+    await this.financePostingService.postCostOfServiceForBooking({
+      sourceModule: 'HOTEL_BOOKING',
+      sourceId: booking.id,
+      supplierName: booking.provider,
+      amount: booking.supplierCost,
+      currency: booking.currency,
+    });
 
     const policy = await this.prisma.incentivePolicy.findFirst({
       where: { isDefault: true, isActive: true },

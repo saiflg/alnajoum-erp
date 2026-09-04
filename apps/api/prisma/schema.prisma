@@ -55,6 +55,13 @@ model Identity {
   auditLogs     AuditLog[]
   notifications Notification[]
 
+  // Phase 6 — finance: who posted a journal entry / recorded a company
+  // investment, when it wasn't a Staff-attributed action (e.g. a system
+  // job) or when the finance screens simply record the logged-in identity
+  // directly rather than looking up their Staff row a second time.
+  journalEntries     JournalEntry[]
+  companyInvestments CompanyInvestment[]
+
   @@index([type])
   @@map("identities")
 }
@@ -246,6 +253,18 @@ model Staff {
   bankAccountNumber String?
   bankAccountName   String?
 
+  // Phase 6 spec #12: a verified account can't be silently swapped out from
+  // under Finance — StaffService.updateBankDetails() resets these to
+  // false/null whenever bankName/bankAccountNumber/bankAccountName actually
+  // change, and only an authorized re-verification (FINANCE.VERIFY_PAYOUT_
+  // ACCOUNT) flips it back, which StaffPayoutsService.attemptPayout() now
+  // requires before it will move money.
+  bankAccountVerified               Boolean   @default(false)
+  bankAccountVerifiedAt             DateTime?
+  bankAccountVerifiedByStaffId      String?
+  bankAccountVerifiedByStaff        Staff?    @relation("BankAccountVerifications", fields: [bankAccountVerifiedByStaffId], references: [id], onDelete: SetNull)
+  bankAccountVerificationsPerformed Staff[]   @relation("BankAccountVerifications")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -278,6 +297,13 @@ model Staff {
   requestedHotelRefunds    HotelRefund[]             @relation("RequestedHotelRefunds")
   completedHotelBookings   HotelBooking[]            @relation("CompletedHotelBookings")
   createdTravelPackages    TravelPackage[]           @relation("CreatedTravelPackages")
+
+  // Phase 6 — finance.
+  createdExpenses            Expense[]           @relation("CreatedExpenses")
+  approvedExpenses           Expense[]           @relation("ApprovedExpenses")
+  recordedSupplierPayments   SupplierPayment[]
+  closedDailyClosings        DailyClosing[]
+  importedBankStatementLines BankStatementLine[]
 
   @@index([companyId])
   @@index([branchId])
@@ -332,6 +358,12 @@ model Branch {
   flightGroupBookings FlightGroupBooking[]
   hotelBookings       HotelBooking[]
   travelPackages      TravelPackage[]
+
+  // Phase 6 — per-branch accounting (spec #21).
+  ledgerAccounts LedgerAccount[]
+  journalEntries JournalEntry[]
+  expenses       Expense[]
+  dailyClosings  DailyClosing[]
 
   @@unique([companyId, code])
   @@index([companyId])
@@ -1456,6 +1488,12 @@ enum IncentiveStatus {
   APPROVED
   REJECTED
   PAID
+  // Phase 6 spec #29: an incentive tied to a booking that later gets
+  // refunded/cancelled must not remain payable — set by
+  // LedgerService.cancelIncentivesForSource() when a flight/hotel/visa
+  // refund is processed. Terminal, like REJECTED; never set on an already
+  // PAID incentive (money already moved — see the refund services' guard).
+  CANCELLED
 }
 
 /**
@@ -2498,4 +2536,363 @@ model CorporateBookingTraveler {
   @@index([bookingId])
   @@index([travelerId])
   @@map("corporate_booking_travelers")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 6 — Enterprise finance: chart of accounts, double-entry ledger,
+// expenses, supplier payables, company investment, daily closing, bank
+// reconciliation. Every module that already moves money (payments, wallet,
+// incentives/payouts, refunds) posts INTO this ledger through LedgerService
+// rather than getting its own parallel accounting — see finance.module.ts.
+// ---------------------------------------------------------------------------
+
+enum AccountType {
+  ASSET
+  LIABILITY
+  REVENUE
+  EXPENSE
+  EQUITY
+}
+
+/**
+ * One line of the chart of accounts (spec #2). `code` is what application
+ * code posts against — FinanceConstants.SYSTEM_ACCOUNT_CODES — so a system
+ * account's `code` must never be reassigned once seeded, the same rule this
+ * codebase already applies to RBAC permission keys. isSystem just prevents
+ * deleting/retyping one from the admin screen; an admin can still freely
+ * create additional non-system accounts (e.g. a new expense category).
+ */
+model LedgerAccount {
+  id   String      @id @default(cuid())
+  code String      @unique
+  name String
+  type AccountType
+
+  isSystem Boolean @default(true)
+  isActive Boolean @default(true)
+
+  // Null = a company-wide account (the overwhelming majority — cash,
+  // receivables, most revenue/expense lines). Set only when a report needs
+  // to slice one account per branch (spec #21's branch accounting), which
+  // this phase doesn't do by default to avoid needlessly fragmenting the
+  // chart of accounts — BranchAccountingService derives per-branch
+  // revenue/expense from the source records' own branchId instead.
+  branchId String?
+  branch   Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  debitEntries  JournalEntry[] @relation("DebitAccount")
+  creditEntries JournalEntry[] @relation("CreditAccount")
+  expenses      Expense[]
+
+  @@index([type])
+  @@map("ledger_accounts")
+}
+
+enum JournalEntryStatus {
+  POSTED
+  REVERSED
+}
+
+/**
+ * The double-entry ledger (spec #3). Deliberately a debit-account/
+ * credit-account *pair* per row rather than an N-line journal — the spec's
+ * own field list ("Debit account, Credit account, Amount...") describes
+ * exactly this shape, and it makes an unbalanced entry structurally
+ * impossible: there is no sum-of-debits-equals-sum-of-credits invariant to
+ * validate, because every row already debits one account and credits
+ * another by the same `amount`. A business event that touches more than two
+ * accounts (rare in this system) simply posts more than one JournalEntry
+ * sharing the same `reference`.
+ * Append-only: POSTED entries are never edited or deleted (spec #3's "never
+ * permanently delete posted financial transactions"). A correction posts a
+ * new entry with accounts swapped and links back via reversalOfId — see
+ * LedgerService.reverseEntry().
+ */
+model JournalEntry {
+  id String @id @default(cuid())
+
+  debitAccountId  String
+  debitAccount    LedgerAccount @relation("DebitAccount", fields: [debitAccountId], references: [id], onDelete: Restrict)
+  creditAccountId String
+  creditAccount   LedgerAccount @relation("CreditAccount", fields: [creditAccountId], references: [id], onDelete: Restrict)
+
+  amount   Int // whole currency units, always positive — direction is which account is debit vs credit
+  currency String
+
+  // Groups related legs of one business event (e.g. all entries posted for
+  // one Payment share its paymentReference) — not unique by itself, unlike
+  // Payment.paymentReference.
+  reference   String
+  description String
+
+  // "PAYMENT" | "WALLET" | "INCENTIVE" | "PAYOUT" | "REFUND" | "EXPENSE" |
+  // "INVESTMENT" | "SUPPLIER_PAYMENT" | "MANUAL" — which module's code
+  // called LedgerService.post(), for filtering and for
+  // ProfitAndLossService/CashFlowService to know how to bucket a row.
+  sourceModule String
+  sourceId     String?
+
+  status JournalEntryStatus @default(POSTED)
+
+  reversalOfId String?       @unique
+  reversalOf   JournalEntry? @relation("Reversal", fields: [reversalOfId], references: [id], onDelete: SetNull)
+  reversedBy   JournalEntry? @relation("Reversal")
+
+  createdByIdentityId String?
+  createdByIdentity   Identity? @relation(fields: [createdByIdentityId], references: [id], onDelete: SetNull)
+
+  branchId String?
+  branch   Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([debitAccountId])
+  @@index([creditAccountId])
+  @@index([sourceModule, sourceId])
+  @@index([reference])
+  @@index([status])
+  @@index([createdAt])
+  @@map("journal_entries")
+}
+
+enum ExpenseStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PAID
+}
+
+/**
+ * Spec #19. Only an APPROVED expense that's been marked PAID posts a ledger
+ * entry (debit the chosen expense account, credit Cash/Bank) — see
+ * ExpensesService.approve()/markPaid(), mirroring how a ManualPaymentSubmission
+ * has zero ledger effect until approved.
+ */
+model Expense {
+  id            String @id @default(cuid())
+  expenseNumber String @unique
+
+  category    String
+  amount      Int
+  currency    String
+  date        DateTime
+  description String
+  vendor      String?
+
+  paymentMethod       PaymentMethod?
+  receiptDocumentPath String?
+
+  branchId String?
+  branch   Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
+
+  accountId String?
+  account   LedgerAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+
+  status ExpenseStatus @default(PENDING)
+
+  createdByStaffId String
+  createdByStaff   Staff  @relation("CreatedExpenses", fields: [createdByStaffId], references: [id], onDelete: Restrict)
+
+  approvedByStaffId String?
+  approvedByStaff   Staff?    @relation("ApprovedExpenses", fields: [approvedByStaffId], references: [id], onDelete: SetNull)
+  approvedAt        DateTime?
+  rejectionReason   String?
+
+  paidAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([branchId])
+  @@index([category])
+  @@map("expenses")
+}
+
+enum InvestmentType {
+  INITIAL
+  ADDITIONAL
+  WITHDRAWAL
+}
+
+/**
+ * Spec #15/#16: equity, never revenue. WITHDRAWAL (an owner draw) is its own
+ * type rather than an Expense — reduces equity directly, distinct from an
+ * operating expense, per spec #16's explicit warning not to conflate the two.
+ */
+model CompanyInvestment {
+  id String @id @default(cuid())
+
+  type        InvestmentType
+  amount      Int
+  currency    String
+  investor    String
+  date        DateTime
+  description String?
+  reference   String?
+
+  recordedByIdentityId String?
+  recordedByIdentity   Identity? @relation(fields: [recordedByIdentityId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([type])
+  @@map("company_investments")
+}
+
+enum SupplierPayableStatus {
+  OUTSTANDING
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+}
+
+/**
+ * Spec #20. One row per booking's supplier cost obligation — created
+ * automatically when a flight is ticketed / hotel booking is completed /
+ * visa application's company cost is set (see SupplierPayablesService.
+ * createFromBooking(), called from the existing ticketing/completion flows
+ * rather than duplicating their cost-snapshot logic).
+ */
+model SupplierPayable {
+  id String @id @default(cuid())
+
+  supplierName String
+  sourceModule String // "FLIGHT_BOOKING" | "HOTEL_BOOKING" | "VISA_APPLICATION"
+  sourceId     String
+
+  amount     Int
+  currency   String
+  amountPaid Int    @default(0)
+
+  dueDate DateTime?
+  status  SupplierPayableStatus @default(OUTSTANDING)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  payments SupplierPayment[]
+
+  @@index([status])
+  @@index([sourceModule, sourceId])
+  @@map("supplier_payables")
+}
+
+model SupplierPayment {
+  id String @id @default(cuid())
+
+  payableId String
+  payable   SupplierPayable @relation(fields: [payableId], references: [id], onDelete: Restrict)
+
+  amount        Int
+  currency      String
+  paymentMethod PaymentMethod
+  reference     String?
+  note          String?
+
+  recordedByStaffId String
+  recordedByStaff   Staff  @relation(fields: [recordedByStaffId], references: [id], onDelete: Restrict)
+
+  paidAt DateTime @default(now())
+
+  @@index([payableId])
+  @@map("supplier_payments")
+}
+
+enum DailyClosingStatus {
+  OPEN
+  CLOSED
+}
+
+/**
+ * Spec #22. `summary` freezes the day's totals (cash/bank/online payments,
+ * wallet movement, refunds, expenses, payouts, supplier payments) at close
+ * time — DailyClosingService computes it fresh from the ledger and other
+ * tables, then stores the snapshot rather than leaving it to be recomputed
+ * (and silently drift) later. A closed day isn't literally read-only at the
+ * database level (nothing in this codebase enforces that), but every
+ * finance screen that lets you backdate/edit a financial record checks
+ * DailyClosingService.isDateClosed() first and requires an explicit reversal
+ * entry instead — see spec #22's "changes require authorized correction/
+ * reversal" and LedgerService.reverseEntry().
+ */
+model DailyClosing {
+  id String @id @default(cuid())
+
+  businessDate DateTime @unique
+  branchId     String?
+  branch       Branch?  @relation(fields: [branchId], references: [id], onDelete: SetNull)
+
+  summary Json
+
+  closedByStaffId String
+  closedByStaff   Staff    @relation(fields: [closedByStaffId], references: [id], onDelete: Restrict)
+  closedAt        DateTime @default(now())
+
+  status DailyClosingStatus @default(CLOSED)
+
+  @@index([businessDate])
+  @@map("daily_closings")
+}
+
+/**
+ * Singleton (id is always "default") — configurable payout approval
+ * thresholds (spec #14). tier1Max is the ceiling a Finance Officer alone
+ * can approve; between tier1Max and tier2Max additionally requires
+ * FINANCE.APPROVE_HIGH_VALUE (Company Admin+); above tier2Max additionally
+ * requires FINANCE.APPROVE_EXECUTIVE (Super Admin) — enforced in
+ * VisaIncentivesService.approve() against the acting identity's permission
+ * set, not a separate dual-signature workflow (a genuine simplification
+ * from the spec's "multiple approvals" language — see the Phase 6 QA
+ * report's Known Limitations).
+ */
+model FinanceSettings {
+  id String @id @default("default")
+
+  payoutApprovalTier1Max Int @default(100000)
+  payoutApprovalTier2Max Int @default(500000)
+
+  updatedAt DateTime @updatedAt
+
+  @@map("finance_settings")
+}
+
+enum BankStatementLineStatus {
+  UNMATCHED
+  MATCHED
+  IGNORED
+}
+
+/**
+ * Spec #23. Lines can be entered manually (localhost / no bank-feed
+ * integration exists yet) or imported from a CSV export of a bank
+ * statement — either way they land here as UNMATCHED and Finance works
+ * through them via BankReconciliationService.match()/ignore().
+ */
+model BankStatementLine {
+  id String @id @default(cuid())
+
+  date              DateTime
+  description       String
+  amount            Int // signed: positive = inflow, negative = outflow
+  currency          String
+  externalReference String?
+
+  status BankStatementLineStatus @default(UNMATCHED)
+
+  // "PAYMENT" | "EXPENSE" | "SUPPLIER_PAYMENT" | "STAFF_PAYOUT" — loose
+  // match, same free-form pattern as WalletTransaction.invoiceId.
+  matchedType String?
+  matchedId   String?
+
+  importedByStaffId String?
+  importedByStaff   Staff?  @relation(fields: [importedByStaffId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([status])
+  @@map("bank_statement_lines")
 }

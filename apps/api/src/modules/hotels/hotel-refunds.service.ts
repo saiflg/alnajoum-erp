@@ -7,6 +7,7 @@ import {
 import { HotelBookingStatus, HotelRefundStatus } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { FinancePostingService } from '../finance/finance-posting.service';
 import { IntegrationsService } from '../integrations/integrations.service';
 import { InvoicesService } from '../payments/invoices.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -41,6 +42,7 @@ export class HotelRefundsService {
     private readonly invoicesService: InvoicesService,
     private readonly notificationsService: NotificationsService,
     private readonly auditService: AuditService,
+    private readonly financePostingService: FinancePostingService,
   ) {}
 
   private async policyConfig(): Promise<{
@@ -152,6 +154,22 @@ export class HotelRefundsService {
     ]);
 
     await this.invoicesService.voidHotelBookingIfUnpaid(bookingId);
+
+    if (preview.estimatedRefundAmount > 0) {
+      await this.financePostingService.postRefund({
+        amount: preview.estimatedRefundAmount,
+        currency: preview.currency,
+        reference: `HREFUND-${refund.id}`,
+        description: `Hotel refund for booking ${booking.bookingReference}`,
+        sourceModule: 'HOTEL_REFUND',
+        sourceId: refund.id,
+      });
+    }
+    await this.financePostingService.cancelIncentivesForSource(
+      'HOTEL_BOOKING',
+      bookingId,
+      `Booking ${booking.bookingReference} was refunded`,
+    );
 
     await this.auditService.record({
       action: 'hotel_refund.completed',

@@ -46,6 +46,7 @@ import {
 import * as argon2 from 'argon2';
 import { randomBytes } from 'crypto';
 import { SYSTEM_ROLES } from '../src/modules/rbac/constants/default-roles.constant';
+import { ACCOUNT_CODES, SEED_ACCOUNTS } from '../src/modules/finance/constants/account-codes.constant';
 
 const prisma = new PrismaClient();
 
@@ -2003,11 +2004,142 @@ async function seedPhase5Hotels() {
   console.log('--------------------------------------------------------');
 }
 
+/**
+ * Phase 6 finance demo data: seeds the chart of accounts (idempotent —
+ * normally done by FinanceModule.onModuleInit on app boot, but seeded here
+ * too so `db:reset:demo`'s seed-before-first-boot ordering never leaves a
+ * journal entry pointing at a missing account), a company investment, and
+ * two expenses (one still PENDING, one APPROVED+PAID) — each posts a real,
+ * balanced journal entry through the same debit/credit shape
+ * LedgerService/FinancePostingService would produce, so the Finance
+ * Dashboard and Chart of Accounts screens aren't empty on a fresh seed.
+ * Deliberately does NOT backfill journal entries for the StaffIncentive/
+ * Payment rows Phases 3-5 already seed directly against Prisma (bypassing
+ * the service layer, like every other demo record in this file) — the
+ * ledger only ever captures transactions that flow through the real app
+ * from here on, exactly as it would in production.
+ */
+async function seedPhase6Finance() {
+  for (const def of SEED_ACCOUNTS) {
+    await prisma.ledgerAccount.upsert({
+      where: { code: def.code },
+      create: { code: def.code, name: def.name, type: def.type, isSystem: true },
+      update: {},
+    });
+  }
+
+  const existing = await prisma.companyInvestment.findFirst({ where: { investor: 'Alnajoum Holdings' } });
+  if (existing) {
+    console.log('Phase 6 finance demo data already present — skipping');
+    return;
+  }
+
+  const accountId = async (code: string) =>
+    (await prisma.ledgerAccount.findUniqueOrThrow({ where: { code } })).id;
+
+  const [cashId, bankId, companyInvestmentId, marketingId, hostingId] = await Promise.all([
+    accountId(ACCOUNT_CODES.CASH),
+    accountId(ACCOUNT_CODES.BANK_ACCOUNTS),
+    accountId(ACCOUNT_CODES.COMPANY_INVESTMENT),
+    accountId(ACCOUNT_CODES.MARKETING),
+    accountId(ACCOUNT_CODES.HOSTING),
+  ]);
+
+  const financeIdentity = await prisma.identity.findUniqueOrThrow({
+    where: { email: 'ibrahim.musa@demo.alnajoum.travel' },
+    include: { staff: true },
+  });
+  const superAdminIdentity = await prisma.identity.findFirst({
+    where: { type: 'STAFF', roles: { some: { role: { name: SYSTEM_ROLES.SUPER_ADMIN } } } },
+  });
+
+  // --- Initial company investment --------------------------------------
+  const investment = await prisma.companyInvestment.create({
+    data: {
+      type: 'INITIAL',
+      amount: 20_000_000,
+      currency: 'NGN',
+      investor: 'Alnajoum Holdings',
+      date: new Date('2026-01-01'),
+      description: 'Initial capital to launch Alnajoum Travel Agency',
+      recordedByIdentityId: superAdminIdentity?.id,
+    },
+  });
+  await prisma.journalEntry.create({
+    data: {
+      debitAccountId: bankId,
+      creditAccountId: companyInvestmentId,
+      amount: 20_000_000,
+      currency: 'NGN',
+      reference: investment.id,
+      description: 'Initial investment by Alnajoum Holdings',
+      sourceModule: 'INVESTMENT',
+      sourceId: investment.id,
+      createdByIdentityId: superAdminIdentity?.id,
+    },
+  });
+
+  // --- Expenses: one still pending, one approved and paid ------------------
+  await prisma.expense.create({
+    data: {
+      expenseNumber: `EXP-${randomBytes(4).toString('hex').toUpperCase()}`,
+      category: 'Marketing',
+      amount: 150_000,
+      currency: 'NGN',
+      date: new Date(),
+      description: 'Social media advertising campaign',
+      vendor: 'Meta Ads',
+      paymentMethod: PaymentMethod.BANK_TRANSFER,
+      accountId: marketingId,
+      status: 'PENDING',
+      createdByStaffId: financeIdentity.staff!.id,
+    },
+  });
+
+  const hostingExpense = await prisma.expense.create({
+    data: {
+      expenseNumber: `EXP-${randomBytes(4).toString('hex').toUpperCase()}`,
+      category: 'Hosting',
+      amount: 45_000,
+      currency: 'NGN',
+      date: new Date(),
+      description: 'Monthly Oracle Cloud VPS hosting',
+      vendor: 'Oracle Cloud',
+      paymentMethod: PaymentMethod.CARD,
+      accountId: hostingId,
+      status: 'PAID',
+      createdByStaffId: financeIdentity.staff!.id,
+      approvedByStaffId: financeIdentity.staff!.id,
+      approvedAt: new Date(),
+      paidAt: new Date(),
+    },
+  });
+  await prisma.journalEntry.create({
+    data: {
+      debitAccountId: hostingId,
+      creditAccountId: cashId,
+      amount: 45_000,
+      currency: 'NGN',
+      reference: hostingExpense.expenseNumber,
+      description: `Expense ${hostingExpense.expenseNumber}: Monthly Oracle Cloud VPS hosting`,
+      sourceModule: 'EXPENSE',
+      sourceId: hostingExpense.id,
+      createdByIdentityId: financeIdentity.id,
+    },
+  });
+
+  console.log('Seeded chart of accounts, 1 company investment, and 2 expenses (1 pending, 1 paid) with matching journal entries.');
+  console.log('--------------------------------------------------------');
+  console.log('Phase 6 finance demo data seeded successfully.');
+  console.log('--------------------------------------------------------');
+}
+
 async function main() {
   await seedPhase1And2();
   await seedPhase3Visa();
   await seedPhase4Flights();
   await seedPhase5Hotels();
+  await seedPhase6Finance();
 }
 
 main()

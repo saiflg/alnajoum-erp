@@ -7,6 +7,7 @@ import {
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { FinancePostingService } from '../finance/finance-posting.service';
 import { calculateStaffIncentiveAmount } from '../incentives/incentive-calculator';
 import { NotificationsService } from '../notifications/notifications.service';
 
@@ -35,6 +36,7 @@ export class FlightIncentivesService {
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
     private readonly notificationsService: NotificationsService,
+    private readonly financePostingService: FinancePostingService,
   ) {}
 
   private async resolvePolicy(
@@ -69,6 +71,17 @@ export class FlightIncentivesService {
     if (existing) {
       return; // Idempotent — a booking can only be ticketed once.
     }
+
+    // Recognize the supplier cost as owed the moment the ticket is issued
+    // (spec #9/#20) — independent of the incentive amount below, which can
+    // legitimately be zero.
+    await this.financePostingService.postCostOfServiceForBooking({
+      sourceModule: 'FLIGHT_BOOKING',
+      sourceId: booking.id,
+      supplierName: booking.provider,
+      amount: booking.providerCost,
+      currency: booking.currency,
+    });
 
     const margin = booking.totalAmount - booking.providerCost;
     const policy = await this.resolvePolicy(booking);

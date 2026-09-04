@@ -9,10 +9,10 @@ import { InvoiceStatus, ManualPaymentStatus } from '@prisma/client';
 import { randomBytes } from 'crypto';
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
+import { FinancePostingService } from '../finance/finance-posting.service';
 import { IncentivesService } from '../incentives/incentives.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { InvoicesService } from '../payments/invoices.service';
-import { ReviewManualPaymentDto } from './dto/review-manual-payment.dto';
 import { SubmitManualPaymentDto } from './dto/submit-manual-payment.dto';
 
 function generatePaymentReference(): string {
@@ -27,6 +27,7 @@ export class ManualPaymentsService {
     private readonly notificationsService: NotificationsService,
     private readonly auditService: AuditService,
     private readonly incentivesService: IncentivesService,
+    private readonly financePostingService: FinancePostingService,
   ) {}
 
   /**
@@ -55,7 +56,9 @@ export class ManualPaymentsService {
       );
     }
     if (invoice.status === InvoiceStatus.VOID) {
-      throw new ConflictException('Cannot submit a payment for a voided invoice');
+      throw new ConflictException(
+        'Cannot submit a payment for a voided invoice',
+      );
     }
     if (invoice.status === InvoiceStatus.PAID) {
       throw new ConflictException('This invoice is already fully paid');
@@ -170,7 +173,7 @@ export class ManualPaymentsService {
     }
 
     const reference = generatePaymentReference();
-    await this.prisma.$transaction(async (tx) => {
+    const createdPayment = await this.prisma.$transaction(async (tx) => {
       const payment = await tx.payment.create({
         data: {
           paymentReference: reference,
@@ -191,7 +194,13 @@ export class ManualPaymentsService {
           paymentId: payment.id,
         },
       });
+      return payment;
     });
+
+    await this.financePostingService.postRevenueForPayment(
+      createdPayment,
+      invoice,
+    );
 
     const updatedInvoice = await this.invoicesService.recomputeStatus(
       submission.invoiceId,

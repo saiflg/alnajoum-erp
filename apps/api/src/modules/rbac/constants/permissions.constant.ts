@@ -151,6 +151,27 @@ export const PERMISSIONS = {
     INCENTIVE_APPROVE: 'visa.incentive.approve', // approve/reject a pending incentive
     PAYOUT_APPROVE: 'visa.payout.approve', // trigger/retry an incentive payout
   },
+  // Phase 6 — enterprise finance, accounting, payment reconciliation, and
+  // staff payout engine.
+  FINANCE: {
+    ACCOUNTS_MANAGE: 'finance:accounts_manage', // chart of accounts CRUD
+    LEDGER_VIEW: 'finance:ledger_view', // journal entries, trial balance
+    EXPENSE_CREATE: 'finance:expense_create',
+    EXPENSE_APPROVE: 'finance:expense_approve',
+    INVESTMENT_MANAGE: 'finance:investment_manage',
+    SUPPLIER_PAYABLES_MANAGE: 'finance:supplier_payables_manage',
+    DASHBOARD_VIEW: 'finance:dashboard_view', // P&L, cash flow, finance dashboard, branch accounting
+    DAILY_CLOSING: 'finance:daily_closing',
+    BANK_RECONCILIATION: 'finance:bank_reconciliation',
+    STAFF_BANK_VERIFY: 'finance:staff_bank_verify', // verify a staff member's payout bank account
+    SETTINGS_MANAGE: 'finance:settings_manage', // payout approval thresholds
+    // Spec #14's tiered payout-approval workflow — checked in addition to
+    // (never instead of) visa.incentive.approve, against the acting
+    // identity's permission set at the amount thresholds configured in
+    // FinanceSettings.
+    APPROVE_HIGH_VALUE: 'finance:approve_high_value',
+    APPROVE_EXECUTIVE: 'finance:approve_executive',
+  },
 } as const;
 
 export const ALL_PERMISSION_KEYS: string[] = Object.values(PERMISSIONS).flatMap(

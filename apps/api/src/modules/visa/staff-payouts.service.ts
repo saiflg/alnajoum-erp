@@ -9,6 +9,7 @@ import { IncentiveStatus, PayoutStatus } from '@prisma/client';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { FinancePostingService } from '../finance/finance-posting.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { STAFF_PAYOUT_PROVIDER } from './providers/staff-payout-provider.port';
@@ -33,6 +34,7 @@ export class StaffPayoutsService {
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
     private readonly notificationsService: NotificationsService,
+    private readonly financePostingService: FinancePostingService,
     @Inject(STAFF_PAYOUT_PROVIDER)
     private readonly provider: StaffPayoutProviderPort,
   ) {}
@@ -66,6 +68,15 @@ export class StaffPayoutsService {
     if (!staff.bankName || !staff.bankAccountNumber || !staff.bankAccountName) {
       throw new BadRequestException(
         `${staff.firstName} ${staff.lastName} has no bank details on file — add them before requesting a payout`,
+      );
+    }
+    // Phase 6 spec #12: money never moves to an account Finance hasn't
+    // verified — StaffBankAccountsService resets this flag whenever the
+    // account details themselves change, so a swap always requires
+    // re-verification before the next payout can proceed.
+    if (!staff.bankAccountVerified) {
+      throw new BadRequestException(
+        `${staff.firstName} ${staff.lastName}'s payout bank account has not been verified by Finance — verify it before requesting a payout`,
       );
     }
 
@@ -129,6 +140,7 @@ export class StaffPayoutsService {
         entityId: payout.id,
         metadata: { providerReference: result.providerReference },
       });
+      await this.financePostingService.postIncentivePaid(updatedPayout);
 
       const identity = await this.staffIdentity(staff.id);
       if (identity) {

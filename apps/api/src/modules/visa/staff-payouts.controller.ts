@@ -36,7 +36,19 @@ export class StaffPayoutsController {
     if (!staffId) {
       throw new ForbiddenException('Only staff have bank details on file');
     }
-    await this.prisma.staff.update({ where: { id: staffId }, data: dto });
+    // Phase 6 spec #12: any change to the account itself invalidates the
+    // previous verification — Finance must re-verify (see
+    // FinanceStaffBankAccountsController) before the next payout attempt,
+    // which StaffPayoutsService.attemptPayout() now checks for.
+    await this.prisma.staff.update({
+      where: { id: staffId },
+      data: {
+        ...dto,
+        bankAccountVerified: false,
+        bankAccountVerifiedAt: null,
+        bankAccountVerifiedByStaffId: null,
+      },
+    });
     return { updated: true };
   }
 
