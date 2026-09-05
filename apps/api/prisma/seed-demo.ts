@@ -2881,6 +2881,36 @@ async function seedPhase8HajjOps() {
     });
   }
 
+  // --- Deeper hotel-catalog integration: a second room linked to Amina's
+  // real, completed Phase 5 hotel booking (HTL-DEMO0003) rather than a
+  // free-text hotel name — demonstrates staff picking from an actual
+  // catalog booking instead of retyping the hotel each time.
+  const cataloguedBooking = await prisma.hotelBooking.findUnique({
+    where: { bookingReference: 'HTL-DEMO0003' },
+  });
+  if (cataloguedBooking) {
+    const catalogueRoom = await prisma.roomAllocation.create({
+      data: {
+        hajjGroupId: hajjGroup.id,
+        hotelBookingId: cataloguedBooking.id,
+        hotelName: cataloguedBooking.hotelName, // snapshotted, matching RoomAllocationService.create's own logic
+        roomType: 'Double',
+        roomNumber: '208',
+        capacity: 2,
+      },
+    });
+    const thirdPilgrim = hajjRegistration.pilgrims[2];
+    if (thirdPilgrim) {
+      await prisma.roomAllocationOccupant.create({
+        data: {
+          roomAllocationId: catalogueRoom.id,
+          pilgrimType: 'HAJJ',
+          pilgrimId: thirdPilgrim.id,
+        },
+      });
+    }
+  }
+
   // --- QR code + check-in: Chinedu is already checked in for his group ----
   const umrahPilgrim = umrahRegistration.pilgrims[0];
   const pilgrimCode = `PLG-${randomBytes(6).toString('hex').toUpperCase()}`;
@@ -2899,7 +2929,7 @@ async function seedPhase8HajjOps() {
   });
 
   console.log(
-    `Created Hajj group ${hajjGroup.groupNumber} (3 pilgrims, 1 readiness override, 1 room with 2 occupants) and Umrah group ${umrahGroup.groupNumber} ` +
+    `Created Hajj group ${hajjGroup.groupNumber} (3 pilgrims, 1 readiness override, 1 free-text room + 1 room linked to a real hotel booking) and Umrah group ${umrahGroup.groupNumber} ` +
       `(1 pilgrim, checked in, QR code ${pilgrimCode}), 1 vehicle, 1 driver, 1 airport transfer.`,
   );
   console.log('--------------------------------------------------------');

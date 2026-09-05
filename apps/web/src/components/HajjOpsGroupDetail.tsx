@@ -7,6 +7,7 @@ import { formatDateTime } from '@/lib/format';
 import type {
   GroupPilgrim,
   HajjOpsGroup,
+  LinkableHotelBooking,
   PilgrimReadiness,
   ReadinessStatus,
   RoomAllocation,
@@ -57,6 +58,7 @@ export function HajjOpsGroupDetail({ type, groupId }: { type: 'HAJJ' | 'UMRAH'; 
   const [group, setGroup] = useState<HajjOpsGroup | null>(null);
   const [readiness, setReadiness] = useState<Record<string, PilgrimReadiness>>({});
   const [rooms, setRooms] = useState<RoomAllocation[] | null>(null);
+  const [linkableHotelBookings, setLinkableHotelBookings] = useState<LinkableHotelBooking[]>([]);
   const [candidatePilgrims, setCandidatePilgrims] = useState<RegistrationPilgrimOption[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -68,6 +70,7 @@ export function HajjOpsGroupDetail({ type, groupId }: { type: 'HAJJ' | 'UMRAH'; 
   const [overrideReason, setOverrideReason] = useState('');
 
   const [roomHotelName, setRoomHotelName] = useState('');
+  const [roomHotelBookingId, setRoomHotelBookingId] = useState('');
   const [roomType, setRoomType] = useState('');
   const [roomNumber, setRoomNumber] = useState('');
   const [roomCapacity, setRoomCapacity] = useState('2');
@@ -176,6 +179,12 @@ export function HajjOpsGroupDetail({ type, groupId }: { type: 'HAJJ' | 'UMRAH'; 
       .catch(() => undefined);
   }, [group?.packageId, type, groupId]);
 
+  useEffect(() => {
+    apiRequest<LinkableHotelBooking[]>(`/hajj-ops/rooms/hotel-bookings?type=${type}&groupId=${groupId}`)
+      .then(setLinkableHotelBookings)
+      .catch(() => undefined);
+  }, [type, groupId]);
+
   async function changeStatus(status: TravelGroupStatus) {
     setBusy(true);
     setError(null);
@@ -256,7 +265,9 @@ export function HajjOpsGroupDetail({ type, groupId }: { type: 'HAJJ' | 'UMRAH'; 
   }
 
   async function createRoom() {
-    if (!roomHotelName || !roomNumber) return;
+    // A hotelName is only required when NOT linking a real booking — the
+    // backend snapshots hotelName from the booking in that case.
+    if ((!roomHotelName && !roomHotelBookingId) || !roomNumber) return;
     setBusy(true);
     setError(null);
     try {
@@ -265,13 +276,15 @@ export function HajjOpsGroupDetail({ type, groupId }: { type: 'HAJJ' | 'UMRAH'; 
         method: 'POST',
         body: {
           [key]: groupId,
-          hotelName: roomHotelName,
+          hotelName: roomHotelBookingId ? undefined : roomHotelName,
+          hotelBookingId: roomHotelBookingId || undefined,
           roomType: roomType || undefined,
           roomNumber,
           capacity: Number(roomCapacity) || 2,
         },
       });
       setRoomHotelName('');
+      setRoomHotelBookingId('');
       setRoomType('');
       setRoomNumber('');
       setRoomCapacity('2');
@@ -537,14 +550,40 @@ export function HajjOpsGroupDetail({ type, groupId }: { type: 'HAJJ' | 'UMRAH'; 
 
       <h3 className="mt-6 text-sm font-semibold text-slate-700">Room Allocation</h3>
       {canManage && (
-        <div className="mt-2 grid grid-cols-2 gap-2 rounded-lg border border-slate-200 bg-white p-3 sm:grid-cols-5">
-          <input value={roomHotelName} onChange={(e) => setRoomHotelName(e.target.value)} placeholder="Hotel name" className="rounded-md border border-slate-300 px-2 py-1.5 text-xs" />
-          <input value={roomType} onChange={(e) => setRoomType(e.target.value)} placeholder="Room type (e.g. Quad)" className="rounded-md border border-slate-300 px-2 py-1.5 text-xs" />
-          <input value={roomNumber} onChange={(e) => setRoomNumber(e.target.value)} placeholder="Room number" className="rounded-md border border-slate-300 px-2 py-1.5 text-xs" />
-          <input type="number" min={1} value={roomCapacity} onChange={(e) => setRoomCapacity(e.target.value)} placeholder="Capacity" className="rounded-md border border-slate-300 px-2 py-1.5 text-xs" />
-          <button disabled={busy} onClick={createRoom} className="rounded-md bg-slate-900 px-2 py-1.5 text-xs font-medium text-white disabled:opacity-50">
-            Add room
-          </button>
+        <div className="mt-2 rounded-lg border border-slate-200 bg-white p-3">
+          {linkableHotelBookings.length > 0 && (
+            <label className="mb-2 block text-xs text-slate-500">
+              Link to a real hotel booking (optional — overrides the hotel name below)
+              <select
+                value={roomHotelBookingId}
+                onChange={(e) => setRoomHotelBookingId(e.target.value)}
+                className="mt-1 block w-full rounded-md border border-slate-300 px-2 py-1.5 text-xs"
+              >
+                <option value="">— Free-text hotel name instead —</option>
+                {linkableHotelBookings.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.bookingReference} — {b.hotelName}, {b.city} ({formatDateTime(b.checkInDate)} –{' '}
+                    {formatDateTime(b.checkOutDate)})
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+            <input
+              value={roomHotelBookingId ? linkableHotelBookings.find((b) => b.id === roomHotelBookingId)?.hotelName ?? '' : roomHotelName}
+              onChange={(e) => setRoomHotelName(e.target.value)}
+              disabled={!!roomHotelBookingId}
+              placeholder="Hotel name"
+              className="rounded-md border border-slate-300 px-2 py-1.5 text-xs disabled:bg-slate-50 disabled:text-slate-400"
+            />
+            <input value={roomType} onChange={(e) => setRoomType(e.target.value)} placeholder="Room type (e.g. Quad)" className="rounded-md border border-slate-300 px-2 py-1.5 text-xs" />
+            <input value={roomNumber} onChange={(e) => setRoomNumber(e.target.value)} placeholder="Room number" className="rounded-md border border-slate-300 px-2 py-1.5 text-xs" />
+            <input type="number" min={1} value={roomCapacity} onChange={(e) => setRoomCapacity(e.target.value)} placeholder="Capacity" className="rounded-md border border-slate-300 px-2 py-1.5 text-xs" />
+            <button disabled={busy} onClick={createRoom} className="rounded-md bg-slate-900 px-2 py-1.5 text-xs font-medium text-white disabled:opacity-50">
+              Add room
+            </button>
+          </div>
         </div>
       )}
       <div className="mt-2 space-y-2">
@@ -555,6 +594,14 @@ export function HajjOpsGroupDetail({ type, groupId }: { type: 'HAJJ' | 'UMRAH'; 
               <span className="text-xs font-normal text-slate-500">
                 {room.occupants.length}/{room.capacity} occupied
               </span>
+              {room.hotelBooking && (
+                <span
+                  className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-800"
+                  title={`${room.hotelBooking.city} · ${formatDateTime(room.hotelBooking.checkInDate)} – ${formatDateTime(room.hotelBooking.checkOutDate)}`}
+                >
+                  Linked: {room.hotelBooking.bookingReference}
+                </span>
+              )}
             </p>
             <ul className="mt-1 text-xs text-slate-600">
               {room.occupants.map((o) => {

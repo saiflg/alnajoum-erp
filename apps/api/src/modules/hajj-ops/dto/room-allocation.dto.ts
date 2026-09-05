@@ -10,8 +10,20 @@ export class CreateRoomAllocationDto {
   @IsString()
   umrahGroupId?: string;
 
+  // Required unless hotelBookingId is given — when it is, the service
+  // snapshots hotelName from that real booking instead of trusting
+  // free-text input, so the two never disagree.
+  @IsOptional()
   @IsString()
-  hotelName: string;
+  hotelName?: string;
+
+  // Links this room to a real Phase 5 HotelBooking the ops team made
+  // through the hotel catalog for one of this group's pilgrims — optional,
+  // since most packages still aren't booked through the catalog (see
+  // schema.prisma's RoomAllocation comment).
+  @IsOptional()
+  @IsString()
+  hotelBookingId?: string;
 
   @IsOptional()
   @IsString()

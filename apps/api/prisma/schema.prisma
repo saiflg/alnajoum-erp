@@ -2083,9 +2083,10 @@ model HotelBooking {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  invoice      Invoice?
-  guestRecords HotelBookingGuest[]
-  refunds      HotelRefund[]
+  invoice         Invoice?
+  guestRecords    HotelBookingGuest[]
+  refunds         HotelRefund[]
+  roomAllocations RoomAllocation[]
 
   @@index([customerId])
   @@index([bookedByStaffId])
@@ -3912,7 +3913,18 @@ model RoomAllocation {
   umrahGroupId String?
   umrahGroup   UmrahGroup? @relation(fields: [umrahGroupId], references: [id], onDelete: Cascade)
 
-  hotelName  String
+  // Snapshotted at creation time — always equal to hotelBooking.hotelName
+  // when linked (see RoomAllocationService.create), free text otherwise.
+  // Packages have never been booked through the Phase 5 catalog (see this
+  // file's Phase 8 header comment), so free text stays the default; this
+  // link is what "deeper hotel-catalog integration" means in practice —
+  // an optional, traceable connection to a real, priced, dated booking
+  // when ops actually makes one, not a requirement to always have one.
+  hotelName String
+
+  hotelBookingId String?
+  hotelBooking   HotelBooking? @relation(fields: [hotelBookingId], references: [id], onDelete: SetNull)
+
   roomType   String? // e.g. "Double", "Quad" — free text, matches package.hotel's own convention
   roomNumber String
   capacity   Int     @default(2)

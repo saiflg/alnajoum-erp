@@ -4,9 +4,11 @@ import {
   Delete,
   Get,
   Param,
+  ParseEnumPipe,
   Post,
   Query,
 } from '@nestjs/common';
+import { PilgrimType } from '@prisma/client';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import {
@@ -32,6 +34,16 @@ export class RoomAllocationController {
     @Query('umrahGroupId') umrahGroupId?: string,
   ) {
     return this.service.listForGroup({ hajjGroupId, umrahGroupId });
+  }
+
+  /** Registered before ':id' so "hotel-bookings" is never parsed as a room id. */
+  @Get('hotel-bookings')
+  @RequirePermissions(PERMISSIONS.HAJJ_OPS.GROUP_MANAGE)
+  listLinkableHotelBookings(
+    @Query('type', new ParseEnumPipe(PilgrimType)) type: PilgrimType,
+    @Query('groupId') groupId: string,
+  ) {
+    return this.service.listLinkableHotelBookings(type, groupId);
   }
 
   @Get(':id')

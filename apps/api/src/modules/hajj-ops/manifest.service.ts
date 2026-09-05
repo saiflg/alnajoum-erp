@@ -48,14 +48,18 @@ export class ManifestService {
             where: { id: groupId },
             include: {
               pilgrims: true,
-              roomAllocations: { include: { occupants: true } },
+              roomAllocations: {
+                include: { occupants: true, hotelBooking: true },
+              },
             },
           })
         : await this.prisma.umrahGroup.findUnique({
             where: { id: groupId },
             include: {
               pilgrims: true,
-              roomAllocations: { include: { occupants: true } },
+              roomAllocations: {
+                include: { occupants: true, hotelBooking: true },
+              },
             },
           });
     if (!group) {
@@ -63,9 +67,20 @@ export class ManifestService {
     }
 
     const roomByPilgrim = new Map<string, string>();
+    // Deeper hotel-catalog integration: when the pilgrim's actual assigned
+    // room is linked to a real HotelBooking, that's a more specific fact
+    // than "some hotel booking exists for this customer" — it wins over the
+    // generic HotelBookingGuest match below.
+    const roomHotelReferenceByPilgrim = new Map<string, string>();
     for (const room of group.roomAllocations) {
       for (const occupant of room.occupants) {
         roomByPilgrim.set(occupant.pilgrimId, room.roomNumber);
+        if (room.hotelBooking) {
+          roomHotelReferenceByPilgrim.set(
+            occupant.pilgrimId,
+            `${room.hotelBooking.bookingReference} (${room.hotelBooking.hotelName})`,
+          );
+        }
       }
     }
 
@@ -90,15 +105,17 @@ export class ManifestService {
           },
         }),
       ]);
+      const genericHotelReference = hotelGuest
+        ? `${hotelGuest.booking.bookingReference} (${hotelGuest.booking.hotelName})`
+        : null;
       rows.push({
         name: `${pilgrim.firstName} ${pilgrim.lastName}`,
         passportNumber: pilgrim.passportNumber ?? '—',
         pilgrimCode: pilgrim.pilgrimCode,
         roomNumber: roomByPilgrim.get(pilgrim.id) ?? null,
         flightReference: flightPassenger?.booking.bookingReference ?? null,
-        hotelReference: hotelGuest
-          ? `${hotelGuest.booking.bookingReference} (${hotelGuest.booking.hotelName})`
-          : null,
+        hotelReference:
+          roomHotelReferenceByPilgrim.get(pilgrim.id) ?? genericHotelReference,
         readiness: readiness.finalStatus,
       });
     }

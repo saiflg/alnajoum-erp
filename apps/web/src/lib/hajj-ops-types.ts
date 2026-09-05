@@ -106,13 +106,34 @@ export interface RoomOccupant {
   checkedInAt: string | null;
 }
 
+export interface LinkedHotelBookingSummary {
+  bookingReference: string;
+  city: string;
+  starRating: number;
+  checkInDate: string;
+  checkOutDate: string;
+}
+
 export interface RoomAllocation {
   id: string;
   hajjGroupId: string | null;
   umrahGroupId: string | null;
   hotelName: string;
+  hotelBookingId: string | null;
+  hotelBooking: LinkedHotelBookingSummary | null;
   roomType: string | null;
   roomNumber: string;
   capacity: number;
   occupants: RoomOccupant[];
+}
+
+/** A real Phase 5 hotel booking staff can link a new room to (see /hajj-ops/rooms/hotel-bookings). */
+export interface LinkableHotelBooking {
+  id: string;
+  bookingReference: string;
+  hotelName: string;
+  city: string;
+  checkInDate: string;
+  checkOutDate: string;
+  rooms: number;
 }

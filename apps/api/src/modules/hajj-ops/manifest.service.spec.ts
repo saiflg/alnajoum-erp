@@ -33,7 +33,13 @@ describe('ManifestService (spec #17/#18/#20 — group manifest export)', () => {
         pilgrimCode: null,
       },
     ],
-    roomAllocations: [{ roomNumber: '101', occupants: [{ pilgrimId: 'p1' }] }],
+    roomAllocations: [
+      {
+        roomNumber: '101',
+        occupants: [{ pilgrimId: 'p1' }],
+        hotelBooking: null,
+      },
+    ],
   };
 
   beforeEach(async () => {
@@ -97,6 +103,45 @@ describe('ManifestService (spec #17/#18/#20 — group manifest export)', () => {
     );
     expect(content).toContain('FLT-123');
     expect(content).toContain('HTL-456 (Hilton Makkah)');
+  });
+
+  it("prefers the pilgrim's actual assigned room's linked hotel booking over the generic guest match (deeper hotel-catalog integration)", async () => {
+    prisma.hajjGroup.findUnique.mockResolvedValue({
+      ...group,
+      roomAllocations: [
+        {
+          roomNumber: '208',
+          occupants: [{ pilgrimId: 'p1' }],
+          hotelBooking: {
+            bookingReference: 'HTL-DEMO0003',
+            hotelName: 'Real Grand Hotel',
+          },
+        },
+      ],
+    });
+    // A different, generic HotelBookingGuest match exists too — the room's
+    // own linked booking must win since it's the pilgrim's actual stay.
+    prisma.hotelBookingGuest.findFirst.mockResolvedValue({
+      booking: {
+        bookingReference: 'HTL-UNRELATED',
+        hotelName: 'Some Other Hotel',
+      },
+    });
+
+    const { content } = await service.renderCsv(PilgrimType.HAJJ, 'group-1');
+    const aminaRow = content
+      .split('\n')
+      .find((line) => line.startsWith('Amina Yusuf'));
+    const bilalRow = content
+      .split('\n')
+      .find((line) => line.startsWith('Bilal Yusuf'));
+
+    // p1 (Amina) is in the linked room — its booking wins over her own
+    // generic guest match.
+    expect(aminaRow).toContain('HTL-DEMO0003 (Real Grand Hotel)');
+    // p2 (Bilal) has no room assignment at all, so he correctly falls back
+    // to the generic HotelBookingGuest match instead.
+    expect(bilalRow).toContain('HTL-UNRELATED (Some Other Hotel)');
   });
 
   it('never renders a synced readiness field — always calls ReadinessService.compute per pilgrim', async () => {
