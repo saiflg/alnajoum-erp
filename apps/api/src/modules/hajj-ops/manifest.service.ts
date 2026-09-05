@@ -9,6 +9,8 @@ interface ManifestRow {
   passportNumber: string;
   pilgrimCode: string | null;
   roomNumber: string | null;
+  flightReference: string | null;
+  hotelReference: string | null;
   readiness: string;
 }
 
@@ -18,6 +20,13 @@ interface ManifestRow {
  * pattern (a streamed PDFDocument piped straight into the HTTP response,
  * no intermediate file) rather than a second PDF pipeline, and CSV instead
  * of adding a new xlsx dependency — Excel opens CSV natively.
+ *
+ * The flight/hotel booking reference columns are resolved the same way
+ * ReadinessService checks flightAssigned/hotelAssigned — by matching each
+ * pilgrim's customerId/familyMemberId against FlightBookingPassenger/
+ * HotelBookingGuest — rather than a separate "flight manifest" or "hotel
+ * manifest" subsystem; a group's manifest already carries everything an
+ * ops or hotel-front-desk read needs in one export.
  *
  * Contains passport numbers, so every route this backs is gated behind
  * HAJJ_OPS.MANIFEST_VIEW at the controller.
@@ -62,15 +71,34 @@ export class ManifestService {
 
     const rows: ManifestRow[] = [];
     for (const pilgrim of group.pilgrims) {
-      const readiness = await this.readinessService.compute(
-        groupType,
-        pilgrim.id,
-      );
+      const [readiness, flightPassenger, hotelGuest] = await Promise.all([
+        this.readinessService.compute(groupType, pilgrim.id),
+        this.prisma.flightBookingPassenger.findFirst({
+          where: pilgrim.customerId
+            ? { customerId: pilgrim.customerId }
+            : { familyMemberId: pilgrim.familyMemberId! },
+          orderBy: { id: 'desc' },
+          select: { booking: { select: { bookingReference: true } } },
+        }),
+        this.prisma.hotelBookingGuest.findFirst({
+          where: pilgrim.customerId
+            ? { customerId: pilgrim.customerId }
+            : { familyMemberId: pilgrim.familyMemberId! },
+          orderBy: { id: 'desc' },
+          select: {
+            booking: { select: { bookingReference: true, hotelName: true } },
+          },
+        }),
+      ]);
       rows.push({
         name: `${pilgrim.firstName} ${pilgrim.lastName}`,
         passportNumber: pilgrim.passportNumber ?? '—',
         pilgrimCode: pilgrim.pilgrimCode,
         roomNumber: roomByPilgrim.get(pilgrim.id) ?? null,
+        flightReference: flightPassenger?.booking.bookingReference ?? null,
+        hotelReference: hotelGuest
+          ? `${hotelGuest.booking.bookingReference} (${hotelGuest.booking.hotelName})`
+          : null,
         readiness: readiness.finalStatus,
       });
     }
@@ -86,7 +114,7 @@ export class ManifestService {
 
     const doc = new PDFDocument({
       size: 'A4',
-      margin: 40,
+      margin: 36,
       layout: 'landscape',
     });
 
@@ -99,26 +127,28 @@ export class ManifestService {
       .text(`${groupName} (${groupNumber})`)
       .moveDown(1);
 
-    const colX = [40, 260, 420, 560, 680];
+    const colX = [36, 220, 350, 460, 560, 670];
     const headerY = doc.y;
-    doc.fontSize(9).fillColor('#0f172a');
-    doc.text('Name', colX[0], headerY, { width: 200 });
-    doc.text('Passport Number', colX[1], headerY, { width: 140 });
-    doc.text('QR Code', colX[2], headerY, { width: 120 });
-    doc.text('Room', colX[3], headerY, { width: 100 });
-    doc.text('Readiness', colX[4], headerY, { width: 100 });
+    doc.fontSize(8).fillColor('#0f172a');
+    doc.text('Name', colX[0], headerY, { width: 180 });
+    doc.text('Passport', colX[1], headerY, { width: 125 });
+    doc.text('QR Code', colX[2], headerY, { width: 105 });
+    doc.text('Room', colX[3], headerY, { width: 95 });
+    doc.text('Flight Ref', colX[4], headerY, { width: 105 });
+    doc.text('Hotel Ref', colX[5], headerY, { width: 130 });
     doc.moveDown(0.5);
-    doc.moveTo(40, doc.y).lineTo(760, doc.y).strokeColor('#e2e8f0').stroke();
+    doc.moveTo(36, doc.y).lineTo(800, doc.y).strokeColor('#e2e8f0').stroke();
     doc.moveDown(0.3);
 
-    doc.fontSize(9).fillColor('#334155');
+    doc.fontSize(8).fillColor('#334155');
     for (const row of rows) {
       const y = doc.y;
-      doc.text(row.name, colX[0], y, { width: 200 });
-      doc.text(row.passportNumber, colX[1], y, { width: 140 });
-      doc.text(row.pilgrimCode ?? 'Not generated', colX[2], y, { width: 120 });
-      doc.text(row.roomNumber ?? 'Unassigned', colX[3], y, { width: 100 });
-      doc.text(row.readiness, colX[4], y, { width: 100 });
+      doc.text(row.name, colX[0], y, { width: 180 });
+      doc.text(row.passportNumber, colX[1], y, { width: 125 });
+      doc.text(row.pilgrimCode ?? 'Not generated', colX[2], y, { width: 105 });
+      doc.text(row.roomNumber ?? 'Unassigned', colX[3], y, { width: 95 });
+      doc.text(row.flightReference ?? '—', colX[4], y, { width: 105 });
+      doc.text(row.hotelReference ?? '—', colX[5], y, { width: 130 });
       doc.moveDown(0.6);
     }
 
@@ -126,6 +156,11 @@ export class ManifestService {
       .moveDown(1)
       .fontSize(8)
       .fillColor('#94a3b8')
+      .text(
+        `Also shown: readiness — ${rows.map((r) => `${r.name}: ${r.readiness}`).join(', ')}.`,
+        { width: 760 },
+      )
+      .moveDown(0.5)
       .text(
         `Generated ${new Date().toISOString().slice(0, 10)} — ${rows.length} pilgrim(s). Internal use only.`,
       );
@@ -141,13 +176,23 @@ export class ManifestService {
       /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 
     const lines = [
-      ['Name', 'Passport Number', 'QR Code', 'Room', 'Readiness'].join(','),
+      [
+        'Name',
+        'Passport Number',
+        'QR Code',
+        'Room',
+        'Flight Reference',
+        'Hotel Reference',
+        'Readiness',
+      ].join(','),
       ...rows.map((r) =>
         [
           r.name,
           r.passportNumber,
           r.pilgrimCode ?? 'Not generated',
           r.roomNumber ?? 'Unassigned',
+          r.flightReference ?? 'Not booked',
+          r.hotelReference ?? 'Not booked',
           r.readiness,
         ]
           .map(escape)
