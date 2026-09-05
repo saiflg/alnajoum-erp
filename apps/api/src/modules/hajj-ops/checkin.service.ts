@@ -4,13 +4,14 @@ import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { PilgrimLookupService } from './pilgrim-lookup.service';
 
-/**
- * Spec #33/#34 — QR generation + QR-based check-in. The QR payload is just
- * HajjRegistrationPilgrim/UmrahRegistrationPilgrim.pilgrimCode, an opaque
- * internal identifier (see PilgrimLookupService.ensurePilgrimCode) — it
- * never encodes passport, financial, or other sensitive data, so a lost or
- * photographed QR code reveals nothing on its own.
- */
+// Spec #14's offline check-in outbox replays a queued scan once connectivity
+// returns; if the original request actually landed but the client never saw
+// the response (connection dropped right as it completed), the replay must
+// not create a second PilgrimCheckIn row. A same (pilgrim, event) check-in
+// within this window is treated as the same physical event, not a new one —
+// no client-supplied idempotency key needed.
+const DEDUPE_WINDOW_MINUTES = 5;
+
 @Injectable()
 export class CheckInService {
   constructor(
@@ -44,6 +45,20 @@ export class CheckInService {
     location?: string,
   ) {
     await this.pilgrimLookup.getPilgrim(pilgrimType, pilgrimId); // 404s if unknown
+
+    const existing = await this.prisma.pilgrimCheckIn.findFirst({
+      where: {
+        pilgrimType,
+        pilgrimId,
+        event,
+        createdAt: {
+          gte: new Date(Date.now() - DEDUPE_WINDOW_MINUTES * 60_000),
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (existing) return existing;
+
     const checkIn = await this.prisma.pilgrimCheckIn.create({
       data: { pilgrimType, pilgrimId, event, staffId, location },
     });

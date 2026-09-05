@@ -29,6 +29,7 @@ export const ADMIN_NAV: NavLink[] = [
   { href: '/admin/hajj-groups', label: 'Hajj Groups', icon: 'hajj' },
   { href: '/admin/umrah-groups', label: 'Umrah Groups', icon: 'umrah' },
   { href: '/admin/hajj-ops-fleet', label: 'Fleet & Transport', icon: 'car' },
+  { href: '/admin/hajj-ops-checkin', label: 'Field Check-In', icon: 'shield' },
   { href: '/admin/invoices', label: 'Invoices', icon: 'invoice' },
   { href: '/admin/manual-payments', label: 'Manual Payments', icon: 'payment' },
   { href: '/admin/wallets', label: 'Wallets', icon: 'wallet' },

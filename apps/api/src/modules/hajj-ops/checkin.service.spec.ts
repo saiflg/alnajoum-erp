@@ -17,7 +17,11 @@ describe('CheckInService', () => {
 
   beforeEach(async () => {
     prisma = {
-      pilgrimCheckIn: { create: jest.fn(), findMany: jest.fn() },
+      pilgrimCheckIn: {
+        create: jest.fn(),
+        findMany: jest.fn(),
+        findFirst: jest.fn().mockResolvedValue(null),
+      },
     };
     pilgrimLookup = {
       getPilgrim: jest.fn().mockResolvedValue({ id: 'pilgrim-1' }),
@@ -104,6 +108,63 @@ describe('CheckInService', () => {
         ),
       ).rejects.toThrow(NotFoundException);
       expect(prisma.pilgrimCheckIn.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('recordCheckIn dedupe (offline outbox replay safety)', () => {
+    it('returns the existing row instead of creating a duplicate when the same (pilgrim, event) was recorded within the last 5 minutes', async () => {
+      const existing = { id: 'checkin-existing', createdAt: new Date() };
+      prisma.pilgrimCheckIn.findFirst.mockResolvedValue(existing);
+
+      const result = await service.recordCheckIn(
+        PilgrimType.HAJJ,
+        'pilgrim-1',
+        PilgrimCheckInEvent.GROUP_CHECK_IN,
+        'staff-1',
+      );
+
+      expect(result).toBe(existing);
+      expect(prisma.pilgrimCheckIn.create).not.toHaveBeenCalled();
+    });
+
+    it('creates a new row when no recent (pilgrim, event) check-in exists', async () => {
+      prisma.pilgrimCheckIn.findFirst.mockResolvedValue(null);
+      prisma.pilgrimCheckIn.create.mockResolvedValue({ id: 'checkin-new' });
+
+      const result = await service.recordCheckIn(
+        PilgrimType.HAJJ,
+        'pilgrim-1',
+        PilgrimCheckInEvent.GROUP_CHECK_IN,
+        'staff-1',
+      );
+
+      expect(prisma.pilgrimCheckIn.create).toHaveBeenCalled();
+      expect(result).toEqual({ id: 'checkin-new' });
+    });
+
+    it('only dedupes against the same event type — a different event for the same pilgrim still records', async () => {
+      // findFirst is scoped by event in the where clause; a mock that always
+      // returns null here (as if the DB found no AIRPORT row while a
+      // GROUP_CHECK_IN row exists) proves the query includes `event`, not
+      // just `pilgrimId`.
+      prisma.pilgrimCheckIn.findFirst.mockResolvedValue(null);
+      prisma.pilgrimCheckIn.create.mockResolvedValue({ id: 'checkin-airport' });
+
+      await service.recordCheckIn(
+        PilgrimType.HAJJ,
+        'pilgrim-1',
+        PilgrimCheckInEvent.AIRPORT,
+        'staff-1',
+      );
+
+      expect(prisma.pilgrimCheckIn.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            event: PilgrimCheckInEvent.AIRPORT,
+          }),
+        }),
+      );
+      expect(prisma.pilgrimCheckIn.create).toHaveBeenCalled();
     });
   });
 });

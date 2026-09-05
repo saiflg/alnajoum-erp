@@ -12,6 +12,7 @@ import type {
   RoomAllocation,
   TravelGroupStatus,
 } from '@/lib/hajj-ops-types';
+import { cacheGroupProjection, getCachedGroupProjection, type CachedGroupProjection } from '@/lib/offline-cache';
 
 const STATUSES: TravelGroupStatus[] = [
   'PLANNING',
@@ -60,6 +61,7 @@ export function HajjOpsGroupDetail({ type, groupId }: { type: 'HAJJ' | 'UMRAH'; 
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [offlineData, setOfflineData] = useState<CachedGroupProjection | null>(null);
 
   const [overridingId, setOverridingId] = useState<string | null>(null);
   const [overrideStatus, setOverrideStatus] = useState<ReadinessStatus>('AMBER');
@@ -70,25 +72,92 @@ export function HajjOpsGroupDetail({ type, groupId }: { type: 'HAJJ' | 'UMRAH'; 
   const [roomNumber, setRoomNumber] = useState('');
   const [roomCapacity, setRoomCapacity] = useState('2');
 
-  function load() {
-    apiRequest<HajjOpsGroup>(`${basePath}/${groupId}`)
-      .then((g) => {
-        setGroup(g);
-        g.pilgrims.forEach((p) => {
-          apiRequest<PilgrimReadiness>(`/hajj-ops/readiness/${type}/${p.id}`)
-            .then((r) => setReadiness((prev) => ({ ...prev, [p.id]: r })))
-            .catch(() => undefined);
-        });
-      })
-      .catch((err) => setError(err instanceof ApiError ? err.message : 'Failed to load group'));
-
-    const roomParam = type === 'HAJJ' ? 'hajjGroupId' : 'umrahGroupId';
-    apiRequest<RoomAllocation[]>(`/hajj-ops/rooms?${roomParam}=${groupId}`)
-      .then(setRooms)
-      .catch(() => undefined);
+  async function loadOfflineFallback() {
+    if (!user) return;
+    const cached = await getCachedGroupProjection(user.id, type, groupId);
+    setOfflineData(cached);
+    if (!cached) {
+      setError('This group has not been viewed on this device before, so no offline copy is available.');
+    }
   }
 
-  useEffect(load, [groupId, type, basePath]);
+  function load() {
+    setOfflineData(null);
+    const roomParam = type === 'HAJJ' ? 'hajjGroupId' : 'umrahGroupId';
+
+    Promise.all([
+      apiRequest<HajjOpsGroup>(`${basePath}/${groupId}`),
+      apiRequest<RoomAllocation[]>(`/hajj-ops/rooms?${roomParam}=${groupId}`),
+    ])
+      .then(async ([g, roomList]) => {
+        setGroup(g);
+        setRooms(roomList);
+
+        const roomByPilgrim = new Map<string, string>();
+        for (const room of roomList) {
+          for (const occupant of room.occupants) roomByPilgrim.set(occupant.pilgrimId, room.roomNumber);
+        }
+
+        const readinessEntries = await Promise.all(
+          g.pilgrims.map(async (p) => {
+            try {
+              const r = await apiRequest<PilgrimReadiness>(`/hajj-ops/readiness/${type}/${p.id}`);
+              setReadiness((prev) => ({ ...prev, [p.id]: r }));
+              return [p.id, r] as const;
+            } catch {
+              return [p.id, null] as const;
+            }
+          }),
+        );
+
+        // Spec #14 — cache only the allow-listed, low-sensitivity projection
+        // (never passport numbers, amounts, or override reason text) for
+        // offline viewing later; this is a nicety, so a failure here (e.g.
+        // IndexedDB unavailable) must never surface to the user.
+        if (user) {
+          const readinessMap = new Map(readinessEntries);
+          cacheGroupProjection({
+            identityId: user.id,
+            type,
+            groupId,
+            groupNumber: g.groupNumber,
+            name: g.name,
+            status: g.status,
+            departureDate: g.departureDate,
+            pilgrims: g.pilgrims.map((p) => ({
+              id: p.id,
+              firstName: p.firstName,
+              lastName: p.lastName,
+              // Not fetched here — the group roster doesn't need every
+              // pilgrim's QR code, and generating one is a mutation
+              // (ensurePilgrimCode creates it on first read). The field
+              // check-in page caches it separately, scoped to the pilgrim
+              // actually being scanned.
+              pilgrimCode: null,
+              roomNumber: roomByPilgrim.get(p.id) ?? null,
+              readinessStatus: readinessMap.get(p.id)?.finalStatus ?? null,
+            })),
+          }).catch(() => undefined);
+        }
+      })
+      .catch((err) => {
+        if (err instanceof ApiError) {
+          setError(err.message);
+        } else {
+          // Not an HTTP error — most likely offline/unreachable. Fall back
+          // to whatever was cached from the last successful view instead of
+          // just showing an error.
+          loadOfflineFallback();
+        }
+      });
+  }
+
+  // Same "check auth/load on mount" idiom as AuthProvider's own effect
+  // (see its comment) — `load` resets offline-fallback state synchronously
+  // before re-fetching, and calls `loadOfflineFallback` on a genuine
+  // network failure; both are intentional, not derived-state anti-patterns.
+  // eslint-disable-next-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps
+  useEffect(load, [groupId, type, basePath, user]);
 
   useEffect(() => {
     if (!group?.packageId) return;
@@ -233,6 +302,50 @@ export function HajjOpsGroupDetail({ type, groupId }: { type: 'HAJJ' | 'UMRAH'; 
   }
 
   if (!group) {
+    if (offlineData) {
+      return (
+        <div>
+          <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+            <strong>Offline</strong> — showing a cached copy of this roster from{' '}
+            {new Date(offlineData.cachedAt).toLocaleString()}. Reconnect to manage the group, override
+            readiness, or check pilgrims in.
+          </div>
+          <div className="mt-3 rounded-lg border border-slate-200 bg-white p-4">
+            <p className="text-lg font-semibold text-slate-900">
+              {offlineData.name} <span className="ml-2 text-xs font-normal text-slate-500">{offlineData.groupNumber}</span>
+            </p>
+            <p className="text-sm text-slate-500">
+              {offlineData.status.replace(/_/g, ' ')}
+              {offlineData.departureDate ? ` · Departs ${formatDateTime(offlineData.departureDate)}` : ''}
+            </p>
+          </div>
+          <div className="mt-3 overflow-x-auto rounded-lg border border-slate-200 bg-white">
+            <table className="min-w-full divide-y divide-slate-200 text-xs">
+              <thead className="bg-slate-50">
+                <tr>
+                  <th className="px-3 py-2 text-left font-medium text-slate-600">Name</th>
+                  <th className="px-3 py-2 text-left font-medium text-slate-600">Room</th>
+                  <th className="px-3 py-2 text-left font-medium text-slate-600">Readiness</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {offlineData.pilgrims.map((p) => (
+                  <tr key={p.id}>
+                    <td className="px-3 py-2 font-medium text-slate-800">
+                      {p.firstName} {p.lastName}
+                    </td>
+                    <td className="px-3 py-2 text-slate-600">{p.roomNumber ?? 'Unassigned'}</td>
+                    <td className="px-3 py-2">
+                      {p.readinessStatus ? <ReadinessBadge status={p.readinessStatus} /> : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      );
+    }
     return <p className="text-sm text-slate-500">{error ?? 'Loading…'}</p>;
   }
 

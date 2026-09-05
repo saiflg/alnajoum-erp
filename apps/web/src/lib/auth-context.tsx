@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { apiRequest, ApiError } from './api';
+import { clearOfflineCache } from './offline-cache';
 import { CurrentUser } from './types';
 
 interface RegisterInput {
@@ -81,8 +82,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(async () => {
     await apiRequest('/auth/logout', { method: 'POST', retryOn401: false }).catch(() => undefined);
+    // Phase 8 §14: a signed-out device keeps no cached roster or pending
+    // offline check-ins for this identity, alongside the normal cookie
+    // invalidation above.
+    if (user) await clearOfflineCache(user.id);
     setUser(null);
-  }, []);
+  }, [user]);
 
   return (
     <AuthContext.Provider value={{ user, loading, login, register, logout, refreshUser }}>
