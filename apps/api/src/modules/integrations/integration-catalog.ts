@@ -221,6 +221,35 @@ export const INTEGRATION_CATALOG: Record<
       ],
     },
   ],
+  VISA: [
+    {
+      provider: 'manual',
+      label:
+        'Manual / Offline (default — staff coordinate with embassy/agent directly)',
+      fields: [
+        {
+          key: 'refundAgencyFeePercent',
+          label: 'Agency Cancellation Fee % (deducted from every visa refund)',
+          secret: false,
+          placeholder: '5',
+        },
+      ],
+      implemented: true,
+    },
+    {
+      provider: 'mock',
+      label: 'Mock (built-in, simulates a visa-center API for demo/testing)',
+      fields: [
+        {
+          key: 'refundAgencyFeePercent',
+          label: 'Agency Cancellation Fee % (deducted from every visa refund)',
+          secret: false,
+          placeholder: '5',
+        },
+      ],
+      implemented: true,
+    },
+  ],
   NOTIFICATION: [
     {
       provider: 'mock',

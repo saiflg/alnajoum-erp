@@ -166,6 +166,10 @@ enum DocumentType {
   FLIGHT_ITINERARY
   GUARANTOR_ID
   GUARANTOR_DOCUMENT
+  // Phase 9 — configurable country visa rules can require proof of travel
+  // insurance; appended for the same "never reorder/remove" reason as the
+  // block above.
+  TRAVEL_INSURANCE
 }
 
 model CustomerDocument {
@@ -311,14 +315,20 @@ model Staff {
   reviewedVisaDocuments    VisaDocument[]
   verifiedGuarantors       Guarantor[]
   assignedVisaApplications VisaApplication[]         @relation("AssignedVisaApplications")
-  ticketedFlightBookings   FlightBooking[]           @relation("TicketedFlightBookings")
-  requestedFlightRefunds   FlightRefund[]            @relation("RequestedFlightRefunds")
-  requestedFlightReissues  FlightReissue[]           @relation("RequestedFlightReissues")
-  flightPricingRules       FlightPricingRule[]
-  createdGroupBookings     FlightGroupBooking[]      @relation("CreatedGroupBookings")
-  requestedHotelRefunds    HotelRefund[]             @relation("RequestedHotelRefunds")
-  completedHotelBookings   HotelBooking[]            @relation("CompletedHotelBookings")
-  createdTravelPackages    TravelPackage[]           @relation("CreatedTravelPackages")
+
+  // Phase 9 — visa & immigration operations.
+  submittedVisaApplications    VisaSubmission[]
+  approvedChecklistExceptions  DocumentChecklistException[]
+  acknowledgedProviderMessages VisaProviderMessage[]
+  requestedVisaRefunds         VisaRefund[]
+  ticketedFlightBookings       FlightBooking[]              @relation("TicketedFlightBookings")
+  requestedFlightRefunds       FlightRefund[]               @relation("RequestedFlightRefunds")
+  requestedFlightReissues      FlightReissue[]              @relation("RequestedFlightReissues")
+  flightPricingRules           FlightPricingRule[]
+  createdGroupBookings         FlightGroupBooking[]         @relation("CreatedGroupBookings")
+  requestedHotelRefunds        HotelRefund[]                @relation("RequestedHotelRefunds")
+  completedHotelBookings       HotelBooking[]               @relation("CompletedHotelBookings")
+  createdTravelPackages        TravelPackage[]              @relation("CreatedTravelPackages")
 
   // Phase 6 — finance.
   createdExpenses            Expense[]           @relation("CreatedExpenses")
@@ -1744,6 +1754,7 @@ enum IntegrationCategory {
   PAYMENT
   NOTIFICATION
   HOTEL
+  VISA
 }
 
 model IntegrationCredential {
@@ -2202,6 +2213,11 @@ enum VisaApplicationStatus {
   PROCESSING
   ADDITIONAL_INFO_REQUIRED
   COMPLETED
+  // Phase 9 — an issued visa whose expiryDate (see VisaApplication) has
+  // passed; set by the expiry-tracking sweep (VisaOpsAutomationService),
+  // never by staff directly. Appended, same reasoning as every other enum
+  // extension in this file.
+  EXPIRED
 }
 
 enum VisaServiceStatus {
@@ -2473,12 +2489,36 @@ model VisaApplication {
   isOfflineEntry Boolean @default(false)
   offlineReason  String?
 
+  // --- Phase 9 additions — all nullable/defaulted so every existing row
+  // stays valid without a backfill. ---
+
+  // Snapshotted from CountryVisaRule at submission time (same "never let a
+  // later config change retroactively alter an already-submitted
+  // application" principle as companyCostSnapshot above) — the number of
+  // days used to compute slaDueAt below.
+  slaTargetDays Int?
+  // Set once the application enters UNDER_REVIEW (see VisaApplicationsService
+  // / VisaSlaService) — "expected completion", same shape as
+  // SupportTicket.slaResponseDueAt from Phase 7.
+  slaDueAt      DateTime?
+
+  // Spec #26 — set once a visa is actually issued (VisaSubmissionsService
+  // records these from the provider's/embassy's response, never guessed).
+  issueDate        DateTime?
+  expiryDate       DateTime?
+  entryValidity    String? // e.g. "Single entry", "Multiple entry"
+  stayDurationDays Int?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  invoice   Invoice?
-  notesLog  VisaApplicationNote[]
-  documents VisaDocument[]
+  invoice             Invoice?
+  notesLog            VisaApplicationNote[]
+  documents           VisaDocument[]
+  submissions         VisaSubmission[]
+  providerMessages    VisaProviderMessage[]
+  checklistExceptions DocumentChecklistException[]
+  refund              VisaRefund?
   // Linked to StaffIncentive by sourceType "VISA_APPLICATION" + sourceId —
   // a polymorphic reference (not a Prisma relation) matching how
   // HAJJ_REGISTRATION/UMRAH_REGISTRATION incentives already work; see
@@ -2490,6 +2530,194 @@ model VisaApplication {
   @@index([visaServiceId])
   @@index([assignedStaffId])
   @@map("visa_applications")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 9 — enterprise visa & immigration operations, built on top of
+// everything above rather than beside it:
+//   - A "visa type" stays whatever free-text string VisaService.visaType
+//     already accepts — CountryVisaRule keys off the same string, no new
+//     enum, no hard-coded per-country logic anywhere in code.
+//   - The document checklist (spec #9) is computed live from
+//     CountryVisaRule + the existing CustomerDocument/FamilyMemberDocument/
+//     VisaDocument tables — never a stored, driftable copy — same
+//     discipline as Customer360Service.segments() in Phase 7.
+//   - Guarantor, payment, and incentive logic are untouched; Phase 9 only
+//     adds the provider-submission and refund pieces that were genuinely
+//     missing, reusing FinancePostingService.postRefund/
+//     cancelIncentivesForSource exactly as HotelRefundsService does.
+// ---------------------------------------------------------------------------
+
+/**
+ * Per-country (optionally per-visa-type) configurable requirements —
+ * spec #4. A row with visaType = "" (sentinel, not null) is that country's
+ * fallback/default rule; a row with visaType set overrides it for that
+ * specific type. CountryVisaRulesService.getApplicableRule() picks the more
+ * specific one. Deliberately not nullable: Postgres treats every NULL as
+ * distinct from every other NULL, so a nullable visaType would let staff
+ * create multiple "default" rows per country despite the @@unique below.
+ */
+model CountryVisaRule {
+  id       String @id @default(cuid())
+  country  String
+  // Matches VisaApplication.visaType's actual stored convention — always
+  // one of the VisaType enum's literal values (e.g. "PILGRIMAGE",
+  // "TOURIST"), since VisaService.submit() writes dto.visaType (the enum)
+  // straight into that free-text column. NOT VisaService (the catalog
+  // model)'s own separate, differently-cased visaType convention (e.g.
+  // "Pilgrimage") — getApplicableRule() is looked up against the
+  // application, so this must key on the same values it holds.
+  visaType String @default("") // "" = applies to every type for this country
+
+  requiredDocumentTypes DocumentType[]
+  optionalDocumentTypes DocumentType[]
+
+  minPassportValidityMonths Int? // spec #11 — never a hard-coded universal rule
+  photoRequirements         String?
+  guarantorRequired         Boolean @default(false)
+
+  processingTimeDays  Int? // default SLA target (spec #30) unless a VisaService overrides it
+  appointmentRequired Boolean @default(false)
+  insuranceRequired   Boolean @default(false)
+
+  feeAmount   Int? // informational default — VisaService pricing is still what's actually charged
+  feeCurrency String?
+
+  restrictions String?
+  notes        String?
+  isActive     Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([country, visaType])
+  @@index([country])
+  @@map("country_visa_rules")
+}
+
+/**
+ * Spec #9's "allow authorized administrators to configure exceptions" —
+ * an audited, reasoned override letting a specific application submit
+ * despite a missing mandatory document, without weakening the checklist
+ * rule for every other application of the same type.
+ */
+model DocumentChecklistException {
+  id            String          @id @default(cuid())
+  applicationId String
+  application   VisaApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  documentType DocumentType
+  reason       String
+
+  approvedByStaffId String
+  approvedByStaff   Staff  @relation(fields: [approvedByStaffId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+
+  @@unique([applicationId, documentType])
+  @@index([applicationId])
+  @@map("document_checklist_exceptions")
+}
+
+enum VisaProviderName {
+  MANUAL // staff record what an embassy/agent/visa center told them — no API
+  MOCK // deterministic simulated provider for localhost/demo/tests
+}
+
+/**
+ * Spec #14 — the actual "submitted to the provider" event, distinct from a
+ * staff member merely clicking a status dropdown. One row per submission
+ * attempt (a resubmission after ADDITIONAL_INFO_REQUIRED creates a new
+ * row, preserving history rather than overwriting it).
+ */
+model VisaSubmission {
+  id            String          @id @default(cuid())
+  applicationId String
+  application   VisaApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  submittedByStaffId String
+  submittedByStaff   Staff  @relation(fields: [submittedByStaffId], references: [id], onDelete: Restrict)
+
+  provider          VisaProviderName
+  externalReference String?
+  // The provider's own status vocabulary, kept verbatim and separate from
+  // VisaApplication.status — spec #16: "do not blindly overwrite internal
+  // statuses... record provider status separately where necessary".
+  providerStatus    String?
+  providerMessage   String?
+
+  documentsSubmitted Json? // snapshot of which VisaDocument ids/types went out, for the record
+  submissionNotes    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([applicationId])
+  @@map("visa_submissions")
+}
+
+enum ProviderMessageSeverity {
+  INFO
+  WARNING
+  ACTION_REQUIRED
+}
+
+/**
+ * Spec #17 — provider/visa-center messages surfaced to authorized staff, independent of the raw providerStatus string on VisaSubmission.
+ */
+model VisaProviderMessage {
+  id            String          @id @default(cuid())
+  applicationId String
+  application   VisaApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  message  String
+  severity ProviderMessageSeverity @default(INFO)
+
+  acknowledgedByStaffId String?
+  acknowledgedByStaff   Staff?    @relation(fields: [acknowledgedByStaffId], references: [id], onDelete: SetNull)
+  acknowledgedAt        DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([applicationId])
+  @@map("visa_provider_messages")
+}
+
+enum VisaRefundStatus {
+  REQUESTED
+  COMPLETED
+  FAILED
+  REJECTED
+}
+
+/**
+ * Spec #23 — mirrors HotelRefund's exact shape and calculation
+ * (refundAmount = amountPaid − supplierPenalty − agencyFee); posts through
+ * the same FinancePostingService.postRefund/cancelIncentivesForSource used
+ * by hotel/flight refunds rather than a new finance code path.
+ */
+model VisaRefund {
+  id            String          @id @default(cuid())
+  applicationId String          @unique
+  application   VisaApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  requestedByStaffId  String?
+  requestedByStaff    Staff?  @relation(fields: [requestedByStaffId], references: [id], onDelete: SetNull)
+  requestedByCustomer Boolean @default(false)
+
+  amountPaid      Int
+  supplierPenalty Int    @default(0)
+  agencyFee       Int    @default(0)
+  refundAmount    Int
+  currency        String
+
+  status VisaRefundStatus @default(REQUESTED)
+  reason String?
+
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  @@map("visa_refunds")
 }
 
 // ---------------------------------------------------------------------------

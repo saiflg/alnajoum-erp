@@ -235,4 +235,66 @@ export class VisaReportsService {
       netProfit: totalMargin - totalIncentives,
     };
   }
+
+  /**
+   * Spec #1's Visa Operations Center — the full per-status breakdown
+   * (Total/New/Draft/Documents Pending/... /Expired), returned as a
+   * complete count for every VisaApplicationStatus value rather than a
+   * curated subset, so no status is ever silently dropped from the
+   * dashboard as the workflow evolves. Broader access than kpis()/
+   * profitReport() (gated VISA.VIEW, not VISA.INCENTIVE_VIEW) since this
+   * carries no cost/margin figures — Visa Manager and Staff roles (spec
+   * #28) can see it too, not just Super Admin/Finance.
+   */
+  async statusBreakdown(filters: {
+    from?: Date;
+    to?: Date;
+    branchId?: string;
+    staffId?: string;
+    country?: string;
+    visaType?: VisaType;
+    customerId?: string;
+    status?: VisaApplicationStatus;
+  }): Promise<{
+    total: number;
+    byStatus: Record<VisaApplicationStatus, number>;
+  }> {
+    const applications = await this.prisma.visaApplication.findMany({
+      where: {
+        createdAt: { gte: filters.from, lte: filters.to },
+        destinationCountry: filters.country,
+        visaType: filters.visaType,
+        customerId: filters.customerId,
+        status: filters.status,
+        OR: filters.staffId
+          ? [
+              { appliedByStaffId: filters.staffId },
+              { assignedStaffId: filters.staffId },
+            ]
+          : undefined,
+      },
+      select: {
+        status: true,
+        appliedByStaff: { select: { branchId: true } },
+        assignedStaff: { select: { branchId: true } },
+      },
+    });
+
+    const filtered = filters.branchId
+      ? applications.filter(
+          (a) =>
+            a.appliedByStaff?.branchId === filters.branchId ||
+            a.assignedStaff?.branchId === filters.branchId,
+        )
+      : applications;
+
+    const byStatus = Object.fromEntries(
+      Object.values(VisaApplicationStatus).map((status) => [status, 0]),
+    ) as Record<VisaApplicationStatus, number>;
+    for (const application of filtered) {
+      byStatus[application.status]++;
+    }
+
+    return { total: filtered.length, byStatus };
+  }
 }

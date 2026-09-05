@@ -35,12 +35,19 @@ export const VISA_PROCESSING_FEES: Record<VisaType, number> = {
   OTHER: 25000,
 };
 
-/** Statuses that no further staff action can move out of. */
-const TERMINAL_STATUSES: VisaApplicationStatus[] = [
+/**
+ * Statuses that no further staff action (or provider sync — see
+ * VisaSubmissionsService) can move out of. Exported so every module that
+ * needs to check "is this application done" — VisaSubmissionsService's
+ * status-sync guard, the future expiry sweep — shares this single list
+ * rather than each keeping its own drift-prone copy.
+ */
+export const TERMINAL_STATUSES: VisaApplicationStatus[] = [
   VisaApplicationStatus.REJECTED,
   VisaApplicationStatus.ISSUED,
   VisaApplicationStatus.CANCELLED,
   VisaApplicationStatus.COMPLETED,
+  VisaApplicationStatus.EXPIRED,
 ];
 
 interface OfflineEntryOptions {

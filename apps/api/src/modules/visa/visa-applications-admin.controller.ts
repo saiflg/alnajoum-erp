@@ -16,7 +16,9 @@ import { UsersService } from '../users/users.service';
 import { AddVisaNoteDto } from './dto/add-visa-note.dto';
 import { AssignVisaApplicationDto } from './dto/assign-visa-application.dto';
 import { SubmitVisaApplicationForDto } from './dto/record-offline-visa.dto';
+import { RequestVisaRefundDto } from './dto/request-visa-refund.dto';
 import { UpdateVisaStatusDto } from './dto/update-visa-status.dto';
+import { VisaRefundsService } from './visa-refunds.service';
 import { VisaService } from './visa.service';
 
 @Controller('visa/applications')
@@ -24,6 +26,7 @@ export class VisaApplicationsAdminController {
   constructor(
     private readonly visaService: VisaService,
     private readonly usersService: UsersService,
+    private readonly refundsService: VisaRefundsService,
   ) {}
 
   private async requireStaffId(user: AuthContext): Promise<string> {
@@ -119,5 +122,31 @@ export class VisaApplicationsAdminController {
   ) {
     const staffId = await this.requireStaffId(user);
     return this.visaService.addNote(id, staffId, dto.note);
+  }
+
+  @Get(':id/refund-preview')
+  @RequirePermissions(PERMISSIONS.VISA.REFUND)
+  previewRefund(@Param('id') id: string) {
+    return this.refundsService.previewRefund(id);
+  }
+
+  @Post(':id/refund')
+  @RequirePermissions(PERMISSIONS.VISA.REFUND)
+  async requestRefund(
+    @CurrentUser() user: AuthContext,
+    @Param('id') id: string,
+    @Body() dto: RequestVisaRefundDto,
+  ) {
+    const staffId = await this.requireStaffId(user);
+    return this.refundsService.requestRefund(id, {
+      requestedByStaffId: staffId,
+      reason: dto.reason,
+    });
+  }
+
+  @Get(':id/refunds')
+  @RequirePermissions(PERMISSIONS.VISA.REFUND)
+  listRefunds(@Param('id') id: string) {
+    return this.refundsService.listAll({ applicationId: id });
   }
 }

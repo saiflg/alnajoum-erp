@@ -2,7 +2,9 @@ import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthContext } from '../../common/interfaces/auth-context.interface';
 import { CustomersService } from '../customers/customers.service';
+import { RequestVisaRefundDto } from './dto/request-visa-refund.dto';
 import { SubmitVisaApplicationDto } from './dto/submit-visa-application.dto';
+import { VisaRefundsService } from './visa-refunds.service';
 import { VisaService } from './visa.service';
 
 /**
@@ -42,6 +44,7 @@ export class VisaApplicationsOwnController {
   constructor(
     private readonly visaService: VisaService,
     private readonly customersService: CustomersService,
+    private readonly refundsService: VisaRefundsService,
   ) {}
 
   @Post()
@@ -81,5 +84,32 @@ export class VisaApplicationsOwnController {
     );
     const application = await this.visaService.cancel(id, customerId);
     return sanitizeForCustomer(application);
+  }
+
+  @Get(':id/refund-preview')
+  async previewRefund(
+    @CurrentUser() user: AuthContext,
+    @Param('id') id: string,
+  ) {
+    const customerId = await this.customersService.getCustomerIdForIdentity(
+      user.sub,
+    );
+    return this.refundsService.previewRefund(id, customerId);
+  }
+
+  @Post(':id/refund-request')
+  async requestRefund(
+    @CurrentUser() user: AuthContext,
+    @Param('id') id: string,
+    @Body() dto: RequestVisaRefundDto,
+  ) {
+    const customerId = await this.customersService.getCustomerIdForIdentity(
+      user.sub,
+    );
+    await this.refundsService.previewRefund(id, customerId); // ownership check
+    return this.refundsService.requestRefund(id, {
+      requestedByCustomer: true,
+      reason: dto.reason,
+    });
   }
 }

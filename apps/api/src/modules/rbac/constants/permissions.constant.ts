@@ -150,6 +150,11 @@ export const PERMISSIONS = {
     INCENTIVE_VIEW: 'visa.incentive.view', // view incentive records (company cost, margin, amounts)
     INCENTIVE_APPROVE: 'visa.incentive.approve', // approve/reject a pending incentive
     PAYOUT_APPROVE: 'visa.payout.approve', // trigger/retry an incentive payout
+    // Phase 9 — visa & immigration operations.
+    RULES_MANAGE: 'visa.rules.manage', // configure CountryVisaRule entries
+    CHECKLIST_EXCEPTION: 'visa.checklist.exception', // authorize a missing-document exception
+    SUBMIT: 'visa.submit', // send an application to the provider (spec #14)
+    REFUND: 'visa.refund', // process a visa cancellation/refund
   },
   // Phase 6 — enterprise finance, accounting, payment reconciliation, and
   // staff payout engine.

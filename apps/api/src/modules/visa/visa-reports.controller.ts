@@ -1,5 +1,5 @@
 import { Controller, Get, Query } from '@nestjs/common';
-import { VisaType } from '@prisma/client';
+import { VisaApplicationStatus, VisaType } from '@prisma/client';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { VisaReportsService } from './visa-reports.service';
@@ -43,6 +43,30 @@ export class VisaReportsController {
       staffId,
       country,
       visaType,
+    });
+  }
+
+  @Get('status-breakdown')
+  @RequirePermissions(PERMISSIONS.VISA.VIEW)
+  statusBreakdown(
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('branchId') branchId?: string,
+    @Query('staffId') staffId?: string,
+    @Query('country') country?: string,
+    @Query('visaType') visaType?: VisaType,
+    @Query('customerId') customerId?: string,
+    @Query('status') status?: VisaApplicationStatus,
+  ) {
+    return this.visaReportsService.statusBreakdown({
+      from: from ? new Date(from) : undefined,
+      to: to ? new Date(to) : undefined,
+      branchId,
+      staffId,
+      country,
+      visaType,
+      customerId,
+      status,
     });
   }
 }
