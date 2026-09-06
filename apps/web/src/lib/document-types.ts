@@ -14,6 +14,7 @@ export const DOCUMENT_TYPE_LABELS: Record<DocumentType, string> = {
   FLIGHT_ITINERARY: 'Flight Itinerary',
   GUARANTOR_ID: "Guarantor's ID",
   GUARANTOR_DOCUMENT: 'Guarantor Document',
+  TRAVEL_INSURANCE: 'Travel Insurance',
 };
 
 export const DOCUMENT_TYPES = Object.keys(DOCUMENT_TYPE_LABELS) as DocumentType[];

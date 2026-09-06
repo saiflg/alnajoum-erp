@@ -1,6 +1,7 @@
 'use client';
 
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, Suspense, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { AppShell } from '@/components/AppShell';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { ADMIN_NAV } from '@/lib/admin-nav';
@@ -13,8 +14,37 @@ import {
   VisaApplication,
   VisaApplicationNote,
   VisaApplicationStatus,
+  VisaChecklist,
   VisaDocument,
+  VisaProviderMessage,
+  VisaRefund,
+  VisaRefundPreview,
+  VisaSubmission,
+  VisaTimelineEvent,
+  PassportValidity,
 } from '@/lib/types';
+
+const PASSPORT_BADGE_STYLES: Record<string, string> = {
+  GREEN: 'bg-emerald-100 text-emerald-700',
+  AMBER: 'bg-amber-100 text-amber-700',
+  RED: 'bg-red-100 text-red-700',
+  UNKNOWN: 'bg-slate-100 text-slate-500',
+};
+
+const CHECKLIST_ITEM_STYLES: Record<string, string> = {
+  MISSING: 'bg-red-100 text-red-700',
+  UPLOADED: 'bg-amber-100 text-amber-700',
+  VERIFIED: 'bg-emerald-100 text-emerald-700',
+  REJECTED: 'bg-red-100 text-red-700',
+  EXPIRED: 'bg-slate-200 text-slate-600',
+  EXEMPTED: 'bg-blue-100 text-blue-700',
+};
+
+const MESSAGE_SEVERITY_STYLES: Record<string, string> = {
+  INFO: 'border-slate-200 bg-white',
+  WARNING: 'border-amber-200 bg-amber-50',
+  ACTION_REQUIRED: 'border-red-200 bg-red-50',
+};
 
 const STATUSES: Array<VisaApplicationStatus | ''> = [
   '',
@@ -33,6 +63,7 @@ const STATUSES: Array<VisaApplicationStatus | ''> = [
   'ISSUED',
   'COMPLETED',
   'CANCELLED',
+  'EXPIRED',
 ];
 
 const NEXT_STATUSES: VisaApplicationStatus[] = [
@@ -66,9 +97,10 @@ const STATUS_STYLES: Record<string, string> = {
   COMPLETED: 'bg-green-100 text-green-700',
   REJECTED: 'bg-red-100 text-red-700',
   CANCELLED: 'bg-slate-100 text-slate-500',
+  EXPIRED: 'bg-slate-200 text-slate-600',
 };
 
-const TERMINAL: VisaApplicationStatus[] = ['ISSUED', 'REJECTED', 'CANCELLED', 'COMPLETED'];
+const TERMINAL: VisaApplicationStatus[] = ['ISSUED', 'REJECTED', 'CANCELLED', 'COMPLETED', 'EXPIRED'];
 
 const DOC_STATUS_STYLES: Record<string, string> = {
   PENDING_REVIEW: 'bg-amber-100 text-amber-700',
@@ -87,15 +119,118 @@ function ApplicationDetail({ app, onChanged }: { app: VisaApplication; onChanged
   const [uploading, setUploading] = useState(false);
   const [verificationNote, setVerificationNote] = useState('');
 
+  // Phase 9
+  const [checklist, setChecklist] = useState<VisaChecklist | null>(null);
+  const [passportValidity, setPassportValidity] = useState<PassportValidity | null>(null);
+  const [exceptionReason, setExceptionReason] = useState('');
+  const [exceptionType, setExceptionType] = useState<DocumentType>('PASSPORT');
+  const [submissions, setSubmissions] = useState<VisaSubmission[]>([]);
+  const [messages, setMessages] = useState<VisaProviderMessage[]>([]);
+  const [manualMessage, setManualMessage] = useState('');
+  const [refunds, setRefunds] = useState<VisaRefund[]>([]);
+  const [refundPreview, setRefundPreview] = useState<VisaRefundPreview | null>(null);
+  const [refundReason, setRefundReason] = useState('');
+  const [timeline, setTimeline] = useState<VisaTimelineEvent[] | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
   function load() {
     if (app.guarantorId) {
       apiRequest<Guarantor>(`/visa/guarantors/${app.guarantorId}`).then(setGuarantor).catch(() => undefined);
     }
     apiRequest<VisaDocument[]>(`/visa/documents/application/${app.id}`).then(setDocuments).catch(() => undefined);
     apiRequest<VisaApplicationNote[]>(`/visa/applications/${app.id}/notes`).then(setNotes).catch(() => undefined);
+    apiRequest<VisaChecklist>(`/visa/applications/${app.id}/checklist`).then(setChecklist).catch(() => undefined);
+    apiRequest<PassportValidity>(`/visa/applications/${app.id}/checklist/passport-validity`).then(setPassportValidity).catch(() => undefined);
+    apiRequest<VisaSubmission[]>(`/visa/applications/${app.id}/submission`).then(setSubmissions).catch(() => undefined);
+    apiRequest<VisaProviderMessage[]>(`/visa/applications/${app.id}/submission/messages`).then(setMessages).catch(() => undefined);
+    apiRequest<VisaRefund[]>(`/visa/applications/${app.id}/refunds`).then(setRefunds).catch(() => undefined);
+    apiRequest<VisaRefundPreview>(`/visa/applications/${app.id}/refund-preview`).then(setRefundPreview).catch(() => undefined);
+    apiRequest<VisaTimelineEvent[]>(`/visa/applications/${app.id}/timeline`).then(setTimeline).catch(() => undefined);
   }
 
   useEffect(load, [app.id, app.guarantorId]);
+
+  async function handleAddException(e: FormEvent) {
+    e.preventDefault();
+    if (!exceptionReason.trim()) return;
+    setError(null);
+    try {
+      await apiRequest(`/visa/applications/${app.id}/checklist/exceptions`, {
+        method: 'POST',
+        body: { documentType: exceptionType, reason: exceptionReason },
+      });
+      setExceptionReason('');
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to add exception');
+    }
+  }
+
+  async function handleSubmitToProvider() {
+    setError(null);
+    setSubmitting(true);
+    try {
+      await apiRequest(`/visa/applications/${app.id}/submission`, { method: 'POST' });
+      load();
+      onChanged();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to submit to provider');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleSyncStatus() {
+    setError(null);
+    try {
+      await apiRequest(`/visa/applications/${app.id}/submission/sync`, { method: 'POST' });
+      load();
+      onChanged();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to sync provider status');
+    }
+  }
+
+  async function handleAddManualMessage(e: FormEvent) {
+    e.preventDefault();
+    if (!manualMessage.trim()) return;
+    setError(null);
+    try {
+      await apiRequest(`/visa/applications/${app.id}/submission/messages`, {
+        method: 'POST',
+        body: { message: manualMessage },
+      });
+      setManualMessage('');
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to log message');
+    }
+  }
+
+  async function handleAcknowledgeMessage(id: string) {
+    try {
+      await apiRequest(`/visa/applications/${app.id}/submission/messages/${id}/acknowledge`, { method: 'POST' });
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to acknowledge message');
+    }
+  }
+
+  async function handleRequestRefund() {
+    if (!confirm(`Refund ${formatCurrency(refundPreview?.refundAmount ?? 0, refundPreview?.currency ?? app.currency)}?`)) return;
+    setError(null);
+    try {
+      await apiRequest(`/visa/applications/${app.id}/refund`, {
+        method: 'POST',
+        body: { reason: refundReason || undefined },
+      });
+      setRefundReason('');
+      load();
+      onChanged();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to process refund');
+    }
+  }
 
   async function handleGuarantorDecision(approved: boolean) {
     setError(null);
@@ -165,9 +300,30 @@ function ApplicationDetail({ app, onChanged }: { app: VisaApplication; onChanged
     }
   }
 
+  const slaOverdue = app.slaDueAt && new Date(app.slaDueAt) < new Date() && !TERMINAL.includes(app.status);
+
   return (
     <div className="border-t border-slate-100 bg-slate-50 p-4 space-y-5">
       {error && <p className="text-sm text-red-600">{error}</p>}
+
+      <div className="flex flex-wrap items-center gap-2">
+        {passportValidity && (
+          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${PASSPORT_BADGE_STYLES[passportValidity.level]}`}>
+            Passport: {passportValidity.level}
+            {passportValidity.monthsUntilExpiry != null && ` (${passportValidity.monthsUntilExpiry}mo left)`}
+          </span>
+        )}
+        {app.slaDueAt && (
+          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${slaOverdue ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600'}`}>
+            SLA due {formatDateTime(app.slaDueAt)}{slaOverdue ? ' — OVERDUE' : ''}
+          </span>
+        )}
+        {app.expiryDate && (
+          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+            Visa expiry: {formatDateTime(app.expiryDate)}
+          </span>
+        )}
+      </div>
 
       {app.status === 'PAYMENT_PENDING' && (
         <div className="rounded-md border border-amber-200 bg-amber-50 p-3">
@@ -222,6 +378,49 @@ function ApplicationDetail({ app, onChanged }: { app: VisaApplication; onChanged
         </div>
       )}
 
+      {checklist && (
+        <div>
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold text-slate-700">Document Checklist</p>
+            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${checklist.mandatoryComplete ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+              {checklist.mandatoryComplete ? 'Mandatory-complete' : 'Incomplete'}
+            </span>
+          </div>
+          <div className="mt-2 space-y-1">
+            {checklist.items.map((item) => (
+              <div key={item.documentType} className="flex items-center justify-between rounded-md border border-slate-200 bg-white p-2 text-sm">
+                <span className="text-slate-700">
+                  {DOCUMENT_TYPE_LABELS[item.documentType]}
+                  {item.required && <span className="ml-1 text-[10px] uppercase text-slate-400">required</span>}
+                </span>
+                <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${CHECKLIST_ITEM_STYLES[item.state]}`} title={item.exceptionReason ?? undefined}>
+                  {item.state}
+                </span>
+              </div>
+            ))}
+            {checklist.items.length === 0 && (
+              <p className="text-xs text-slate-500">No document rule configured for this country/visa type yet — nothing blocks submission.</p>
+            )}
+          </div>
+          <form onSubmit={handleAddException} className="mt-2 flex flex-wrap items-center gap-2">
+            <select value={exceptionType} onChange={(e) => setExceptionType(e.target.value as DocumentType)} className="rounded-md border border-slate-300 px-2 py-1.5 text-xs">
+              {DOCUMENT_TYPES.map((t) => (
+                <option key={t} value={t}>{DOCUMENT_TYPE_LABELS[t]}</option>
+              ))}
+            </select>
+            <input
+              placeholder="Reason for exempting this document…"
+              value={exceptionReason}
+              onChange={(e) => setExceptionReason(e.target.value)}
+              className="flex-1 min-w-[200px] rounded-md border border-slate-300 px-2 py-1.5 text-xs"
+            />
+            <button type="submit" className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100">
+              Grant exception
+            </button>
+          </form>
+        </div>
+      )}
+
       <div>
         <p className="text-sm font-semibold text-slate-700">Documents</p>
         <div className="mt-2 space-y-2">
@@ -261,6 +460,138 @@ function ApplicationDetail({ app, onChanged }: { app: VisaApplication; onChanged
       </div>
 
       <div>
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-semibold text-slate-700">Provider Submission</p>
+          {app.status === 'UNDER_REVIEW' && (
+            <button
+              onClick={handleSubmitToProvider}
+              disabled={submitting}
+              className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+            >
+              {submitting ? 'Submitting…' : 'Submit to provider'}
+            </button>
+          )}
+        </div>
+        <div className="mt-2 space-y-2">
+          {submissions.map((sub) => (
+            <div key={sub.id} className="rounded-md border border-slate-200 bg-white p-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="font-medium text-slate-800">
+                  {sub.provider} {sub.externalReference && `· ${sub.externalReference}`}
+                </span>
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-600">{sub.providerStatus}</span>
+              </div>
+              {sub.provider === 'MOCK' && sub.externalReference && (
+                <button onClick={handleSyncStatus} className="mt-1 text-[11px] font-medium text-blue-700 hover:underline">
+                  Sync status from provider
+                </button>
+              )}
+            </div>
+          ))}
+          {submissions.length === 0 && (
+            <p className="text-xs text-slate-500">
+              Not yet submitted to a provider{app.status !== 'UNDER_REVIEW' ? ' — must be under review first' : ''}.
+            </p>
+          )}
+        </div>
+
+        <p className="mt-3 text-xs font-semibold text-slate-600">Provider Messages</p>
+        <div className="mt-1 space-y-1">
+          {messages.map((m) => (
+            <div key={m.id} className={`rounded-md border p-2 text-xs ${MESSAGE_SEVERITY_STYLES[m.severity]}`}>
+              <p className="text-slate-700">{m.message}</p>
+              <div className="mt-1 flex items-center justify-between text-slate-400">
+                <span>{m.severity} · {formatDateTime(m.createdAt)}</span>
+                {!m.acknowledgedAt && (
+                  <button onClick={() => handleAcknowledgeMessage(m.id)} className="font-medium text-blue-700 hover:underline">
+                    Acknowledge
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+          {messages.length === 0 && <p className="text-xs text-slate-500">No provider messages yet.</p>}
+        </div>
+        <form onSubmit={handleAddManualMessage} className="mt-2 flex gap-2">
+          <input
+            placeholder="Log a manual update (e.g. phone call with the embassy)…"
+            value={manualMessage}
+            onChange={(e) => setManualMessage(e.target.value)}
+            className="flex-1 rounded-md border border-slate-300 px-2 py-1.5 text-xs"
+          />
+          <button type="submit" className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100">
+            Log
+          </button>
+        </form>
+      </div>
+
+      <div>
+        <p className="text-sm font-semibold text-slate-700">Refund</p>
+        {refunds.length > 0 ? (
+          <div className="mt-2 space-y-1">
+            {refunds.map((r) => (
+              <div key={r.id} className="rounded-md border border-slate-200 bg-white p-2 text-xs">
+                <p className="text-slate-700">
+                  {formatCurrency(r.refundAmount, r.currency)} refunded — {r.status}
+                </p>
+                <p className="mt-1 text-slate-400">
+                  Paid {formatCurrency(r.amountPaid, r.currency)}, penalty {formatCurrency(r.supplierPenalty, r.currency)}, fee{' '}
+                  {formatCurrency(r.agencyFee, r.currency)}
+                  {r.reason && ` · ${r.reason}`}
+                </p>
+              </div>
+            ))}
+          </div>
+        ) : refundPreview ? (
+          <div className="mt-2 rounded-md border border-slate-200 bg-white p-3 text-xs">
+            <p className="text-slate-700">
+              Refund preview: {formatCurrency(refundPreview.refundAmount, refundPreview.currency)}{' '}
+              <span className="text-slate-400">
+                (paid {formatCurrency(refundPreview.amountPaid, refundPreview.currency)} − penalty{' '}
+                {formatCurrency(refundPreview.supplierPenalty, refundPreview.currency)} − fee{' '}
+                {formatCurrency(refundPreview.agencyFee, refundPreview.currency)})
+              </span>
+            </p>
+            {refundPreview.alreadySubmittedToProvider && (
+              <p className="mt-1 text-amber-700">Already submitted to the provider — the embassy/agent cost is forfeited.</p>
+            )}
+            <div className="mt-2 flex gap-2">
+              <input
+                placeholder="Reason (optional)"
+                value={refundReason}
+                onChange={(e) => setRefundReason(e.target.value)}
+                className="flex-1 rounded-md border border-slate-300 px-2 py-1.5 text-xs"
+              />
+              <button onClick={handleRequestRefund} className="rounded-md border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50">
+                Process refund
+              </button>
+            </div>
+          </div>
+        ) : (
+          <p className="mt-1 text-xs text-slate-500">No payment to refund yet.</p>
+        )}
+      </div>
+
+      {timeline && timeline.length > 0 && (
+        <div>
+          <p className="text-sm font-semibold text-slate-700">Timeline</p>
+          <div className="mt-2 space-y-1 border-l-2 border-slate-200 pl-3">
+            {timeline.map((event, i) => (
+              <div key={i} className="text-xs">
+                <p className="text-slate-700">
+                  {event.detail ?? event.action.replace(/_/g, ' ').replace(/\./g, ' → ')}
+                </p>
+                <p className="text-slate-400">
+                  {formatDateTime(event.timestamp)}
+                  {event.actorEmail && ` · ${event.actorEmail}`}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div>
         <p className="text-sm font-semibold text-slate-700">Internal notes (staff only)</p>
         <div className="mt-2 space-y-1">
           {notes.map((n) => (
@@ -289,10 +620,13 @@ function ApplicationDetail({ app, onChanged }: { app: VisaApplication; onChanged
   );
 }
 
-export default function AdminVisaApplicationsPage() {
+function AdminVisaApplicationsPageInner() {
+  const searchParams = useSearchParams();
   const [applications, setApplications] = useState<VisaApplication[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<VisaApplicationStatus | ''>('');
+  const [statusFilter, setStatusFilter] = useState<VisaApplicationStatus | ''>(
+    (searchParams.get('status') as VisaApplicationStatus | null) ?? '',
+  );
   const [busyId, setBusyId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -400,5 +734,13 @@ export default function AdminVisaApplicationsPage() {
         </div>
       </AppShell>
     </ProtectedRoute>
+  );
+}
+
+export default function AdminVisaApplicationsPage() {
+  return (
+    <Suspense fallback={null}>
+      <AdminVisaApplicationsPageInner />
+    </Suspense>
   );
 }

@@ -73,7 +73,8 @@ export type DocumentType =
   | 'HOTEL_BOOKING'
   | 'FLIGHT_ITINERARY'
   | 'GUARANTOR_ID'
-  | 'GUARANTOR_DOCUMENT';
+  | 'GUARANTOR_DOCUMENT'
+  | 'TRAVEL_INSURANCE';
 
 export interface CustomerDocument {
   id: string;
@@ -782,7 +783,9 @@ export type VisaApplicationStatus =
   | 'SUBMITTED_TO_PROVIDER'
   | 'PROCESSING'
   | 'ADDITIONAL_INFO_REQUIRED'
-  | 'COMPLETED';
+  | 'COMPLETED'
+  // Phase 9
+  | 'EXPIRED';
 
 export type VisaServiceStatus = 'DRAFT' | 'ACTIVE' | 'SUSPENDED' | 'CLOSED' | 'ARCHIVED';
 
@@ -912,6 +915,126 @@ export interface VisaApplication {
   offlineReason: string | null;
   assignedStaffId: string | null;
   assignedStaff?: { firstName: string; lastName: string } | null;
+  // Phase 9
+  slaTargetDays: number | null;
+  slaDueAt: string | null;
+  issueDate: string | null;
+  expiryDate: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 9 — visa & immigration operations (country rules, document
+// checklist/passport validity, provider submissions, refunds, timeline).
+// ---------------------------------------------------------------------------
+
+export interface CountryVisaRule {
+  id: string;
+  country: string;
+  /** "" = this country's default rule, applied when no type-specific rule matches. */
+  visaType: string;
+  requiredDocumentTypes: DocumentType[];
+  optionalDocumentTypes: DocumentType[];
+  minPassportValidityMonths: number | null;
+  photoRequirements: string | null;
+  guarantorRequired: boolean;
+  processingTimeDays: number | null;
+  appointmentRequired: boolean;
+  insuranceRequired: boolean;
+  feeAmount: number | null;
+  feeCurrency: string | null;
+  restrictions: string | null;
+  notes: string | null;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export type ChecklistItemState = 'MISSING' | 'UPLOADED' | 'VERIFIED' | 'REJECTED' | 'EXPIRED' | 'EXEMPTED';
+
+export interface ChecklistItem {
+  documentType: DocumentType;
+  required: boolean;
+  state: ChecklistItemState;
+  documentId: string | null;
+  exceptionReason: string | null;
+}
+
+export interface VisaChecklist {
+  items: ChecklistItem[];
+  mandatoryComplete: boolean;
+}
+
+export type PassportValidityLevel = 'GREEN' | 'AMBER' | 'RED' | 'UNKNOWN';
+
+export interface PassportValidity {
+  level: PassportValidityLevel;
+  passportExpiryDate: string | null;
+  minPassportValidityMonths: number | null;
+  monthsUntilExpiry: number | null;
+}
+
+export type VisaProviderName = 'MANUAL' | 'MOCK';
+export type ProviderMessageSeverity = 'INFO' | 'WARNING' | 'ACTION_REQUIRED';
+export type VisaRefundStatus = 'REQUESTED' | 'COMPLETED' | 'FAILED' | 'REJECTED';
+
+export interface VisaSubmission {
+  id: string;
+  applicationId: string;
+  submittedByStaffId: string;
+  provider: VisaProviderName;
+  externalReference: string | null;
+  providerStatus: string | null;
+  providerMessage: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface VisaProviderMessage {
+  id: string;
+  applicationId: string;
+  message: string;
+  severity: ProviderMessageSeverity;
+  acknowledgedByStaffId: string | null;
+  acknowledgedAt: string | null;
+  createdAt: string;
+}
+
+export interface VisaRefundPreview {
+  amountPaid: number;
+  supplierPenalty: number;
+  agencyFee: number;
+  refundAmount: number;
+  currency: string;
+  alreadySubmittedToProvider: boolean;
+}
+
+export interface VisaRefund {
+  id: string;
+  applicationId: string;
+  requestedByStaffId: string | null;
+  requestedByCustomer: boolean;
+  amountPaid: number;
+  supplierPenalty: number;
+  agencyFee: number;
+  refundAmount: number;
+  currency: string;
+  status: VisaRefundStatus;
+  reason: string | null;
+  createdAt: string;
+  completedAt: string | null;
+}
+
+export interface VisaTimelineEvent {
+  timestamp: string;
+  source: 'audit' | 'provider_message';
+  action: string;
+  detail: string | null;
+  actorEmail: string | null;
+  metadata: unknown;
+}
+
+export interface VisaStatusBreakdown {
+  total: number;
+  byStatus: Record<VisaApplicationStatus, number>;
 }
 
 // ---------------------------------------------------------------------------

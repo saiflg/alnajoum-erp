@@ -14,6 +14,7 @@ import {
   PublicVisaService,
   VisaApplication,
   VisaDocument,
+  VisaRefundPreview,
   VisaType,
 } from '@/lib/types';
 
@@ -156,6 +157,8 @@ export default function PortalVisaPage() {
   const [submitting, setSubmitting] = useState(false);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [refundPreviews, setRefundPreviews] = useState<Record<string, VisaRefundPreview>>({});
+  const [requestingRefundId, setRequestingRefundId] = useState<string | null>(null);
 
   const [visaServiceId, setVisaServiceId] = useState('');
   const [destinationCountry, setDestinationCountry] = useState('');
@@ -219,6 +222,35 @@ export default function PortalVisaPage() {
       setError(err instanceof ApiError ? err.message : 'Failed to cancel');
     } finally {
       setCancellingId(null);
+    }
+  }
+
+  async function loadRefundPreview(id: string) {
+    try {
+      const preview = await apiRequest<VisaRefundPreview>(`/visa/applications/me/${id}/refund-preview`);
+      setRefundPreviews((prev) => ({ ...prev, [id]: preview }));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to load refund estimate');
+    }
+  }
+
+  async function handleRequestRefund(id: string) {
+    const preview = refundPreviews[id];
+    if (!preview) return;
+    if (!confirm(`Request a refund of approximately ${formatCurrency(preview.refundAmount, preview.currency)}?`)) return;
+    setRequestingRefundId(id);
+    try {
+      await apiRequest(`/visa/applications/me/${id}/refund-request`, { method: 'POST', body: {} });
+      setRefundPreviews((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to request refund');
+    } finally {
+      setRequestingRefundId(null);
     }
   }
 
@@ -378,7 +410,7 @@ export default function PortalVisaPage() {
                 >
                   {expandedId === app.id ? 'Hide documents' : 'Documents'}
                 </button>
-                {!TERMINAL.includes(app.status) && (
+                {!TERMINAL.includes(app.status) && app.invoice?.status !== 'PAID' && (
                   <button
                     onClick={() => handleCancel(app.id)}
                     disabled={cancellingId === app.id}
@@ -387,7 +419,36 @@ export default function PortalVisaPage() {
                     {cancellingId === app.id ? 'Cancelling…' : 'Cancel'}
                   </button>
                 )}
+                {app.invoice?.status === 'PAID' && app.status !== 'CANCELLED' && !refundPreviews[app.id] && (
+                  <button onClick={() => loadRefundPreview(app.id)} className="text-sm font-medium text-slate-500 hover:underline">
+                    Request refund
+                  </button>
+                )}
               </div>
+              {refundPreviews[app.id] && (
+                <div className="mt-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-800">
+                  <p>
+                    Estimated refund: {formatCurrency(refundPreviews[app.id].refundAmount, refundPreviews[app.id].currency)}{' '}
+                    (amount paid minus any embassy/agent cost already incurred and our processing fee). Final amount
+                    confirmed once processed.
+                  </p>
+                  <div className="mt-2 flex gap-2">
+                    <button
+                      onClick={() => handleRequestRefund(app.id)}
+                      disabled={requestingRefundId === app.id}
+                      className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+                    >
+                      {requestingRefundId === app.id ? 'Processing…' : 'Confirm refund request'}
+                    </button>
+                    <button
+                      onClick={() => setRefundPreviews((prev) => { const next = { ...prev }; delete next[app.id]; return next; })}
+                      className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-white"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
               {expandedId === app.id && <DocumentsPanel applicationId={app.id} />}
             </div>
           ))}
