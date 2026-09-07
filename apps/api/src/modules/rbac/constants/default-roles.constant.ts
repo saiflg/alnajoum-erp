@@ -7,6 +7,10 @@ export const SYSTEM_ROLES = {
   FINANCE_OFFICER: 'FINANCE_OFFICER',
   STAFF: 'STAFF',
   CUSTOMER: 'CUSTOMER',
+  // Phase 11 — see this file's own comment above the role definitions for
+  // why these two are the only genuinely new default roles this phase adds.
+  AUDITOR: 'AUDITOR',
+  REPORT_VIEWER: 'REPORT_VIEWER',
 } as const;
 
 /**
@@ -22,6 +26,8 @@ export const ROLE_DASHBOARD_PRECEDENCE: Array<{
   { role: SYSTEM_ROLES.FINANCE_OFFICER, dashboardPath: '/finance/dashboard' },
   { role: SYSTEM_ROLES.BRANCH_MANAGER, dashboardPath: '/branch/dashboard' },
   { role: SYSTEM_ROLES.STAFF, dashboardPath: '/staff/dashboard' },
+  { role: SYSTEM_ROLES.AUDITOR, dashboardPath: '/staff/dashboard' },
+  { role: SYSTEM_ROLES.REPORT_VIEWER, dashboardPath: '/staff/dashboard' },
   { role: SYSTEM_ROLES.CUSTOMER, dashboardPath: '/portal/dashboard' },
 ];
 
@@ -181,6 +187,30 @@ export const DEFAULT_ROLE_DEFINITIONS: Array<{
       PERMISSIONS.HAJJ_OPS.EMERGENCY_CONTACT_VIEW,
       PERMISSIONS.HAJJ_OPS.DASHBOARD_VIEW,
       PERMISSIONS.HAJJ_OPS.PROFITABILITY_VIEW,
+      // Phase 11 — Company Admin is this platform's Tenant Admin (spec
+      // #35): full administrative control within their own company, but
+      // never another tenant's data (enforced by tenant scoping, not by
+      // withholding these permissions).
+      PERMISSIONS.USER.INVITE,
+      PERMISSIONS.USER.ACTIVATE,
+      PERMISSIONS.USER.DEACTIVATE,
+      PERMISSIONS.USER.SUSPEND,
+      PERMISSIONS.USER.RESET_ACCESS,
+      PERMISSIONS.USER.VIEW_LOGIN_HISTORY,
+      PERMISSIONS.USER.MANAGE_SESSIONS,
+      PERMISSIONS.USER.MANAGE_2FA,
+      PERMISSIONS.APPROVAL.VIEW,
+      PERMISSIONS.APPROVAL.DECIDE,
+      PERMISSIONS.APPROVAL.CONFIGURE,
+      PERMISSIONS.SETTINGS.VIEW,
+      PERMISSIONS.SETTINGS.EDIT,
+      PERMISSIONS.FEATURE_FLAG.VIEW,
+      PERMISSIONS.FEATURE_FLAG.MANAGE,
+      PERMISSIONS.API_KEY.MANAGE,
+      PERMISSIONS.SECURITY.VIEW_EVENTS,
+      PERMISSIONS.CURRENCY.MANAGE,
+      PERMISSIONS.TAX.MANAGE,
+      PERMISSIONS.SEARCH.GLOBAL,
     ],
   },
   {
@@ -263,6 +293,11 @@ export const DEFAULT_ROLE_DEFINITIONS: Array<{
       PERMISSIONS.HAJJ_OPS.DASHBOARD_VIEW,
       // Not PROFITABILITY_VIEW — spec #24 reserves per-package profitability
       // for authorized financial users, not branch operations management.
+      // Phase 11 — spec #36: branch-scoped oversight only, never
+      // company-wide security/settings/API-key administration.
+      PERMISSIONS.APPROVAL.VIEW,
+      PERMISSIONS.APPROVAL.DECIDE,
+      PERMISSIONS.SEARCH.GLOBAL,
     ],
   },
   {
@@ -317,6 +352,11 @@ export const DEFAULT_ROLE_DEFINITIONS: Array<{
       PERMISSIONS.HAJJ_OPS.MANIFEST_VIEW,
       PERMISSIONS.HAJJ_OPS.DASHBOARD_VIEW,
       PERMISSIONS.HAJJ_OPS.PROFITABILITY_VIEW,
+      // Phase 11 — spec #37: finance administration, not security settings.
+      PERMISSIONS.APPROVAL.VIEW,
+      PERMISSIONS.APPROVAL.DECIDE,
+      PERMISSIONS.SECURITY.VIEW_EVENTS,
+      PERMISSIONS.SEARCH.GLOBAL,
     ],
   },
   {
@@ -378,6 +418,10 @@ export const DEFAULT_ROLE_DEFINITIONS: Array<{
       // Not GROUP_MANAGE/FLEET_MANAGE/CHECKLIST_OVERRIDE/PROFITABILITY_VIEW —
       // baseline staff can view and check pilgrims in, but not reconfigure
       // groups/fleet, override a departure-readiness status, or see margins.
+      // Phase 11 — search only; approving requests, viewing security
+      // events, and every admin-governance permission stay withheld from
+      // baseline staff by design (see spec #66's escalation tests).
+      PERMISSIONS.SEARCH.GLOBAL,
     ],
   },
   {
@@ -385,5 +429,53 @@ export const DEFAULT_ROLE_DEFINITIONS: Array<{
     description: 'Public website / customer portal end-user.',
     isSystem: true,
     permissions: [],
+  },
+  // Phase 11 spec #6 — two genuinely new, read-only oversight roles that
+  // no combination of the existing roles already expresses. Every other
+  // role the spec lists by name (TENANT_ADMIN, BRANCH_MANAGER, FINANCE_
+  // MANAGER, FLIGHT_AGENT, HOTEL_AGENT, VISA_OFFICER, HAJJ_OFFICER,
+  // UMRAH_OFFICER, CRM_OFFICER, CUSTOMER_SUPPORT, SALES_AGENT, HR_MANAGER)
+  // is either already covered by an existing role (COMPANY_ADMIN IS this
+  // platform's Tenant Admin, BRANCH_MANAGER already exists, STAFF is the
+  // general front-line agent role every *_AGENT/*_OFFICER name describes)
+  // or is a narrower slice of an existing role's permissions that an
+  // administrator can already create via the existing custom-role API
+  // (RbacController's POST /rbac/roles) — spec #6 explicitly asks for that
+  // capability to exist, not for every named role to be pre-seeded.
+  {
+    name: SYSTEM_ROLES.AUDITOR,
+    description:
+      'Read-only oversight: audit trail, security events, and every module\'s reports — no create/update/approve access anywhere.',
+    isSystem: true,
+    permissions: [
+      PERMISSIONS.AUDIT.READ,
+      PERMISSIONS.SECURITY.VIEW_EVENTS,
+      PERMISSIONS.APPROVAL.VIEW,
+      PERMISSIONS.FLIGHT.READ,
+      PERMISSIONS.FLIGHT.REPORTS_VIEW,
+      PERMISSIONS.HOTEL.READ,
+      PERMISSIONS.HOTEL.REPORTS_VIEW,
+      PERMISSIONS.VISA_APPLICATION.READ,
+      PERMISSIONS.VISA.VIEW,
+      PERMISSIONS.INVOICE.READ,
+      PERMISSIONS.FINANCE.LEDGER_VIEW,
+      PERMISSIONS.FINANCE.DASHBOARD_VIEW,
+      PERMISSIONS.HAJJ_OPS.DASHBOARD_VIEW,
+      PERMISSIONS.CRM.DASHBOARD_VIEW,
+      PERMISSIONS.SEARCH.GLOBAL,
+    ],
+  },
+  {
+    name: SYSTEM_ROLES.REPORT_VIEWER,
+    description:
+      'Read-only reporting access across modules — no financial ledger, security, or audit detail.',
+    isSystem: true,
+    permissions: [
+      PERMISSIONS.FLIGHT.REPORTS_VIEW,
+      PERMISSIONS.HOTEL.REPORTS_VIEW,
+      PERMISSIONS.FINANCE.DASHBOARD_VIEW,
+      PERMISSIONS.HAJJ_OPS.DASHBOARD_VIEW,
+      PERMISSIONS.CRM.DASHBOARD_VIEW,
+    ],
   },
 ];

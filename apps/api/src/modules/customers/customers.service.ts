@@ -12,9 +12,22 @@ export class CustomersService {
     private readonly auditService: AuditService,
   ) {}
 
-  findAll(filters: { assignedStaffId?: string; assignedBranchId?: string } = {}) {
+  /**
+   * `tenantCompanyId` comes from resolveTenantFilter(user) — undefined
+   * means the caller is SUPER_ADMIN (no filter, cross-tenant by design);
+   * any other value, including the '__no_tenant__' sentinel, is applied
+   * literally so a caller whose own tenant can't be resolved sees nothing
+   * rather than every company's customers.
+   */
+  findAll(
+    filters: { assignedStaffId?: string; assignedBranchId?: string } = {},
+    tenantCompanyId?: string,
+  ) {
     return this.prisma.customer.findMany({
-      where: filters,
+      where: {
+        ...filters,
+        ...(tenantCompanyId !== undefined && { companyId: tenantCompanyId }),
+      },
       include: {
         identity: { select: { email: true, phone: true, status: true } },
         assignedStaff: { select: { firstName: true, lastName: true } },
@@ -25,11 +38,19 @@ export class CustomersService {
   }
 
   /** "My customers" — every customer assigned to this staff member. */
-  listForStaff(staffId: string) {
-    return this.findAll({ assignedStaffId: staffId });
+  listForStaff(staffId: string, tenantCompanyId?: string) {
+    return this.findAll({ assignedStaffId: staffId }, tenantCompanyId);
   }
 
-  async findOne(id: string) {
+  /**
+   * Phase 11 spec #65 — a customer belonging to another tenant must come
+   * back as NotFound, not a 403: a 403 would confirm the id exists at
+   * all, which is itself a cross-tenant information leak. Checked after
+   * the fetch (not folded into the `where`) so this single code path can
+   * report a genuinely-missing id and a cross-tenant id identically to
+   * the caller — see this method's spec below for why it doesn't matter.
+   */
+  async findOne(id: string, tenantCompanyId?: string) {
     const customer = await this.prisma.customer.findUnique({
       where: { id },
       include: {
@@ -40,7 +61,10 @@ export class CustomersService {
         assignedBranch: { select: { id: true, name: true } },
       },
     });
-    if (!customer) {
+    if (
+      !customer ||
+      (tenantCompanyId !== undefined && customer.companyId !== tenantCompanyId)
+    ) {
       throw new NotFoundException('Customer not found');
     }
     return customer;
@@ -76,8 +100,9 @@ export class CustomersService {
     id: string,
     dto: AdminUpdateCustomerDto,
     actorIdentityId?: string,
+    tenantCompanyId?: string,
   ) {
-    const existing = await this.findOne(id);
+    const existing = await this.findOne(id, tenantCompanyId);
 
     if (dto.assignedStaffId) {
       const staff = await this.prisma.staff.findUnique({
@@ -151,8 +176,12 @@ export class CustomersService {
     return this.update(customer.id, dto, identityId);
   }
 
-  async deactivate(id: string, actorIdentityId?: string) {
-    const customer = await this.findOne(id);
+  async deactivate(
+    id: string,
+    actorIdentityId?: string,
+    tenantCompanyId?: string,
+  ) {
+    const customer = await this.findOne(id, tenantCompanyId);
     await this.prisma.identity.update({
       where: { id: customer.identityId },
       data: { status: 'DEACTIVATED' },

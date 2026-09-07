@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, Param, Patch, Query } from '@nestjs/comm
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import type { AuthContext } from '../../common/interfaces/auth-context.interface';
+import { resolveTenantFilter } from '../../common/utils/tenant.util';
 import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { UsersService } from '../users/users.service';
 import { CustomersService } from './customers.service';
@@ -18,10 +19,14 @@ export class CustomersController {
   @Get()
   @RequirePermissions(PERMISSIONS.CUSTOMER.READ)
   findAll(
+    @CurrentUser() user: AuthContext,
     @Query('assignedStaffId') assignedStaffId?: string,
     @Query('assignedBranchId') assignedBranchId?: string,
   ) {
-    return this.customersService.findAll({ assignedStaffId, assignedBranchId });
+    return this.customersService.findAll(
+      { assignedStaffId, assignedBranchId },
+      resolveTenantFilter(user),
+    );
   }
 
   /** Every customer assigned to the calling staff member — "my customers". */
@@ -30,7 +35,10 @@ export class CustomersController {
   async findAssignedToMe(@CurrentUser() user: AuthContext) {
     const staffId = await this.usersService.getStaffIdForIdentity(user.sub);
     if (!staffId) return [];
-    return this.customersService.listForStaff(staffId);
+    return this.customersService.listForStaff(
+      staffId,
+      resolveTenantFilter(user),
+    );
   }
 
   @Get('me')
@@ -48,8 +56,8 @@ export class CustomersController {
 
   @Get(':id')
   @RequirePermissions(PERMISSIONS.CUSTOMER.READ)
-  findOne(@Param('id') id: string) {
-    return this.customersService.findOne(id);
+  findOne(@CurrentUser() user: AuthContext, @Param('id') id: string) {
+    return this.customersService.findOne(id, resolveTenantFilter(user));
   }
 
   @Patch(':id')
@@ -59,12 +67,21 @@ export class CustomersController {
     @Param('id') id: string,
     @Body() dto: AdminUpdateCustomerDto,
   ) {
-    return this.customersService.update(id, dto, user.sub);
+    return this.customersService.update(
+      id,
+      dto,
+      user.sub,
+      resolveTenantFilter(user),
+    );
   }
 
   @Delete(':id')
   @RequirePermissions(PERMISSIONS.CUSTOMER.DELETE)
   remove(@CurrentUser() user: AuthContext, @Param('id') id: string) {
-    return this.customersService.deactivate(id, user.sub);
+    return this.customersService.deactivate(
+      id,
+      user.sub,
+      resolveTenantFilter(user),
+    );
   }
 }

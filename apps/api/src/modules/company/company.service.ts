@@ -15,6 +15,27 @@ export class CompanyService {
     return this.prisma.company.findMany({ orderBy: { createdAt: 'desc' } });
   }
 
+  /**
+   * Phase 11 — a public/unauthenticated flow (customer self-registration,
+   * a lead converting to a customer with no company context of its own)
+   * has no tenant to attach the new record to on its own. This platform
+   * has only ever had one Company in real use, so "the oldest active
+   * one" is the correct, unsurprising default — never an arbitrary pick,
+   * and never something a client can override by passing its own id.
+   */
+  async getDefaultCompanyId(): Promise<string> {
+    const company = await this.prisma.company.findFirst({
+      where: { isActive: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    if (!company) {
+      throw new NotFoundException(
+        'No active company is configured on this platform yet.',
+      );
+    }
+    return company.id;
+  }
+
   async findOne(id: string) {
     const company = await this.prisma.company.findUnique({
       where: { id },

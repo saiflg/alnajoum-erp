@@ -222,6 +222,7 @@ async function seedPhase1And2() {
       },
       customer: {
         create: {
+          companyId: company.id,
           firstName: 'Amina',
           lastName: 'Yusuf',
           dateOfBirth: new Date('1985-04-12'),
@@ -266,6 +267,7 @@ async function seedPhase1And2() {
       },
       customer: {
         create: {
+          companyId: company.id,
           firstName: 'Chinedu',
           lastName: 'Okafor',
           dateOfBirth: new Date('1978-11-03'),
@@ -4040,6 +4042,147 @@ async function seedPhase10FlightGds() {
   console.log('--------------------------------------------------------');
 }
 
+/**
+ * Phase 11 — completes the primary Company's tenant fields (added by this
+ * phase's migration with safe defaults, but never actually filled in) and
+ * seeds a wholly separate SECOND tenant with its own branch/staff/customer
+ * so cross-tenant isolation is provable against real seeded data, not just
+ * unit-test mocks — see spec #65's explicit demand for this.
+ */
+async function seedPhase11EnterpriseGovernance() {
+  const existingSecondTenant = await prisma.company.findFirst({
+    where: { name: 'Zamzam Horizon Travels' },
+  });
+  if (existingSecondTenant) {
+    console.log('Phase 11 enterprise/governance demo data already present — skipping');
+    return;
+  }
+
+  const primaryCompany = await prisma.company.findFirstOrThrow();
+  await prisma.company.update({
+    where: { id: primaryCompany.id },
+    data: {
+      tradingName: 'Alnajoum Travel',
+      country: 'Nigeria',
+      currency: 'NGN',
+      timezone: 'Africa/Lagos',
+      taxId: 'TIN-10293847',
+      subscriptionPlan: 'Enterprise',
+      subscriptionStatus: 'ACTIVE',
+    },
+  });
+
+  // --- A wholly separate second tenant, never touched by any Phase 1-10
+  // seed data, purely to prove tenant isolation against a real second
+  // company rather than a hypothetical one. ---
+  const tenantB = await prisma.company.create({
+    data: {
+      name: 'Zamzam Horizon Travels',
+      legalName: 'Zamzam Horizon Travels Limited',
+      tradingName: 'Zamzam Horizon',
+      registrationNumber: 'RC-7719042',
+      email: 'contact@zamzamhorizon.demo',
+      phone: '+2348199990000',
+      address: '5 Marina Road, Lagos Island',
+      country: 'Nigeria',
+      currency: 'NGN',
+      timezone: 'Africa/Lagos',
+      taxId: 'TIN-88771122',
+      subscriptionPlan: 'Standard',
+      subscriptionStatus: 'ACTIVE',
+      isActive: true,
+    },
+  });
+  const tenantBBranch = await prisma.branch.create({
+    data: {
+      companyId: tenantB.id,
+      name: 'Lagos Island Branch',
+      code: 'HQ',
+      city: 'Lagos',
+      country: 'Nigeria',
+      isHeadOffice: true,
+    },
+  });
+
+  const companyAdminRole = await prisma.role.findUniqueOrThrow({
+    where: { name: SYSTEM_ROLES.COMPANY_ADMIN },
+  });
+  const customerRole = await prisma.role.findUniqueOrThrow({
+    where: { name: SYSTEM_ROLES.CUSTOMER },
+  });
+  const tenantBPasswordHash = await argon2.hash(DEMO_PASSWORD);
+
+  const tenantBAdminIdentity = await prisma.identity.create({
+    data: {
+      email: 'admin@zamzamhorizon.demo.alnajoum.travel',
+      passwordHash: tenantBPasswordHash,
+      type: 'STAFF',
+      status: 'ACTIVE',
+      emailVerifiedAt: new Date(),
+      staff: {
+        create: {
+          companyId: tenantB.id,
+          branchId: tenantBBranch.id,
+          employeeCode: 'ZH-AD01',
+          firstName: 'Yusuf',
+          lastName: 'Balogun',
+          jobTitle: 'Managing Director',
+          department: 'Management',
+        },
+      },
+      roles: { create: [{ roleId: companyAdminRole.id }] },
+    },
+    include: { staff: true },
+  });
+
+  const tenantBCustomerIdentity = await prisma.identity.create({
+    data: {
+      email: 'khadija.bello@demo.zamzamhorizon.travel',
+      phone: '+2348177776543',
+      passwordHash: tenantBPasswordHash,
+      type: 'CUSTOMER',
+      status: 'ACTIVE',
+      emailVerifiedAt: new Date(),
+      roles: { create: [{ roleId: customerRole.id }] },
+      customer: {
+        create: {
+          companyId: tenantB.id,
+          firstName: 'Khadija',
+          lastName: 'Bello',
+          nationality: 'Nigerian',
+          gender: 'FEMALE',
+          country: 'Nigeria',
+          customerType: 'INDIVIDUAL',
+          assignedStaffId: tenantBAdminIdentity.staff!.id,
+          assignedBranchId: tenantBBranch.id,
+        },
+      },
+    },
+    include: { customer: true },
+  });
+
+  await prisma.auditLog.create({
+    data: {
+      companyId: tenantB.id,
+      action: 'company.created',
+      entityType: 'Company',
+      entityId: tenantB.id,
+      metadata: { seeded: true, purpose: 'Phase 11 cross-tenant isolation proof' },
+    },
+  });
+
+  console.log(
+    `Created second demo tenant "${tenantB.name}" (id ${tenantB.id}) — ` +
+      `admin ${tenantBAdminIdentity.email}, customer ${tenantBCustomerIdentity.customer!.id} ` +
+      `(password for both: ${DEMO_PASSWORD})`,
+  );
+  console.log(
+    'This tenant exists ONLY to prove cross-tenant isolation — Tenant A ' +
+      '(Alnajoum Travel Agency) staff must never be able to read, list, or ' +
+      'modify anything belonging to it, and vice versa.',
+  );
+}
+
 async function main() {
   await seedPhase1And2();
   await seedPhase3Visa();
@@ -4050,6 +4193,7 @@ async function main() {
   await seedPhase8HajjOps();
   await seedPhase9VisaOperations();
   await seedPhase10FlightGds();
+  await seedPhase11EnterpriseGovernance();
 }
 
 main()

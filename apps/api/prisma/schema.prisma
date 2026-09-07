@@ -65,6 +65,12 @@ model Identity {
   // Phase 7 — per-identity notification channel preferences.
   notificationPreference NotificationPreference?
 
+  // Phase 11 — 2FA recovery codes and API keys this identity owns.
+  recoveryCodes TwoFactorRecoveryCode[]
+  apiKeys       ApiKey[]
+  approvalRequestsMade     ApprovalRequest[] @relation("ApprovalRequester")
+  approvalDecisionsMade    ApprovalDecision[] @relation("ApprovalDecider")
+
   @@index([type])
   @@map("identities")
 }
@@ -80,6 +86,16 @@ model Customer {
   id         String   @id @default(cuid())
   identityId String   @unique
   identity   Identity @relation(fields: [identityId], references: [id], onDelete: Cascade)
+
+  // Phase 11 spec #2/#3 — the tenant boundary. Required (not derived only
+  // from assignedBranch, which is nullable for a self-registered customer
+  // with no staff/branch assigned yet) so every customer is isolable even
+  // before anyone picks them up. Defaults to the single pre-Phase-11
+  // Company for every existing row (see the Phase 11 migration) —
+  // multi-tenant support is additive, not a breaking change for the one
+  // agency that has used this platform so far.
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
 
   firstName   String
   lastName    String
@@ -146,6 +162,7 @@ model Customer {
 
   @@index([assignedStaffId])
   @@index([assignedBranchId])
+  @@index([companyId])
   @@map("customers")
 }
 
@@ -365,14 +382,29 @@ model Staff {
   @@map("staff")
 }
 
+/**
+ * Phase 11 spec #2 — this IS the platform's tenant/organization boundary,
+ * not a separate concept: every Branch/Staff already hangs off a Company,
+ * so formalizing multi-tenancy means completing this model's fields and
+ * threading `companyId` through the records that were still missing it
+ * (see Customer.companyId below), not inventing a parallel "Organization"
+ * model that would just duplicate this one.
+ */
 model Company {
   id                 String  @id @default(cuid())
   name               String
   legalName          String?
+  tradingName        String? // Phase 11 — the public-facing brand name, when it differs from the legal name
   registrationNumber String? @unique
   email              String?
   phone              String?
   address            String?
+  country            String? // Phase 11 spec #2
+  currency           String  @default("NGN") // Phase 11 — this tenant's default/base currency (ISO 4217); a booking's own transaction currency is never overwritten by this
+  timezone           String  @default("Africa/Lagos") // Phase 11 — IANA zone, drives display only; every timestamp is still stored in UTC
+  taxId              String? // Phase 11 spec #2 — tax registration number, where applicable
+  subscriptionPlan   String? // Phase 11 — free-text plan name (e.g. "Standard", "Enterprise"); no billing engine exists to enforce it yet
+  subscriptionStatus String? // Phase 11 — free-text (e.g. "ACTIVE", "TRIAL", "SUSPENDED"); informational only, never used to gate access on its own
   website            String?
   logoUrl            String?
   isActive           Boolean @default(true)
@@ -380,8 +412,14 @@ model Company {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  branches Branch[]
-  staff    Staff[]
+  branches   Branch[]
+  staff      Staff[]
+  customers  Customer[]
+  auditLogs  AuditLog[]
+  featureFlagOverrides FeatureFlagOverride[]
+  systemSettings SystemSetting[]
+  approvalRequests ApprovalRequest[]
+  approvalThresholdRules ApprovalThresholdRule[]
 
   @@map("companies")
 }
@@ -489,6 +527,14 @@ model IdentityRole {
   @@map("identity_roles")
 }
 
+/**
+ * Phase 11 spec #16 — this already carries most of what a "session"
+ * needs (device/browser via userAgent, IP, issued/expiry/revoked times);
+ * SessionsService presents it as a session list/revoke API rather than a
+ * duplicate Session model. `lastActivityAt` is the one genuinely new
+ * signal, bumped by JwtAccessStrategy on each authenticated request whose
+ * access token was minted from this refresh token's family.
+ */
 model RefreshToken {
   id         String   @id @default(cuid())
   identityId String
@@ -501,6 +547,7 @@ model RefreshToken {
 
   createdByIp String?
   userAgent   String?
+  lastActivityAt DateTime? // Phase 11 — updated opportunistically, not on every single request
 
   createdAt DateTime @default(now())
 
@@ -513,10 +560,28 @@ model AuditLog {
   identityId String?
   identity   Identity? @relation(fields: [identityId], references: [id], onDelete: SetNull)
 
+  // Phase 11 spec #25/#26 — tenant/branch context on the log row itself
+  // (not just derivable from identity, since a system job or a since-
+  // deleted identity may have neither) so the admin audit search can
+  // filter by tenant/branch directly, in SQL, without a join per row.
+  // Both nullable: platform-level actions (e.g. Super Admin creating a
+  // Company) have no single owning tenant.
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  branchId  String?
+
   action     String // e.g. "auth.login", "company.create"
   entityType String?
   entityId   String?
   metadata   Json?
+
+  // Phase 11 spec #11/#25 — a reason and a before/after snapshot for the
+  // audit rows that represent a decision or a configuration change
+  // (approvals, settings, role/permission edits). Left null for routine
+  // create/read entries where there's no "previous state" to speak of.
+  reason      String?
+  previousValue Json?
+  newValue      Json?
 
   ipAddress String?
   userAgent String?
@@ -526,6 +591,8 @@ model AuditLog {
   @@index([identityId])
   @@index([entityType, entityId])
   @@index([createdAt])
+  @@index([companyId])
+  @@index([action])
   @@map("audit_logs")
 }
 
@@ -4578,4 +4645,315 @@ model RoomAllocationOccupant {
   @@unique([roomAllocationId, pilgrimType, pilgrimId])
   @@index([pilgrimType, pilgrimId])
   @@map("room_allocation_occupants")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 11 — Enterprise Administration, Security, Multi-Tenant Controls &
+// System Governance. Builds on what already existed rather than duplicating
+// it: Company already IS the tenant boundary (spec #2), IdentityRole already
+// supports company/branch-scoped role grants (spec #6), RefreshToken already
+// carries most of a "session" (spec #16), Identity.twoFactorEnabled/
+// twoFactorSecret columns already existed but were never wired to anything
+// (spec #15) — TwoFactorRecoveryCode below is the one genuinely missing
+// piece for that. AuditLog (extended above) remains the single audit trail
+// rather than a parallel "SecurityEvent" table — security events are just
+// AuditLog rows with a "security.*" action prefix, keeping one place to
+// search (spec #18/#25/#26).
+// ---------------------------------------------------------------------------
+
+/**
+ * Spec #15 — TOTP recovery codes. Stored hashed (argon2, same as
+ * passwords) and single-use; shown to the identity in full exactly once,
+ * at generation time, then never again (TwoFactorService never returns
+ * the plaintext after that response).
+ */
+model TwoFactorRecoveryCode {
+  id         String   @id @default(cuid())
+  identityId String
+  identity   Identity @relation(fields: [identityId], references: [id], onDelete: Cascade)
+
+  codeHash String
+  usedAt   DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([identityId])
+  @@map("two_factor_recovery_codes")
+}
+
+enum ApiKeyStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
+
+/**
+ * Spec #19 — machine-to-machine API access, separate from the
+ * user-session JWT flow. The raw key is shown once at creation and never
+ * stored or displayed again — only its hash and a short, non-secret
+ * prefix (for the owner to recognize which key is which in a list).
+ */
+model ApiKey {
+  id             String       @id @default(cuid())
+  ownerIdentityId String
+  ownerIdentity   Identity    @relation(fields: [ownerIdentityId], references: [id], onDelete: Cascade)
+
+  name        String
+  keyPrefix   String // first 8 chars of the raw key, safe to display — lets the owner tell keys apart without ever re-showing the secret
+  keyHash     String @unique
+  permissions String[] // subset of PERMISSIONS keys this key may exercise — never broader than its owner's own roles
+
+  status     ApiKeyStatus @default(ACTIVE)
+  expiresAt  DateTime?
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([ownerIdentityId])
+  @@map("api_keys")
+}
+
+// Named ApprovalRequestStatus, not ApprovalStatus, to avoid colliding with
+// the pre-existing ApprovalStatus enum (PENDING/APPROVED/REJECTED) used by
+// VisaApplication.approvalStatus/CorporateAccount's corporateApprovalStatus
+// — those ad hoc per-module flows are untouched by this generic engine.
+enum ApprovalRequestStatus {
+  REQUESTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+}
+
+/**
+ * Spec #10/#11 — a reusable, generic approval workflow that any module can
+ * route a sensitive action through, rather than every module inventing
+ * its own ad hoc approval state machine. This does NOT replace the
+ * existing narrower approval patterns that already work (ManualPayment
+ * Submission's finance review, Phase 10's manual-booking approval gate,
+ * StaffIncentive's own PENDING->APPROVED lifecycle) — those stay exactly
+ * as they are. This is for NEW call sites (see FlightRefundsService's
+ * threshold check) that need configurable multi-level approval with
+ * amount-based thresholds, which nothing existing provides.
+ */
+model ApprovalRequest {
+  id String @id @default(cuid())
+
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+
+  type   String // e.g. "FLIGHT_REFUND", "SUPPLIER_PAYMENT" — matches ApprovalThresholdRule.type
+  amount Int?
+  currency String?
+
+  entityType String? // e.g. "FlightRefund"
+  entityId   String?
+
+  requestedByIdentityId String
+  requestedBy           Identity @relation("ApprovalRequester", fields: [requestedByIdentityId], references: [id], onDelete: Restrict)
+  reason                String?
+
+  status ApprovalRequestStatus @default(REQUESTED)
+
+  // Snapshot of what would change if approved, and what actually changed
+  // once it is — spec #11's "record previous state / new state".
+  previousState Json?
+  newState      Json?
+
+  requiredApprovals Int @default(1) // resolved from ApprovalThresholdRule at creation time — never recomputed later, so a mid-flight threshold change can't retroactively change what a pending request needs
+  decisions ApprovalDecision[]
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  resolvedAt  DateTime?
+
+  @@index([companyId])
+  @@index([status])
+  @@index([entityType, entityId])
+  @@map("approval_requests")
+}
+
+enum ApprovalDecisionType {
+  APPROVED
+  REJECTED
+}
+
+/**
+ * One approver's decision on an ApprovalRequest. Multiple rows accumulate
+ * for a multi-level request; ApprovalService.decide() flips the parent to
+ * APPROVED only once enough APPROVED decisions exist to meet
+ * requiredApprovals, and to REJECTED immediately on the first rejection
+ * (a single "no" stops the request, same as most real approval chains).
+ */
+model ApprovalDecision {
+  id                String          @id @default(cuid())
+  approvalRequestId String
+  approvalRequest   ApprovalRequest @relation(fields: [approvalRequestId], references: [id], onDelete: Cascade)
+
+  decidedByIdentityId String
+  decidedBy           Identity @relation("ApprovalDecider", fields: [decidedByIdentityId], references: [id], onDelete: Restrict)
+
+  decision ApprovalDecisionType
+  reason   String? // required for REJECTED — enforced in ApprovalService, not the DB
+
+  createdAt DateTime @default(now())
+
+  // Spec #11 — a person decides on a given request at most once; the
+  // self-approval rule (decidedByIdentityId != requestedByIdentityId) is
+  // enforced in ApprovalService since it spans two tables.
+  @@unique([approvalRequestId, decidedByIdentityId])
+  @@map("approval_decisions")
+}
+
+/**
+ * Spec #10 — configurable amount-based approval thresholds, resolved
+ * most-specific-first as usual across this codebase (a companyId-scoped
+ * rule beats the platform-wide default). minAmount/maxAmount define the
+ * band this rule covers; null maxAmount means "and above".
+ */
+model ApprovalThresholdRule {
+  id        String  @id @default(cuid())
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  type              String // e.g. "FLIGHT_REFUND"
+  minAmount         Int    @default(0)
+  maxAmount         Int? // null = no upper bound
+  requiredApprovals Int    @default(1)
+  isActive          Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([type, isActive])
+  @@map("approval_threshold_rules")
+}
+
+/**
+ * Spec #39 — feature flags. A flag with no override row is off by
+ * default (isEnabledByDefault decides), matching "never invented/assumed
+ * on" discipline used elsewhere in this codebase. Per-tenant overrides
+ * are additive, never used to bypass a permission check (spec #39's own
+ * warning) — every gated call site still runs its normal RBAC guard.
+ */
+model FeatureFlag {
+  id          String  @id @default(cuid())
+  key         String  @unique // e.g. "ENABLE_HAJJ"
+  description String?
+  isEnabledByDefault Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  overrides FeatureFlagOverride[]
+
+  @@map("feature_flags")
+}
+
+model FeatureFlagOverride {
+  id            String      @id @default(cuid())
+  featureFlagId String
+  featureFlag   FeatureFlag @relation(fields: [featureFlagId], references: [id], onDelete: Cascade)
+  companyId     String
+  company       Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  isEnabled Boolean
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([featureFlagId, companyId])
+  @@map("feature_flag_overrides")
+}
+
+/**
+ * Spec #20 — centralized, database-backed settings for cross-cutting
+ * configuration that doesn't already have a home (finance-specific
+ * config lives in FinanceSettings, provider credentials in
+ * IntegrationCredential — this is deliberately NOT a duplicate of
+ * either). companyId null = platform-wide default; a company-scoped row
+ * overrides it, same most-specific-wins pattern used throughout.
+ */
+model SystemSetting {
+  id        String  @id @default(cuid())
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  category String // e.g. "SECURITY", "PASSWORD_POLICY"
+  key      String // e.g. "MAX_FAILED_LOGIN_ATTEMPTS"
+  value    Json
+
+  updatedByIdentityId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  history SystemSettingHistory[]
+
+  @@unique([companyId, category, key])
+  @@map("system_settings")
+}
+
+/**
+ * Spec #38 — configuration versioning. One row per change, written
+ * alongside every SystemSetting update, never edited afterward.
+ */
+model SystemSettingHistory {
+  id              String        @id @default(cuid())
+  systemSettingId String
+  systemSetting   SystemSetting @relation(fields: [systemSettingId], references: [id], onDelete: Cascade)
+
+  previousValue Json?
+  newValue      Json
+  changedByIdentityId String?
+  reason        String?
+
+  createdAt DateTime @default(now())
+
+  @@index([systemSettingId])
+  @@map("system_setting_history")
+}
+
+/**
+ * Spec #21 — reference currency data for display/lookup. A booking's own
+ * transaction currency (e.g. FlightBooking.currency) is always stored as
+ * its own string field and is never overwritten when a rate here
+ * changes — this table never touches historical transaction values.
+ */
+model Currency {
+  code           String  @id // ISO 4217, e.g. "NGN"
+  name           String
+  symbol         String
+  decimalPlaces  Int     @default(2)
+  exchangeRateToBase Float @default(1) // relative to the platform base currency (NGN)
+  isActive       Boolean @default(true)
+
+  updatedAt DateTime @updatedAt
+
+  @@map("currencies")
+}
+
+/**
+ * Spec #22 — configurable tax rules. CRUD/lookup only in this phase; not
+ * wired into every module's pricing engine yet (each module's existing
+ * markup/fee engine — FlightPricingRule, FlightServiceFee, etc. — keeps
+ * working exactly as before). A future phase can have those engines
+ * resolve a TaxRule the same way they resolve a FlightServiceFee today.
+ */
+model TaxRule {
+  id                String   @id @default(cuid())
+  name              String
+  ratePercent       Float?
+  fixedAmount       Int?
+  isInclusive       Boolean  @default(false)
+  applicableService String? // e.g. "FLIGHT", "HOTEL" — free text, mirrors FlightServiceFeeType's own looseness
+  country           String?
+  effectiveFrom     DateTime @default(now())
+  effectiveTo       DateTime?
+  isActive          Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([applicableService, isActive])
+  @@map("tax_rules")
 }

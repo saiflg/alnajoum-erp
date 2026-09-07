@@ -16,6 +16,8 @@ import {
 } from '../../common/utils/duration.util';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { CompanyService } from '../company/company.service';
+import { TwoFactorService } from './two-factor.service';
 import {
   DEFAULT_ROLE_DEFINITIONS,
   ROLE_DASHBOARD_PRECEDENCE,
@@ -48,6 +50,14 @@ export interface TokenPair {
   };
 }
 
+/** Phase 11 — what login() returns instead of a TokenPair when the
+ * identity has 2FA enabled. Carries no session of any kind — only
+ * verifyTwoFactorLogin(challengeToken, code) can turn this into one. */
+export interface TwoFactorChallenge {
+  requiresTwoFactor: true;
+  challengeToken: string;
+}
+
 function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }
@@ -62,6 +72,8 @@ export class AuthService {
     private readonly configService: ConfigService,
     private readonly rbacService: RbacService,
     private readonly auditService: AuditService,
+    private readonly companyService: CompanyService,
+    private readonly twoFactorService: TwoFactorService,
   ) {}
 
   private resolveDashboardPath(roles: string[]): string {
@@ -87,6 +99,11 @@ export class AuthService {
     const customerRole = await this.prisma.role.findUnique({
       where: { name: SYSTEM_ROLES.CUSTOMER },
     });
+    // Phase 11 — a public sign-up has no tenant context of its own to
+    // supply, and never should: the platform's one active company is the
+    // only sane default (see CompanyService.getDefaultCompanyId's own
+    // doc comment), never something the request body gets to pick.
+    const companyId = await this.companyService.getDefaultCompanyId();
 
     const identity = await this.prisma.identity.create({
       data: {
@@ -98,6 +115,7 @@ export class AuthService {
           create: {
             firstName: dto.firstName,
             lastName: dto.lastName,
+            companyId,
           },
         },
         ...(customerRole && {
@@ -121,6 +139,7 @@ export class AuthService {
   async validateCredentials(
     email: string,
     password: string,
+    meta: RequestMeta = {},
   ): Promise<Identity> {
     const identity = await this.prisma.identity.findUnique({
       where: { email },
@@ -155,6 +174,28 @@ export class AuthService {
         },
       });
 
+      // Phase 11 spec #17/#18 — every failed attempt and every lockout is
+      // a security event, not just a silent counter increment.
+      await this.auditService.record({
+        identityId: identity.id,
+        action: 'security.login_failed',
+        entityType: 'Identity',
+        entityId: identity.id,
+        ipAddress: meta.ipAddress,
+        userAgent: meta.userAgent,
+      });
+      if (shouldLock) {
+        await this.auditService.record({
+          identityId: identity.id,
+          action: 'security.account_locked',
+          entityType: 'Identity',
+          entityId: identity.id,
+          metadata: { durationMinutes: ACCOUNT_LOCK_DURATION_MINUTES },
+          ipAddress: meta.ipAddress,
+          userAgent: meta.userAgent,
+        });
+      }
+
       throw new UnauthorizedException('Invalid email or password');
     }
 
@@ -163,6 +204,16 @@ export class AuthService {
     }
 
     if (identity.failedLoginCount > 0 || identity.lockedUntil) {
+      if (identity.lockedUntil) {
+        await this.auditService.record({
+          identityId: identity.id,
+          action: 'security.account_unlocked',
+          entityType: 'Identity',
+          entityId: identity.id,
+          ipAddress: meta.ipAddress,
+          userAgent: meta.userAgent,
+        });
+      }
       await this.prisma.identity.update({
         where: { id: identity.id },
         data: { failedLoginCount: 0, lockedUntil: null },
@@ -172,8 +223,42 @@ export class AuthService {
     return identity;
   }
 
-  async login(dto: LoginDto, meta: RequestMeta): Promise<TokenPair> {
-    const identity = await this.validateCredentials(dto.email, dto.password);
+  /** Signed with JWT_REFRESH_SECRET (a second secret this codebase already
+   * provisions but never otherwise signs with) so a challenge token can
+   * never be mistaken for — or accepted as — a real access token; the
+   * passport-jwt strategy verifies against JWT_ACCESS_SECRET specifically,
+   * so a mismatched signature is rejected before JwtAccessStrategy.validate
+   * ever runs. 5 minutes is long enough to type a 6-digit code, not long
+   * enough to be a meaningful standing credential if intercepted. */
+  private async issueTwoFactorChallenge(identityId: string): Promise<string> {
+    return this.jwtService.signAsync(
+      { sub: identityId, purpose: '2fa_challenge' },
+      {
+        secret: this.configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
+        expiresIn: 300,
+      },
+    );
+  }
+
+  async login(
+    dto: LoginDto,
+    meta: RequestMeta,
+  ): Promise<TokenPair | TwoFactorChallenge> {
+    const identity = await this.validateCredentials(
+      dto.email,
+      dto.password,
+      meta,
+    );
+
+    if (identity.twoFactorEnabled) {
+      // Password was correct, but the session isn't authenticated yet —
+      // no lastLoginAt bump, no token pair, no "auth.login" audit entry
+      // until the second factor actually clears (see verifyTwoFactorLogin).
+      return {
+        requiresTwoFactor: true,
+        challengeToken: await this.issueTwoFactorChallenge(identity.id),
+      };
+    }
 
     await this.prisma.identity.update({
       where: { id: identity.id },
@@ -192,40 +277,81 @@ export class AuthService {
     return this.issueTokenPair(identity, meta);
   }
 
+  /** Completes a login that stopped at requiresTwoFactor. Verifies the
+   * challenge token's own signature/expiry (via JwtService, same secret
+   * issueTwoFactorChallenge signed with) before ever looking at the code. */
+  async verifyTwoFactorLogin(
+    challengeToken: string,
+    code: string,
+    meta: RequestMeta,
+  ): Promise<TokenPair> {
+    let payload: { sub: string; purpose: string };
+    try {
+      payload = await this.jwtService.verifyAsync(challengeToken, {
+        secret: this.configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
+      });
+    } catch {
+      throw new UnauthorizedException(
+        'This 2FA challenge has expired — log in again',
+      );
+    }
+    if (payload.purpose !== '2fa_challenge') {
+      throw new UnauthorizedException('Invalid 2FA challenge token');
+    }
+
+    const identity = await this.prisma.identity.findUniqueOrThrow({
+      where: { id: payload.sub },
+    });
+    const valid = await this.twoFactorService.verifyChallenge(
+      identity.id,
+      code,
+    );
+    if (!valid) {
+      await this.auditService.record({
+        identityId: identity.id,
+        action: 'security.login_failed',
+        entityType: 'Identity',
+        entityId: identity.id,
+        metadata: { reason: '2fa_code_invalid' },
+        ipAddress: meta.ipAddress,
+        userAgent: meta.userAgent,
+      });
+      throw new UnauthorizedException('Invalid authenticator or recovery code');
+    }
+
+    await this.prisma.identity.update({
+      where: { id: identity.id },
+      data: { lastLoginAt: new Date() },
+    });
+    await this.auditService.record({
+      identityId: identity.id,
+      action: 'auth.login',
+      entityType: 'Identity',
+      entityId: identity.id,
+      metadata: { via2fa: true },
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
+    });
+
+    return this.issueTokenPair(identity, meta);
+  }
+
   private async issueTokenPair(
     identity: Identity,
     meta: RequestMeta,
   ): Promise<TokenPair> {
     const { roles } = await this.rbacService.getEffectiveAccess(identity.id);
 
-    // `permissions` deliberately never goes into the signed payload — see
-    // JwtAccessStrategy.validate's doc comment: a large permission set
-    // (SUPER_ADMIN/COMPANY_ADMIN) would blow the access_token cookie past
-    // the ~4KB limit browsers silently enforce per cookie. The strategy
-    // resolves permissions fresh from the DB on every request instead.
-    const payload: Pick<AuthContext, 'sub' | 'type' | 'roles'> = {
-      sub: identity.id,
-      type: identity.type,
-      roles,
-    };
-
-    const accessTokenExpiresIn = this.configService.get<string>(
-      'JWT_ACCESS_EXPIRES_IN',
-      '15m',
-    );
     const refreshTokenExpiresIn = this.configService.get<string>(
       'JWT_REFRESH_EXPIRES_IN',
       '7d',
     );
-
-    const accessToken = await this.jwtService.signAsync(payload, {
-      secret: this.configService.getOrThrow<string>('JWT_ACCESS_SECRET'),
-      expiresIn: durationToSeconds(accessTokenExpiresIn),
-    });
-
     const refreshToken = randomBytes(48).toString('hex');
 
-    await this.prisma.refreshToken.create({
+    // Created before the access token is signed, purely so its id exists
+    // to embed as `sessionId` below (see AuthContext.sessionId's doc
+    // comment) — the row is otherwise unchanged from before Phase 11.
+    const refreshTokenRecord = await this.prisma.refreshToken.create({
       data: {
         identityId: identity.id,
         tokenHash: hashToken(refreshToken),
@@ -233,6 +359,30 @@ export class AuthService {
         createdByIp: meta.ipAddress,
         userAgent: meta.userAgent,
       },
+    });
+
+    // `permissions` deliberately never goes into the signed payload — see
+    // JwtAccessStrategy.validate's doc comment: a large permission set
+    // (SUPER_ADMIN/COMPANY_ADMIN) would blow the access_token cookie past
+    // the ~4KB limit browsers silently enforce per cookie. The strategy
+    // resolves permissions fresh from the DB on every request instead.
+    const payload: Pick<AuthContext, 'sub' | 'type' | 'roles'> & {
+      sessionId: string;
+    } = {
+      sub: identity.id,
+      type: identity.type,
+      roles,
+      sessionId: refreshTokenRecord.id,
+    };
+
+    const accessTokenExpiresIn = this.configService.get<string>(
+      'JWT_ACCESS_EXPIRES_IN',
+      '15m',
+    );
+
+    const accessToken = await this.jwtService.signAsync(payload, {
+      secret: this.configService.getOrThrow<string>('JWT_ACCESS_SECRET'),
+      expiresIn: durationToSeconds(accessTokenExpiresIn),
     });
 
     return {

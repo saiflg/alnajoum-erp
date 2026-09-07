@@ -11,6 +11,7 @@ import {
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import type { AuthContext } from '../../common/interfaces/auth-context.interface';
+import { resolveTenantFilter } from '../../common/utils/tenant.util';
 import { IncentivesService } from '../incentives/incentives.service';
 import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { CreateStaffDto } from './dto/create-staff.dto';
@@ -34,34 +35,38 @@ export class UsersController {
 
   @Post()
   @RequirePermissions(PERMISSIONS.STAFF.CREATE)
-  create(@Body() dto: CreateStaffDto) {
-    return this.usersService.createStaff(dto);
+  create(@CurrentUser() user: AuthContext, @Body() dto: CreateStaffDto) {
+    return this.usersService.createStaff(dto, resolveTenantFilter(user));
   }
 
   @Get()
   @RequirePermissions(PERMISSIONS.STAFF.READ)
   findAll(
-    @Query('companyId') companyId?: string,
+    @CurrentUser() user: AuthContext,
     @Query('branchId') branchId?: string,
   ) {
-    return this.usersService.findAll(companyId, branchId);
+    return this.usersService.findAll(branchId, resolveTenantFilter(user));
   }
 
   @Get(':id')
   @RequirePermissions(PERMISSIONS.STAFF.READ)
-  findOne(@Param('id') id: string) {
-    return this.usersService.findOne(id);
+  findOne(@CurrentUser() user: AuthContext, @Param('id') id: string) {
+    return this.usersService.findOne(id, resolveTenantFilter(user));
   }
 
   @Patch(':id')
   @RequirePermissions(PERMISSIONS.STAFF.UPDATE)
-  update(@Param('id') id: string, @Body() dto: UpdateStaffDto) {
-    return this.usersService.update(id, dto);
+  update(
+    @CurrentUser() user: AuthContext,
+    @Param('id') id: string,
+    @Body() dto: UpdateStaffDto,
+  ) {
+    return this.usersService.update(id, dto, resolveTenantFilter(user));
   }
 
   @Delete(':id')
   @RequirePermissions(PERMISSIONS.STAFF.DELETE)
-  remove(@Param('id') id: string) {
-    return this.usersService.remove(id);
+  remove(@CurrentUser() user: AuthContext, @Param('id') id: string) {
+    return this.usersService.remove(id, resolveTenantFilter(user));
   }
 }

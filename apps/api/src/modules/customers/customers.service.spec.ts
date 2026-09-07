@@ -41,6 +41,68 @@ describe('CustomersService', () => {
         NotFoundException,
       );
     });
+
+    it('returns the customer when no tenant filter is given (SUPER_ADMIN)', async () => {
+      prisma.customer.findUnique.mockResolvedValue({
+        id: 'customer-1',
+        companyId: 'company-a',
+      });
+
+      await expect(service.findOne('customer-1')).resolves.toEqual(
+        expect.objectContaining({ id: 'customer-1' }),
+      );
+    });
+
+    it('returns the customer when it belongs to the caller\'s own tenant', async () => {
+      prisma.customer.findUnique.mockResolvedValue({
+        id: 'customer-1',
+        companyId: 'company-a',
+      });
+
+      await expect(
+        service.findOne('customer-1', 'company-a'),
+      ).resolves.toEqual(expect.objectContaining({ id: 'customer-1' }));
+    });
+
+    /**
+     * Phase 11 spec #65 — the mandatory cross-tenant test: a caller
+     * scoped to company-a must get NotFound (never the record, never a
+     * 403 that would confirm the id exists) for a customer that
+     * genuinely exists but belongs to company-b.
+     */
+    it('throws NotFound (not the record) for a customer belonging to a different tenant', async () => {
+      prisma.customer.findUnique.mockResolvedValue({
+        id: 'customer-1',
+        companyId: 'company-b',
+      });
+
+      await expect(
+        service.findOne('customer-1', 'company-a'),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('findAll', () => {
+    it('scopes the query to the caller\'s tenant when one is given', async () => {
+      prisma.customer.findMany.mockResolvedValue([]);
+
+      await service.findAll({}, 'company-a');
+
+      expect(prisma.customer.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ companyId: 'company-a' }),
+        }),
+      );
+    });
+
+    it('applies no tenant filter when none is given (SUPER_ADMIN)', async () => {
+      prisma.customer.findMany.mockResolvedValue([]);
+
+      await service.findAll({});
+
+      const call = prisma.customer.findMany.mock.calls[0][0];
+      expect(call.where).not.toHaveProperty('companyId');
+    });
   });
 
   describe('findByIdentityId', () => {

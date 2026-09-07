@@ -3,6 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { LeadStatus } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { CompanyService } from '../company/company.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { LeadsService } from './leads.service';
 
@@ -44,9 +45,13 @@ describe('LeadsService', () => {
       customer: { findUnique: jest.fn(), findFirst: jest.fn() },
       identity: { findUnique: jest.fn(), create: jest.fn() },
       role: { findUnique: jest.fn() },
+      branch: { findUnique: jest.fn() },
       customerTimelineEvent: { create: jest.fn() },
     };
     notificationsService = { sendGeneric: jest.fn() };
+    const companyService = {
+      getDefaultCompanyId: jest.fn().mockResolvedValue('company-1'),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -54,6 +59,7 @@ describe('LeadsService', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: AuditService, useValue: { record: jest.fn() } },
         { provide: NotificationsService, useValue: notificationsService },
+        { provide: CompanyService, useValue: companyService },
       ],
     }).compile();
 

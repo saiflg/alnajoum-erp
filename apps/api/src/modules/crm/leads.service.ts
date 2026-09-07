@@ -9,6 +9,7 @@ import * as argon2 from 'argon2';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { CompanyService } from '../company/company.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { SYSTEM_ROLES } from '../rbac/constants/default-roles.constant';
 import { CreateLeadDto } from './dto/create-lead.dto';
@@ -41,7 +42,24 @@ export class LeadsService {
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
     private readonly notificationsService: NotificationsService,
+    private readonly companyService: CompanyService,
   ) {}
+
+  /** Phase 11 — a converting lead's own branch (when assigned) determines
+   * its tenant; an unassigned lead falls back to the platform default,
+   * same as a public self-registration. */
+  private async resolveCompanyIdForNewCustomer(
+    assignedBranchId: string | null,
+  ): Promise<string> {
+    if (assignedBranchId) {
+      const branch = await this.prisma.branch.findUnique({
+        where: { id: assignedBranchId },
+        select: { companyId: true },
+      });
+      if (branch) return branch.companyId;
+    }
+    return this.companyService.getDefaultCompanyId();
+  }
 
   /** Idempotent — same pattern as LedgerService.ensureSystemAccounts(). */
   async ensureDefaultStages(): Promise<void> {
@@ -344,6 +362,9 @@ export class LeadsService {
       });
       const tempPassword = randomBytes(9).toString('base64url');
       const passwordHash = await argon2.hash(tempPassword);
+      const companyId = await this.resolveCompanyIdForNewCustomer(
+        lead.assignedBranchId,
+      );
 
       const identity = await this.prisma.identity.create({
         data: {
@@ -353,6 +374,7 @@ export class LeadsService {
           type: IdentityType.CUSTOMER,
           customer: {
             create: {
+              companyId,
               firstName,
               lastName,
               customerType:

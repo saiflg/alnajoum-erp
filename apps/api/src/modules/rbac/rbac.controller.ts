@@ -7,7 +7,9 @@ import {
   Patch,
   Post,
 } from '@nestjs/common';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
+import type { AuthContext } from '../../common/interfaces/auth-context.interface';
 import { PERMISSIONS } from './constants/permissions.constant';
 import { AssignRoleDto } from './dto/assign-role.dto';
 import { CreateRoleDto } from './dto/create-role.dto';
@@ -51,18 +53,26 @@ export class RbacController {
   @Post('identities/:identityId/roles')
   @RequirePermissions(PERMISSIONS.ROLE.ASSIGN)
   assignRole(
+    @CurrentUser() user: AuthContext,
     @Param('identityId') identityId: string,
     @Body() dto: AssignRoleDto,
   ) {
-    return this.rbacService.assignRoleToIdentity(identityId, dto);
+    return this.rbacService.assignRoleToIdentity(identityId, dto, {
+      sub: user.sub,
+      roles: user.roles,
+    });
   }
 
   @Delete('identities/:identityId/roles/:roleId')
   @RequirePermissions(PERMISSIONS.ROLE.ASSIGN)
   removeRole(
+    @CurrentUser() user: AuthContext,
     @Param('identityId') identityId: string,
     @Param('roleId') roleId: string,
   ) {
-    return this.rbacService.removeRoleFromIdentity(identityId, roleId);
+    return this.rbacService.removeRoleFromIdentity(identityId, roleId, {
+      sub: user.sub,
+      roles: user.roles,
+    });
   }
 }

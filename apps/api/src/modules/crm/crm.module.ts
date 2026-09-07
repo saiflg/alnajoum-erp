@@ -1,5 +1,6 @@
 import { Module, OnModuleInit } from '@nestjs/common';
 import { AuditModule } from '../audit/audit.module';
+import { CompanyModule } from '../company/company.module';
 import { CustomersModule } from '../customers/customers.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { UsersModule } from '../users/users.module';
@@ -22,7 +23,13 @@ import { TasksController } from './tasks.controller';
 import { TasksService } from './tasks.service';
 
 @Module({
-  imports: [AuditModule, NotificationsModule, UsersModule, CustomersModule],
+  imports: [
+    AuditModule,
+    NotificationsModule,
+    UsersModule,
+    CustomersModule,
+    CompanyModule,
+  ],
   controllers: [
     LeadsController,
     TasksController,

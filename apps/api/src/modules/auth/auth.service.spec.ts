@@ -5,7 +5,9 @@ import { Test, TestingModule } from '@nestjs/testing';
 import * as argon2 from 'argon2';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { CompanyService } from '../company/company.service';
 import { RbacService } from '../rbac/rbac.service';
+import { TwoFactorService } from './two-factor.service';
 import { AuthService } from './auth.service';
 import { MAX_FAILED_LOGIN_ATTEMPTS } from './auth.constants';
 
@@ -17,6 +19,8 @@ describe('AuthService', () => {
   };
   let rbacService: { getEffectiveAccess: jest.Mock };
   let auditService: { record: jest.Mock };
+  let jwtService: { signAsync: jest.Mock; verifyAsync: jest.Mock };
+  let twoFactorService: { verifyChallenge: jest.Mock };
 
   const baseIdentity = {
     id: 'identity-1',
@@ -48,17 +52,22 @@ describe('AuthService', () => {
         .mockResolvedValue({ roles: ['STAFF'], permissions: ['staff:read'] }),
     };
     auditService = { record: jest.fn() };
+    jwtService = {
+      signAsync: jest.fn().mockResolvedValue('signed.jwt.token'),
+      verifyAsync: jest.fn(),
+    };
+    twoFactorService = { verifyChallenge: jest.fn() };
+    const companyService = {
+      getDefaultCompanyId: jest.fn().mockResolvedValue('company-1'),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
         { provide: PrismaService, useValue: prisma },
-        {
-          provide: JwtService,
-          useValue: {
-            signAsync: jest.fn().mockResolvedValue('signed.jwt.token'),
-          },
-        },
+        { provide: CompanyService, useValue: companyService },
+        { provide: JwtService, useValue: jwtService },
+        { provide: TwoFactorService, useValue: twoFactorService },
         {
           provide: ConfigService,
           useValue: {
@@ -153,6 +162,110 @@ describe('AuthService', () => {
     });
   });
 
+  describe('login', () => {
+    it('returns a token pair directly when 2FA is not enabled (unchanged pre-Phase-11 behavior)', async () => {
+      const passwordHash = await argon2.hash('correct-password1');
+      prisma.identity.findUnique.mockResolvedValue({
+        ...baseIdentity,
+        passwordHash,
+        twoFactorEnabled: false,
+      });
+      prisma.refreshToken.create.mockResolvedValue({});
+
+      const result = await service.login(
+        { email: 'user@example.com', password: 'correct-password1' },
+        {},
+      );
+
+      expect('requiresTwoFactor' in result).toBe(false);
+      expect((result as { accessToken: string }).accessToken).toBeDefined();
+    });
+
+    it('returns a 2FA challenge instead of a session when 2FA is enabled', async () => {
+      const passwordHash = await argon2.hash('correct-password1');
+      prisma.identity.findUnique.mockResolvedValue({
+        ...baseIdentity,
+        passwordHash,
+        twoFactorEnabled: true,
+      });
+
+      const result = await service.login(
+        { email: 'user@example.com', password: 'correct-password1' },
+        {},
+      );
+
+      expect(result).toEqual({
+        requiresTwoFactor: true,
+        challengeToken: 'signed.jwt.token',
+      });
+      expect(prisma.refreshToken.create).not.toHaveBeenCalled();
+      expect(auditService.record).not.toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'auth.login' }),
+      );
+    });
+  });
+
+  describe('verifyTwoFactorLogin', () => {
+    it('rejects an expired/invalid challenge token', async () => {
+      jwtService.verifyAsync.mockRejectedValue(new Error('expired'));
+
+      await expect(
+        service.verifyTwoFactorLogin('bad-token', '123456', {}),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('rejects a token whose purpose is not 2fa_challenge', async () => {
+      jwtService.verifyAsync.mockResolvedValue({
+        sub: 'identity-1',
+        purpose: 'something_else',
+      });
+
+      await expect(
+        service.verifyTwoFactorLogin('token', '123456', {}),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('rejects an invalid code and records a security event, without issuing a session', async () => {
+      jwtService.verifyAsync.mockResolvedValue({
+        sub: 'identity-1',
+        purpose: '2fa_challenge',
+      });
+      prisma.identity.findUniqueOrThrow.mockResolvedValue(baseIdentity);
+      twoFactorService.verifyChallenge.mockResolvedValue(false);
+
+      await expect(
+        service.verifyTwoFactorLogin('token', '000000', {}),
+      ).rejects.toThrow(UnauthorizedException);
+      expect(auditService.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'security.login_failed',
+          metadata: { reason: '2fa_code_invalid' },
+        }),
+      );
+      expect(prisma.refreshToken.create).not.toHaveBeenCalled();
+    });
+
+    it('issues a full session for a valid code', async () => {
+      jwtService.verifyAsync.mockResolvedValue({
+        sub: 'identity-1',
+        purpose: '2fa_challenge',
+      });
+      prisma.identity.findUniqueOrThrow.mockResolvedValue(baseIdentity);
+      twoFactorService.verifyChallenge.mockResolvedValue(true);
+      prisma.refreshToken.create.mockResolvedValue({});
+
+      const result = await service.verifyTwoFactorLogin('token', '123456', {});
+
+      expect(result.accessToken).toBeDefined();
+      expect(auditService.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'auth.login',
+          metadata: { via2fa: true },
+        }),
+      );
+    });
+  });
+
   describe('registerCustomer', () => {
     it('throws Conflict when the email is already registered', async () => {
       prisma.identity.findUnique.mockResolvedValue(baseIdentity);
@@ -225,7 +338,7 @@ describe('AuthService', () => {
   });
 
   describe('getMe', () => {
-    it('surfaces the staff member\'s real company/branch name for the top nav', async () => {
+    it("surfaces the staff member's real company/branch name for the top nav", async () => {
       prisma.identity.findUniqueOrThrow.mockResolvedValue({
         ...baseIdentity,
         customer: null,

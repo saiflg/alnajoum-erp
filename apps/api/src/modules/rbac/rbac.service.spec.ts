@@ -1,11 +1,17 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
+import { AuditService } from '../audit/audit.service';
 import { RbacService } from './rbac.service';
 
 describe('RbacService', () => {
   let service: RbacService;
   let prisma: Record<string, Record<string, jest.Mock>>;
+  let auditService: { record: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
@@ -23,9 +29,14 @@ describe('RbacService', () => {
         delete: jest.fn(),
       },
     };
+    auditService = { record: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [RbacService, { provide: PrismaService, useValue: prisma }],
+      providers: [
+        RbacService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: AuditService, useValue: auditService },
+      ],
     }).compile();
 
     service = module.get(RbacService);
@@ -110,6 +121,103 @@ describe('RbacService', () => {
       const result = await service.getEffectiveAccess('identity-1');
 
       expect(result).toEqual({ roles: [], permissions: [] });
+    });
+  });
+
+  describe('assignRoleToIdentity', () => {
+    it('throws NotFound for a missing role', async () => {
+      prisma.role.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.assignRoleToIdentity('identity-1', { roleId: 'role-1' }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    /**
+     * Phase 11 spec #66 — mandatory role-escalation test: a non-Super-
+     * Admin caller (e.g. a Tenant Admin) must never be able to grant
+     * SUPER_ADMIN to anyone, including themselves.
+     */
+    it('blocks granting SUPER_ADMIN when the acting caller is not already SUPER_ADMIN', async () => {
+      prisma.role.findUnique.mockResolvedValue({
+        id: 'role-1',
+        name: 'SUPER_ADMIN',
+      });
+
+      await expect(
+        service.assignRoleToIdentity(
+          'identity-1',
+          { roleId: 'role-1' },
+          { sub: 'actor-1', roles: ['COMPANY_ADMIN'] },
+        ),
+      ).rejects.toThrow(ForbiddenException);
+      expect(prisma.identityRole.upsert).not.toHaveBeenCalled();
+      expect(auditService.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'security.role_escalation_blocked',
+        }),
+      );
+    });
+
+    it('allows an existing SUPER_ADMIN to grant SUPER_ADMIN to someone else', async () => {
+      prisma.role.findUnique.mockResolvedValue({
+        id: 'role-1',
+        name: 'SUPER_ADMIN',
+      });
+      prisma.identityRole.upsert.mockResolvedValue({});
+
+      await service.assignRoleToIdentity(
+        'identity-1',
+        { roleId: 'role-1' },
+        { sub: 'actor-1', roles: ['SUPER_ADMIN'] },
+      );
+
+      expect(prisma.identityRole.upsert).toHaveBeenCalled();
+    });
+
+    it("allows granting an ordinary role regardless of the acting caller's own roles", async () => {
+      prisma.role.findUnique.mockResolvedValue({
+        id: 'role-1',
+        name: 'STAFF',
+      });
+      prisma.identityRole.upsert.mockResolvedValue({});
+
+      await service.assignRoleToIdentity(
+        'identity-1',
+        { roleId: 'role-1' },
+        { sub: 'actor-1', roles: ['BRANCH_MANAGER'] },
+      );
+
+      expect(prisma.identityRole.upsert).toHaveBeenCalled();
+    });
+  });
+
+  describe('removeRoleFromIdentity', () => {
+    it('blocks removing SUPER_ADMIN when the acting caller is not already SUPER_ADMIN', async () => {
+      prisma.role.findUnique.mockResolvedValue({
+        id: 'role-1',
+        name: 'SUPER_ADMIN',
+      });
+
+      await expect(
+        service.removeRoleFromIdentity('identity-1', 'role-1', {
+          sub: 'actor-1',
+          roles: ['COMPANY_ADMIN'],
+        }),
+      ).rejects.toThrow(ForbiddenException);
+      expect(prisma.identityRole.delete).not.toHaveBeenCalled();
+    });
+
+    it('allows removing an ordinary role', async () => {
+      prisma.role.findUnique.mockResolvedValue({ id: 'role-1', name: 'STAFF' });
+      prisma.identityRole.delete.mockResolvedValue({});
+
+      await service.removeRoleFromIdentity('identity-1', 'role-1', {
+        sub: 'actor-1',
+        roles: ['COMPANY_ADMIN'],
+      });
+
+      expect(prisma.identityRole.delete).toHaveBeenCalled();
     });
   });
 });

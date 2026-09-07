@@ -227,6 +227,49 @@ export const PERMISSIONS = {
     DASHBOARD_VIEW: 'hajj_ops:dashboard_view',
     PROFITABILITY_VIEW: 'hajj_ops:profitability_view', // per-package cost vs. revenue — financial users only
   },
+  // Phase 11 — enterprise administration, security, multi-tenant controls
+  // and system governance. Deliberately separate from STAFF (which covers
+  // a staff member's own profile fields — job title, department, bank
+  // details): USER is about identity-level lifecycle and security actions
+  // that apply the same way to a staff or customer account.
+  USER: {
+    INVITE: 'user:invite',
+    ACTIVATE: 'user:activate',
+    DEACTIVATE: 'user:deactivate',
+    SUSPEND: 'user:suspend',
+    RESET_ACCESS: 'user:reset_access', // force password/2FA reset, unlock a locked account
+    VIEW_LOGIN_HISTORY: 'user:view_login_history',
+    MANAGE_SESSIONS: 'user:manage_sessions', // view/revoke another identity's sessions
+    MANAGE_2FA: 'user:manage_2fa', // admin disabling/resetting someone else's 2FA — never used to read their secret
+  },
+  APPROVAL: {
+    VIEW: 'approval:view',
+    DECIDE: 'approval:decide', // approve/reject a pending ApprovalRequest
+    CONFIGURE: 'approval:configure', // manage ApprovalThresholdRule
+  },
+  SETTINGS: {
+    VIEW: 'settings:view',
+    EDIT: 'settings:edit',
+  },
+  FEATURE_FLAG: {
+    VIEW: 'feature_flag:view',
+    MANAGE: 'feature_flag:manage',
+  },
+  API_KEY: {
+    MANAGE: 'api_key:manage', // create/revoke one's own; USER.MANAGE_SESSIONS-equivalent admin override is not exposed this phase
+  },
+  SECURITY: {
+    VIEW_EVENTS: 'security:view_events', // audit_logs rows with a "security.*" action prefix
+  },
+  CURRENCY: {
+    MANAGE: 'currency:manage',
+  },
+  TAX: {
+    MANAGE: 'tax:manage',
+  },
+  SEARCH: {
+    GLOBAL: 'search:global', // the cross-module admin search endpoint — each result type is still filtered by that type's own read permission underneath
+  },
 } as const;
 
 export const ALL_PERMISSION_KEYS: string[] = Object.values(PERMISSIONS).flatMap(

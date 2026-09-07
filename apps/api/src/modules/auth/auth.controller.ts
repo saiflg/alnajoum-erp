@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Ip,
+  Param,
   Patch,
   Post,
   Req,
@@ -20,12 +21,24 @@ import { ChangePasswordDto } from './dto/change-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterCustomerDto } from './dto/register-customer.dto';
+import { TwoFactorLoginVerifyDto } from './dto/two-factor-login-verify.dto';
+import { TwoFactorVerifyDto } from './dto/two-factor-verify.dto';
+import { SessionsService } from './sessions.service';
+import { TwoFactorService } from './two-factor.service';
+
+function isTokenPair(
+  result: TokenPair | { requiresTwoFactor: true },
+): result is TokenPair {
+  return !('requiresTwoFactor' in result);
+}
 
 @Controller('auth')
 export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly configService: ConfigService,
+    private readonly twoFactorService: TwoFactorService,
+    private readonly sessionsService: SessionsService,
   ) {}
 
   private buildMeta(req: Request, ip?: string): RequestMeta {
@@ -78,7 +91,28 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
     @Ip() ip: string,
   ) {
-    const tokens = await this.authService.login(dto, this.buildMeta(req, ip));
+    const result = await this.authService.login(dto, this.buildMeta(req, ip));
+    // A 2FA challenge carries no session to set cookies for — the client
+    // must still call login-verify before anything is actually issued.
+    if (isTokenPair(result)) {
+      this.setAuthCookies(res, result);
+    }
+    return result;
+  }
+
+  @Public()
+  @Post('2fa/login-verify')
+  async twoFactorLoginVerify(
+    @Body() dto: TwoFactorLoginVerifyDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+    @Ip() ip: string,
+  ) {
+    const tokens = await this.authService.verifyTwoFactorLogin(
+      dto.challengeToken,
+      dto.code,
+      this.buildMeta(req, ip),
+    );
     this.setAuthCookies(res, tokens);
     return tokens;
   }
@@ -135,5 +169,57 @@ export class AuthController {
   ) {
     await this.authService.changePassword(user.sub, dto);
     return { changed: true };
+  }
+
+  // --- Phase 11 spec #15 — self-service 2FA management ---------------------
+
+  @Post('2fa/setup')
+  setupTwoFactor(@CurrentUser() user: AuthContext) {
+    return this.twoFactorService.generateSetup(user.sub);
+  }
+
+  @Post('2fa/verify-enable')
+  verifyAndEnableTwoFactor(
+    @CurrentUser() user: AuthContext,
+    @Body() dto: TwoFactorVerifyDto,
+  ) {
+    return this.twoFactorService.verifyAndEnable(user.sub, dto.code);
+  }
+
+  @Post('2fa/disable')
+  disableTwoFactor(
+    @CurrentUser() user: AuthContext,
+    @Body() dto: TwoFactorVerifyDto,
+  ) {
+    return this.twoFactorService.disable(user.sub, dto.code);
+  }
+
+  @Post('2fa/recovery-codes/regenerate')
+  regenerateRecoveryCodes(
+    @CurrentUser() user: AuthContext,
+    @Body() dto: TwoFactorVerifyDto,
+  ) {
+    return this.twoFactorService.regenerateRecoveryCodes(user.sub, dto.code);
+  }
+
+  // --- Phase 11 spec #16 — self-service session management -----------------
+
+  @Get('sessions')
+  listSessions(@CurrentUser() user: AuthContext) {
+    return this.sessionsService.listForIdentity(user.sub, user.sessionId);
+  }
+
+  @Post('sessions/:id/revoke')
+  revokeSession(@CurrentUser() user: AuthContext, @Param('id') id: string) {
+    return this.sessionsService.revoke(user.sub, id, user.sub);
+  }
+
+  @Post('sessions/revoke-others')
+  revokeOtherSessions(@CurrentUser() user: AuthContext) {
+    return this.sessionsService.revokeAllOthers(
+      user.sub,
+      user.sessionId,
+      user.sub,
+    );
   }
 }
