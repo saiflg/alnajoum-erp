@@ -70,6 +70,33 @@ export class FlightRefundsService {
     return Number(config?.agencyFeePercent) || 0;
   }
 
+  /**
+   * `FlightBooking.refundable` is a lossy true/false/null snapshot of the
+   * fare's real 4-state refundability (REFUNDABLE/PARTIALLY_REFUNDABLE/
+   * NON_REFUNDABLE/UNKNOWN, see FlightsService.createBooking) — anything
+   * short of fully REFUNDABLE collapses to `false`. Using that boolean
+   * directly here previously treated a PARTIALLY_REFUNDABLE fare exactly
+   * like a NON_REFUNDABLE one (100% penalty, 0 refund shown), when the
+   * real provider — see MockFlightProviderService.requestRefund — applies
+   * only a 25% penalty for "partially refundable". The preview must match
+   * what requestRefund will actually do, so read the richer fareRules
+   * snapshot first and only fall back to the lossy boolean when it's
+   * missing (very old records, or a manual booking with no live offer).
+   */
+  private resolvePenaltyRate(
+    refundable: boolean | null,
+    fareRules: unknown,
+  ): number {
+    const detailed = (fareRules as { refundable?: string } | null | undefined)
+      ?.refundable;
+    if (detailed === 'REFUNDABLE') return 0;
+    if (detailed === 'NON_REFUNDABLE') return 1;
+    if (detailed === 'PARTIALLY_REFUNDABLE' || detailed === 'UNKNOWN') {
+      return 0.25;
+    }
+    return refundable === true ? 0 : refundable === false ? 1 : 0.25;
+  }
+
   async previewRefund(
     bookingId: string,
     ownerCustomerId?: string,
@@ -79,8 +106,7 @@ export class FlightRefundsService {
     const agencyFee = Math.round(booking.totalAmount * (feePercent / 100));
 
     const refundable = booking.refundable;
-    const penaltyRate =
-      refundable === true ? 0 : refundable === false ? 1 : 0.25;
+    const penaltyRate = this.resolvePenaltyRate(refundable, booking.fareRules);
     const estimatedProviderPenalty = Math.round(
       booking.totalAmount * penaltyRate,
     );

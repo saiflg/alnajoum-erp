@@ -104,6 +104,22 @@ describe('FlightRefundsService', () => {
       expect(preview.estimatedProviderPenalty).toBe(0);
       expect(preview.estimatedRefundAmount).toBe(95_000);
     });
+
+    it('applies only a 25% penalty for a partially-refundable fare, matching what requestRefund will actually charge', async () => {
+      // Regression: `booking.refundable` is a lossy true/false/null
+      // snapshot that collapses PARTIALLY_REFUNDABLE down to `false`,
+      // which previously made the preview show a 100% penalty (0
+      // refund) for a fare the provider actually refunds 75% of. The
+      // preview must read the richer fareRules snapshot instead.
+      prisma.flightBooking.findUnique.mockResolvedValue({
+        ...booking,
+        refundable: false,
+        fareRules: { refundable: 'PARTIALLY_REFUNDABLE' },
+      });
+      const preview = await service.previewRefund('booking-1');
+      expect(preview.estimatedProviderPenalty).toBe(25_000);
+      expect(preview.estimatedRefundAmount).toBe(70_000);
+    });
   });
 
   describe('requestRefund', () => {
