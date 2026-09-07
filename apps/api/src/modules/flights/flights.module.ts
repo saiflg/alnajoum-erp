@@ -7,6 +7,8 @@ import { IntegrationsModule } from '../integrations/integrations.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { UsersModule } from '../users/users.module';
+import { FlightAncillariesController } from './flight-ancillaries.controller';
+import { FlightAncillariesService } from './flight-ancillaries.service';
 import { FlightBookingsAdminController } from './flight-bookings-admin.controller';
 import { FlightBookingsOwnController } from './flight-bookings-own.controller';
 import { FlightGroupBookingsController } from './flight-group-bookings.controller';
@@ -14,11 +16,21 @@ import { FlightGroupBookingsService } from './flight-group-bookings.service';
 import { FlightIncentivesService } from './flight-incentives.service';
 import { FlightPricingRulesController } from './flight-pricing-rules.controller';
 import { FlightPricingService } from './flight-pricing.service';
+import { FlightProviderRoutingController } from './flight-provider-routing.controller';
+import { FlightProviderRoutingService } from './flight-provider-routing.service';
 import { FlightRefundsService } from './flight-refunds.service';
 import { FlightReissueService } from './flight-reissue.service';
 import { FlightReportsController } from './flight-reports.controller';
 import { FlightReportsService } from './flight-reports.service';
+import { FlightServiceFeesController } from './flight-service-fees.controller';
+import { FlightServiceFeesService } from './flight-service-fees.service';
+import { FlightSupplierContractsController } from './flight-supplier-contracts.controller';
+import { FlightSupplierContractsService } from './flight-supplier-contracts.service';
+import { FlightSuppliersController } from './flight-suppliers.controller';
+import { FlightSuppliersService } from './flight-suppliers.service';
 import { FlightTicketingService } from './flight-ticketing.service';
+import { FlightVoidsController } from './flight-voids.controller';
+import { FlightVoidsService } from './flight-voids.service';
 import { FlightsController } from './flights.controller';
 import { FlightsService } from './flights.service';
 import { ProviderTransactionLogService } from './provider-transaction-log.service';
@@ -56,6 +68,13 @@ import { TravelportFlightProviderService } from './providers/travelport-flight-p
     FlightPricingRulesController,
     FlightGroupBookingsController,
     FlightReportsController,
+    // Phase 10 — GDS/supplier/servicing-center expansion.
+    FlightVoidsController,
+    FlightAncillariesController,
+    FlightSuppliersController,
+    FlightSupplierContractsController,
+    FlightProviderRoutingController,
+    FlightServiceFeesController,
   ],
   providers: [
     FlightsService,
@@ -75,6 +94,13 @@ import { TravelportFlightProviderService } from './providers/travelport-flight-p
     TboFlightProviderService,
     FlightProviderRouter,
     { provide: FLIGHT_PROVIDER, useExisting: FlightProviderRouter },
+    // Phase 10 — GDS/supplier/servicing-center expansion.
+    FlightVoidsService,
+    FlightAncillariesService,
+    FlightSuppliersService,
+    FlightSupplierContractsService,
+    FlightProviderRoutingService,
+    FlightServiceFeesService,
   ],
   exports: [FlightsService],
 })

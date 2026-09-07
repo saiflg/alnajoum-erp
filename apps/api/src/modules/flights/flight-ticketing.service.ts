@@ -53,9 +53,30 @@ export class FlightTicketingService {
     if (booking.status === FlightBookingStatus.TICKETED) {
       throw new ConflictException('This booking has already been ticketed');
     }
-    if (booking.status !== FlightBookingStatus.CONFIRMED) {
+    // Spec #9 — a held booking is ticketable too, exactly like a plain
+    // CONFIRMED one, as long as its hold hasn't expired (checked below).
+    if (
+      booking.status !== FlightBookingStatus.CONFIRMED &&
+      booking.status !== FlightBookingStatus.ON_HOLD
+    ) {
       throw new ConflictException(
         `This booking is ${booking.status.toLowerCase()}, not confirmed — it must be confirmed (and paid) before it can be ticketed`,
+      );
+    }
+    if (
+      booking.status === FlightBookingStatus.ON_HOLD &&
+      booking.holdExpiresAt &&
+      booking.holdExpiresAt < new Date()
+    ) {
+      // Spec #9 — "do not allow payment after the hold has expired." This
+      // is the one sanctioned direct writer of HOLD_EXPIRED, same pattern
+      // as VisaOpsAutomationService's EXPIRED write for visas.
+      await this.prisma.flightBooking.update({
+        where: { id: bookingId },
+        data: { status: FlightBookingStatus.HOLD_EXPIRED },
+      });
+      throw new ConflictException(
+        'This hold has expired — search again to get a new offer.',
       );
     }
     if (!booking.invoice || booking.invoice.status !== InvoiceStatus.PAID) {

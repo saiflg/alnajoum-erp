@@ -132,11 +132,6 @@ export class FlightRefundsService {
         'This booking has already been cancelled/refunded',
       );
     }
-    if (!booking.providerOrderId) {
-      throw new BadRequestException(
-        'This booking has no provider order to refund.',
-      );
-    }
 
     const capabilities = await this.provider.capabilities();
     const feePercent = await this.agencyFeePercent();
@@ -147,7 +142,10 @@ export class FlightRefundsService {
       data: { status: FlightBookingStatus.REFUND_REQUESTED },
     });
 
-    if (!capabilities.refund) {
+    // Spec #40 — a manual/offline booking has no live provider order to
+    // call, exactly like a provider that lacks refund support: it goes
+    // through the same manual-required path below, never a hard failure.
+    if (!capabilities.refund || !booking.providerOrderId) {
       const refund = await this.prisma.flightRefund.create({
         data: {
           bookingId,

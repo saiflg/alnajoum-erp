@@ -6,6 +6,7 @@ import type { AuthContext } from '../../common/interfaces/auth-context.interface
 import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { UsersService } from '../users/users.service';
 import { CreateBookingDto } from './dto/create-booking.dto';
+import { CreateManualFlightBookingDto } from './dto/create-manual-flight-booking.dto';
 import { RequestRefundDto } from './dto/request-refund.dto';
 import { RequestReissueDto } from './dto/request-reissue.dto';
 import { FlightRefundsService } from './flight-refunds.service';
@@ -37,7 +38,28 @@ export class FlightBookingsAdminController {
       staffId ?? undefined,
       dto.idempotencyKey,
       dto.expectedPrice,
+      { hold: dto.hold },
     );
+  }
+
+  @Post('manual')
+  @RequirePermissions(PERMISSIONS.FLIGHT.MANUAL_BOOKING)
+  async createManual(
+    @CurrentUser() user: AuthContext,
+    @Body() dto: CreateManualFlightBookingDto,
+  ) {
+    const staffId = await this.usersService.getStaffIdForIdentity(user.sub);
+    return this.flightsService.createManualBooking(dto, staffId ?? '');
+  }
+
+  @Post(':id/approve-manual')
+  @RequirePermissions(PERMISSIONS.FLIGHT.MANUAL_BOOKING_APPROVE)
+  async approveManual(
+    @CurrentUser() user: AuthContext,
+    @Param('id') id: string,
+  ) {
+    const staffId = await this.usersService.getStaffIdForIdentity(user.sub);
+    return this.flightsService.approveManualBooking(id, staffId ?? '');
   }
 
   @Get()

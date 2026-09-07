@@ -63,6 +63,67 @@ function ref(prefix: string): string {
   return `${prefix}-${randomBytes(4).toString('hex').toUpperCase()}`;
 }
 
+/**
+ * A real booking's `itinerary` is always the full FlightOffer snapshot
+ * taken at booking time (see FlightsService.createBooking) — every admin
+ * page that renders a booking (e.g. the detail page's `itinerary.legs.map`)
+ * assumes that shape unconditionally. A demo/seed booking must match it
+ * too, or the admin UI crashes the moment someone opens that record —
+ * a placeholder like `{ demo: true }` is not good enough.
+ */
+function demoItinerary(opts: {
+  origin: string;
+  destination: string;
+  departureAt: Date;
+  totalAmount: number;
+  airline?: string;
+  airlineCode?: string;
+  flightNumber?: string;
+}) {
+  const departureAt = opts.departureAt.toISOString();
+  const airline = opts.airline ?? 'Air Peace';
+  const airlineCode = opts.airlineCode ?? 'P4';
+  return {
+    id: ref('offer'),
+    provider: 'MOCK',
+    tripType: 'ONE_WAY',
+    cabinClass: 'ECONOMY',
+    currency: 'NGN',
+    totalAmount: opts.totalAmount,
+    seatsAvailable: 4,
+    expiresAt: departureAt,
+    legs: [
+      {
+        origin: opts.origin,
+        destination: opts.destination,
+        departureAt,
+        arrivalAt: departureAt,
+        segments: [
+          {
+            origin: opts.origin,
+            destination: opts.destination,
+            departureAt,
+            arrivalAt: departureAt,
+            airline,
+            airlineCode,
+            flightNumber: opts.flightNumber ?? `${airlineCode}100`,
+            cabinClass: 'ECONOMY',
+            durationMinutes: 180,
+          },
+        ],
+      },
+    ],
+    fareConditions: {
+      refundable: 'PARTIALLY_REFUNDABLE',
+      cancellationPenaltyDescription:
+        'Refundable minus a 25% cancellation penalty and non-refundable taxes.',
+      baggageAllowance: { checked: '1 x 23kg', cabin: '1 x 7kg' },
+      fareBrand: 'Economy Basic',
+      warnings: [],
+    },
+  };
+}
+
 /** Phase 1/2 demo data — customers, family, Hajj/Umrah, wallet, manual payment. */
 async function seedPhase1And2() {
   const existing = await prisma.identity.findUnique({
@@ -3520,6 +3581,465 @@ async function seedPhase9VisaOperations() {
   console.log('--------------------------------------------------------');
 }
 
+/**
+ * Phase 10 demo data — flight suppliers (GDS/airline/consolidator) with a
+ * contract nearing expiry, a route-scoped provider-routing rule, two
+ * configurable service fees, a held reservation, a voided ticket, an
+ * ancillary purchase, and a manual/offline booking pair (one still
+ * awaiting approval, one already approved with its incentive created) —
+ * enough to exercise every new Phase 10 screen without registering
+ * through the UI first. Independently idempotent, same pattern as every
+ * earlier phase.
+ */
+async function seedPhase10FlightGds() {
+  const existing = await prisma.flightSupplier.findFirst();
+  if (existing) {
+    console.log('Phase 10 flight/GDS demo data already present — skipping');
+    return;
+  }
+
+  const aminaIdentity = await prisma.identity.findUniqueOrThrow({
+    where: { email: MARKER_EMAIL },
+    include: { customer: true },
+  });
+  const chineduIdentity = await prisma.identity.findUniqueOrThrow({
+    where: { email: 'chinedu.okafor@demo.alnajoum.travel' },
+    include: { customer: true },
+  });
+  const agentIdentity = await prisma.identity.findUniqueOrThrow({
+    where: { email: 'fatima.sule@demo.alnajoum.travel' },
+    include: { staff: true },
+  });
+  const financeIdentity = await prisma.identity.findUniqueOrThrow({
+    where: { email: 'ibrahim.musa@demo.alnajoum.travel' },
+    include: { staff: true },
+  });
+
+  // --- Spec #22/#23/#24: supplier master records + a contract nearing expiry ---
+  const gdsSupplier = await prisma.flightSupplier.create({
+    data: {
+      name: 'Duffel Settlement Account',
+      type: 'GDS',
+      apiProvider: 'duffel',
+      currency: 'NGN',
+      commissionPercent: 2,
+      markupPercent: 5,
+      creditLimit: 10_000_000,
+      paymentTerms: 'Net 7',
+      settlementCycle: 'Weekly',
+      status: 'ACTIVE',
+      apiStatus: 'Connected (test mode)',
+    },
+  });
+  await prisma.flightSupplierContract.create({
+    data: {
+      supplierId: gdsSupplier.id,
+      name: '2026 Duffel Agency Agreement',
+      startDate: new Date('2026-01-01'),
+      endDate: new Date(Date.now() + 20 * 24 * 60 * 60 * 1000), // expiring soon
+      commissionPercent: 2,
+      currency: 'NGN',
+      settlementTerms: 'Weekly settlement via bank transfer',
+      ticketingTerms: 'Instant ticketing, test-mode balance',
+      cancellationRules: 'Per-fare cancellation penalty, no supplier fee',
+      contactPerson: 'Duffel Partner Support',
+      status: 'ACTIVE',
+    },
+  });
+  const airlineSupplier = await prisma.flightSupplier.create({
+    data: {
+      name: 'Air Peace Direct',
+      type: 'AIRLINE',
+      currency: 'NGN',
+      commissionPercent: 3,
+      creditLimit: 5_000_000,
+      paymentTerms: 'Net 14',
+      settlementCycle: 'Monthly',
+      status: 'ACTIVE',
+    },
+  });
+  await prisma.flightSupplier.create({
+    data: {
+      name: 'Al Rajhi Travel Consolidator',
+      type: 'CONSOLIDATOR',
+      currency: 'NGN',
+      commissionPercent: 4,
+      markupPercent: 6,
+      creditLimit: 8_000_000,
+      paymentTerms: 'Net 30',
+      settlementCycle: 'Monthly',
+      status: 'ACTIVE',
+    },
+  });
+  console.log(
+    'Created 3 flight suppliers (GDS/Airline/Consolidator) and 1 contract expiring in 20 days',
+  );
+
+  // --- Spec #23: supplier exposure near the 85% alert threshold, using the
+  // existing generic SupplierPayable ledger, linked to the new master record.
+  await prisma.supplierPayable.create({
+    data: {
+      supplierName: gdsSupplier.name,
+      flightSupplierId: gdsSupplier.id,
+      sourceModule: 'FLIGHT_BOOKING',
+      sourceId: ref('demo-booking'),
+      amount: 8_900_000,
+      currency: 'NGN',
+      status: 'OUTSTANDING',
+    },
+  });
+
+  // --- Spec #30: route-scoped provider priority + a global fallback default ---
+  // MOCK is listed last so this rule still demonstrates real GDS priority
+  // order while keeping LOS->DXB (one of spec #48's required localhost demo
+  // routes) actually searchable without live Duffel/Travelport/Sabre
+  // credentials — the whole point of a fallback list is that it ends
+  // somewhere that works.
+  await prisma.flightProviderRoutingRule.create({
+    data: {
+      origin: 'LOS',
+      destination: 'DXB',
+      providerPriority: ['DUFFEL', 'TRAVELPORT', 'SABRE', 'MOCK'],
+      priority: 10,
+      isActive: true,
+    },
+  });
+  await prisma.flightProviderRoutingRule.create({
+    data: {
+      providerPriority: ['MOCK'],
+      priority: 0,
+      isActive: true,
+    },
+  });
+  console.log(
+    'Created 2 provider routing rules (LOS→DXB priority list + global default)',
+  );
+
+  // --- Spec #26: configurable service fees ---
+  await prisma.flightServiceFee.create({
+    data: { type: 'TICKETING', amount: 2_000, isActive: true },
+  });
+  await prisma.flightServiceFee.create({
+    data: { type: 'CANCELLATION', percent: 2, isActive: true },
+  });
+  console.log(
+    'Created 2 flight service fees (₦2,000 flat ticketing fee, 2% cancellation fee)',
+  );
+
+  // --- Spec #9: a held reservation, payable before its 24h window expires ---
+  const holdBooking = await prisma.flightBooking.create({
+    data: {
+      bookingReference: `ANJ-DEMOHOLD1`,
+      customerId: aminaIdentity.customer!.id,
+      bookedByStaffId: agentIdentity.staff!.id,
+      provider: 'MOCK',
+      providerOfferId: ref('offer'),
+      providerOrderId: `MOCK-${ref('order')}`,
+      status: 'ON_HOLD',
+      holdExpiresAt: new Date(Date.now() + 20 * 60 * 60 * 1000), // 20h from now
+      currency: 'NGN',
+      totalAmount: 420_000,
+      providerCost: 380_000,
+      markupAmount: 40_000,
+      tripType: 'ONE_WAY',
+      origin: 'LOS',
+      destination: 'DXB',
+      departureAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+      cabinClass: 'ECONOMY',
+      itinerary: demoItinerary({
+        origin: 'LOS',
+        destination: 'DXB',
+        departureAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+        totalAmount: 420_000,
+      }),
+      passengers: {
+        create: [
+          {
+            type: 'ADULT',
+            customerId: aminaIdentity.customer!.id,
+            firstName: 'Amina',
+            lastName: 'Yusuf',
+          },
+        ],
+      },
+    },
+  });
+  await prisma.invoice.create({
+    data: {
+      invoiceNumber: ref('INV'),
+      customerId: aminaIdentity.customer!.id,
+      flightBookingId: holdBooking.id,
+      status: 'ISSUED',
+      currency: 'NGN',
+      totalAmount: 420_000,
+      lineItems: {
+        create: [
+          {
+            description: `Held flight ${holdBooking.bookingReference} — Lagos to Dubai`,
+            amount: 420_000,
+          },
+        ],
+      },
+    },
+  });
+
+  // --- Spec #18: a voided ticket (full reversal, no penalty) ----------------
+  const voidBooking = await prisma.flightBooking.create({
+    data: {
+      bookingReference: `ANJ-DEMOVOID1`,
+      customerId: chineduIdentity.customer!.id,
+      bookedByStaffId: agentIdentity.staff!.id,
+      provider: 'MOCK',
+      providerOfferId: ref('offer'),
+      providerOrderId: `MOCK-${ref('order')}`,
+      status: 'VOIDED',
+      currency: 'NGN',
+      totalAmount: 350_000,
+      providerCost: 300_000,
+      markupAmount: 50_000,
+      tripType: 'ONE_WAY',
+      origin: 'LOS',
+      destination: 'ABV',
+      departureAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+      cabinClass: 'ECONOMY',
+      pnr: 'VOIDAB',
+      ticketedAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
+      ticketedByStaffId: agentIdentity.staff!.id,
+      itinerary: demoItinerary({
+        origin: 'LOS',
+        destination: 'ABV',
+        departureAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+        totalAmount: 350_000,
+      }),
+      passengers: {
+        create: [
+          {
+            type: 'ADULT',
+            customerId: chineduIdentity.customer!.id,
+            firstName: 'Chinedu',
+            lastName: 'Okafor',
+            ticketNumber: 'TKT-VOID001',
+          },
+        ],
+      },
+    },
+  });
+  await prisma.flightVoid.create({
+    data: {
+      bookingId: voidBooking.id,
+      requestedByStaffId: agentIdentity.staff!.id,
+      ticketNumbers: ['TKT-VOID001'],
+      voidDeadline: new Date(),
+      amountVoided: 350_000,
+      currency: 'NGN',
+      status: 'VOIDED',
+      completedAt: new Date(),
+    },
+  });
+
+  // --- Spec #19: an ancillary purchase on a ticketed booking ----------------
+  const ancillaryBooking = await prisma.flightBooking.create({
+    data: {
+      bookingReference: `ANJ-DEMOANC1`,
+      customerId: aminaIdentity.customer!.id,
+      bookedByStaffId: agentIdentity.staff!.id,
+      provider: 'MOCK',
+      providerOfferId: ref('offer'),
+      providerOrderId: `MOCK-${ref('order')}`,
+      status: 'TICKETED',
+      currency: 'NGN',
+      totalAmount: 400_000,
+      providerCost: 350_000,
+      markupAmount: 50_000,
+      tripType: 'ONE_WAY',
+      origin: 'LOS',
+      destination: 'JED',
+      departureAt: new Date(Date.now() + 21 * 24 * 60 * 60 * 1000),
+      cabinClass: 'ECONOMY',
+      pnr: 'ANCJED',
+      ticketedAt: new Date(),
+      ticketedByStaffId: agentIdentity.staff!.id,
+      itinerary: demoItinerary({
+        origin: 'LOS',
+        destination: 'JED',
+        departureAt: new Date(Date.now() + 21 * 24 * 60 * 60 * 1000),
+        totalAmount: 400_000,
+      }),
+      passengers: {
+        create: [
+          {
+            type: 'ADULT',
+            customerId: aminaIdentity.customer!.id,
+            firstName: 'Amina',
+            lastName: 'Yusuf',
+            ticketNumber: 'TKT-ANC001',
+          },
+        ],
+      },
+    },
+  });
+  await prisma.flightAncillary.create({
+    data: {
+      bookingId: ancillaryBooking.id,
+      type: 'BAGGAGE',
+      description: 'Extra 23kg checked bag',
+      amount: 15_000,
+      currency: 'NGN',
+      status: 'CONFIRMED',
+      purchasedByStaffId: agentIdentity.staff!.id,
+      providerReference: `MOCKANC-${ref('anc')}`,
+    },
+  });
+  console.log(
+    'Created 1 held reservation, 1 voided ticket, and 1 ticketed booking with a baggage ancillary',
+  );
+
+  // --- Spec #40: manual/offline bookings — one pending approval, one approved ---
+  const manualPending = await prisma.flightBooking.create({
+    data: {
+      bookingReference: `ANJ-DEMOMAN1`,
+      customerId: chineduIdentity.customer!.id,
+      bookedByStaffId: agentIdentity.staff!.id,
+      provider: 'MOCK',
+      providerOfferId: ref('manual'),
+      status: 'TICKETED',
+      currency: 'NGN',
+      totalAmount: 250_000,
+      providerCost: 200_000,
+      markupAmount: 50_000,
+      tripType: 'ONE_WAY',
+      origin: 'ABV',
+      destination: 'JED',
+      departureAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      cabinClass: 'ECONOMY',
+      pnr: 'MANUAL1',
+      ticketedAt: new Date(),
+      ticketedByStaffId: agentIdentity.staff!.id,
+      isOfflineEntry: true,
+      offlineReason:
+        'Customer called in, paid cash at the branch — booked directly with the airline counter.',
+      itinerary: demoItinerary({
+        origin: 'ABV',
+        destination: 'JED',
+        departureAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        totalAmount: 250_000,
+        airline: 'Air Peace',
+        airlineCode: 'P4',
+        flightNumber: 'P47821',
+      }),
+      passengers: {
+        create: [
+          {
+            type: 'ADULT',
+            customerId: chineduIdentity.customer!.id,
+            firstName: 'Chinedu',
+            lastName: 'Okafor',
+            ticketNumber: 'TKT-MAN001',
+          },
+        ],
+      },
+    },
+  });
+  await prisma.supplierPayable.create({
+    data: {
+      supplierName: airlineSupplier.name,
+      flightSupplierId: airlineSupplier.id,
+      sourceModule: 'FLIGHT_BOOKING',
+      sourceId: manualPending.id,
+      amount: 200_000,
+      currency: 'NGN',
+      status: 'OUTSTANDING',
+    },
+  });
+  await prisma.auditLog.create({
+    data: {
+      action: 'flight_booking.manual_created',
+      entityType: 'FlightBooking',
+      entityId: manualPending.id,
+      metadata: { staffId: agentIdentity.staff!.id, status: 'TICKETED' },
+    },
+  });
+
+  const manualApproved = await prisma.flightBooking.create({
+    data: {
+      bookingReference: `ANJ-DEMOMAN2`,
+      customerId: aminaIdentity.customer!.id,
+      bookedByStaffId: agentIdentity.staff!.id,
+      provider: 'MOCK',
+      providerOfferId: ref('manual'),
+      status: 'TICKETED',
+      currency: 'NGN',
+      totalAmount: 300_000,
+      providerCost: 240_000,
+      markupAmount: 60_000,
+      tripType: 'ONE_WAY',
+      origin: 'KAD',
+      destination: 'JED',
+      departureAt: new Date(Date.now() + 40 * 24 * 60 * 60 * 1000),
+      cabinClass: 'ECONOMY',
+      pnr: 'MANUAL2',
+      ticketedAt: new Date(),
+      ticketedByStaffId: agentIdentity.staff!.id,
+      isOfflineEntry: true,
+      offlineReason:
+        'Walk-in customer, paid by bank transfer — booked directly with the agent.',
+      itinerary: demoItinerary({
+        origin: 'KAD',
+        destination: 'JED',
+        departureAt: new Date(Date.now() + 40 * 24 * 60 * 60 * 1000),
+        totalAmount: 300_000,
+        airline: 'Air Peace',
+        airlineCode: 'P4',
+        flightNumber: 'P47833',
+      }),
+      passengers: {
+        create: [
+          {
+            type: 'ADULT',
+            customerId: aminaIdentity.customer!.id,
+            firstName: 'Amina',
+            lastName: 'Yusuf',
+            ticketNumber: 'TKT-MAN002',
+          },
+        ],
+      },
+    },
+  });
+  const manualMargin = 60_000;
+  const manualIncentive = await prisma.staffIncentive.create({
+    data: {
+      staffId: agentIdentity.staff!.id,
+      sourceType: 'FLIGHT_BOOKING',
+      sourceId: manualApproved.id,
+      amount: Math.round(manualMargin * 0.5),
+      currency: 'NGN',
+      description: `Incentive on flight booking ${manualApproved.bookingReference} (manual, approved)`,
+      status: 'PENDING',
+      referenceNumber: ref('INC'),
+      companyCost: 240_000,
+      sellingPrice: 300_000,
+      margin: manualMargin,
+      customerId: aminaIdentity.customer!.id,
+    },
+  });
+  await prisma.auditLog.create({
+    data: {
+      action: 'flight_booking.manual_approved',
+      entityType: 'FlightBooking',
+      entityId: manualApproved.id,
+      metadata: { approvedByStaffId: financeIdentity.staff!.id },
+    },
+  });
+  console.log(
+    `Created 2 manual/offline bookings — ${manualPending.bookingReference} still awaiting approval, ` +
+      `${manualApproved.bookingReference} approved with incentive ${manualIncentive.referenceNumber}`,
+  );
+
+  console.log('--------------------------------------------------------');
+  console.log('Phase 10 flight/GDS demo data seeded successfully.');
+  console.log('--------------------------------------------------------');
+}
+
 async function main() {
   await seedPhase1And2();
   await seedPhase3Visa();
@@ -3529,6 +4049,7 @@ async function main() {
   await seedPhase7Crm();
   await seedPhase8HajjOps();
   await seedPhase9VisaOperations();
+  await seedPhase10FlightGds();
 }
 
 main()

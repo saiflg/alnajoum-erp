@@ -51,6 +51,7 @@ export class FlightBookingsOwnController {
       undefined,
       dto.idempotencyKey,
       dto.expectedPrice,
+      { hold: dto.hold },
     );
     return sanitizeForCustomer(booking);
   }

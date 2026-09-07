@@ -2,18 +2,33 @@ import { Injectable, Logger } from '@nestjs/common';
 import { CabinClass, FlightProviderName, TripType } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import {
+  AncillaryRequest,
   BookingPassengerSnapshot,
+  CreateOrderOptions,
   CreateOrderResult,
   FareConditions,
   FlightLegOffer,
   FlightOffer,
   FlightProviderPort,
   IssueTicketResult,
+  ProviderAncillaryResult,
   ProviderCapabilities,
   ProviderRefundResult,
+  ProviderVoidResult,
   ReissueResult,
   SearchFlightsCriteria,
 } from './flight-provider.port';
+
+/** Spec #9 — a held mock reservation gets 24 hours to pay before it expires,
+ * a realistic GDS-style hold window. */
+const HOLD_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+const ANCILLARY_PRICES: Record<AncillaryRequest['type'], number> = {
+  BAGGAGE: 15_000,
+  SEAT: 8_000,
+  MEAL: 3_000,
+  OTHER: 5_000,
+};
 
 const REFUNDABILITY: FareConditions['refundable'][] = [
   'REFUNDABLE',
@@ -73,6 +88,9 @@ interface BookedOrder {
   offer: FlightOffer;
   ticketed: boolean;
   cancelled: boolean;
+  held: boolean;
+  holdExpiresAt?: number;
+  voided: boolean;
 }
 
 /** Deterministic-length alphanumeric code, e.g. a 6-char PNR. */
@@ -92,7 +110,23 @@ export class MockFlightProviderService implements FlightProviderPort {
   private readonly bookedOrders = new Map<string, BookedOrder>();
 
   capabilities(): Promise<ProviderCapabilities> {
-    return Promise.resolve({ ticketing: true, refund: true, reissue: true });
+    return Promise.resolve({
+      search: true,
+      hold: true,
+      instantTicketing: true,
+      ticketing: true,
+      cancellation: true,
+      refund: true,
+      reissue: true,
+      void: true,
+      ancillary: true,
+      seatSelection: true,
+      baggage: true,
+      // Group bookings are staff-managed in this codebase (see
+      // FlightGroupBooking's own doc comment) — no provider exposes a live
+      // group-booking API, including this one.
+      groupBooking: false,
+    });
   }
 
   searchOffers(criteria: SearchFlightsCriteria): Promise<FlightOffer[]> {
@@ -242,6 +276,7 @@ export class MockFlightProviderService implements FlightProviderPort {
   createOrder(
     offer: FlightOffer,
     passengers: BookingPassengerSnapshot[],
+    options?: CreateOrderOptions,
   ): Promise<CreateOrderResult> {
     const cached = this.offerCache.get(offer.id);
     if (!cached || cached.expiresAt < Date.now()) {
@@ -257,12 +292,29 @@ export class MockFlightProviderService implements FlightProviderPort {
     // Offers are single-use in a real GDS; drop it from the cache once booked.
     this.offerCache.delete(offer.id);
     const providerOrderId = `MOCK-${randomUUID()}`;
+    const holdExpiresAt = options?.hold
+      ? Date.now() + HOLD_WINDOW_MS
+      : undefined;
     this.bookedOrders.set(providerOrderId, {
       offer,
       ticketed: false,
       cancelled: false,
+      voided: false,
+      held: !!options?.hold,
+      holdExpiresAt,
     });
-    return Promise.resolve({ providerOrderId, status: 'CONFIRMED' });
+    if (options?.hold) {
+      this.logger.log(
+        `Mock order ${providerOrderId} held until ${new Date(holdExpiresAt!).toISOString()}`,
+      );
+    }
+    return Promise.resolve({
+      providerOrderId,
+      status: 'CONFIRMED',
+      holdExpiresAt: holdExpiresAt
+        ? new Date(holdExpiresAt).toISOString()
+        : undefined,
+    });
   }
 
   issueTicket(
@@ -270,16 +322,29 @@ export class MockFlightProviderService implements FlightProviderPort {
     _offer: FlightOffer,
   ): Promise<IssueTicketResult> {
     const order = this.bookedOrders.get(providerOrderId);
-    if (!order || order.cancelled) {
+    if (!order || order.cancelled || order.voided) {
       return Promise.resolve({
         pnr: '',
         status: 'FAILED',
         errorMessage: 'No active order found for this booking.',
       });
     }
+    // Spec #9 — "do not allow payment after the hold has expired." Ticket
+    // issuance is this codebase's post-payment confirmation step (see
+    // FlightTicketingService.issueTicket), so this is where an expired hold
+    // must actually block.
+    if (order.held && order.holdExpiresAt && order.holdExpiresAt < Date.now()) {
+      return Promise.resolve({
+        pnr: '',
+        status: 'FAILED',
+        errorMessage:
+          'This hold has expired — search again to get a new offer.',
+      });
+    }
     const rand = mulberry32(hashString(providerOrderId));
     const pnr = randomCode(rand, 6);
     order.ticketed = true;
+    order.held = false;
     this.logger.log(
       `Mock ticket issued for order ${providerOrderId}: PNR ${pnr}`,
     );
@@ -346,6 +411,8 @@ export class MockFlightProviderService implements FlightProviderPort {
       offer: newOffer,
       ticketed: true,
       cancelled: false,
+      held: false,
+      voided: false,
     });
     order.cancelled = true;
     this.logger.log(
@@ -355,6 +422,50 @@ export class MockFlightProviderService implements FlightProviderPort {
       providerOrderId: newProviderOrderId,
       pnr,
       status: 'REISSUED',
+    });
+  }
+
+  requestVoid(
+    providerOrderId: string,
+    ticketNumbers: string[],
+  ): Promise<ProviderVoidResult> {
+    const order = this.bookedOrders.get(providerOrderId);
+    if (!order || !order.ticketed || order.cancelled) {
+      return Promise.resolve({
+        status: 'FAILED',
+        errorMessage: 'No ticketed order found for this booking.',
+      });
+    }
+    order.voided = true;
+    this.logger.log(
+      `Mock void for order ${providerOrderId}: tickets ${ticketNumbers.join(', ')}`,
+    );
+    return Promise.resolve({ status: 'VOIDED' });
+  }
+
+  purchaseAncillary(
+    providerOrderId: string,
+    request: AncillaryRequest,
+  ): Promise<ProviderAncillaryResult> {
+    const order = this.bookedOrders.get(providerOrderId);
+    if (!order || order.cancelled || order.voided) {
+      return Promise.resolve({
+        status: 'FAILED',
+        amount: 0,
+        currency: 'NGN',
+        errorMessage: 'No active order found for this booking.',
+      });
+    }
+    const amount = ANCILLARY_PRICES[request.type];
+    const providerReference = `MOCKANC-${randomUUID().slice(0, 8).toUpperCase()}`;
+    this.logger.log(
+      `Mock ancillary purchased for order ${providerOrderId}: ${request.type} (${request.description}) — ${amount} NGN`,
+    );
+    return Promise.resolve({
+      status: 'CONFIRMED',
+      amount,
+      currency: order.offer.currency,
+      providerReference,
     });
   }
 }

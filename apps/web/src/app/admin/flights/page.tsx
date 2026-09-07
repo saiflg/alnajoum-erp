@@ -9,11 +9,37 @@ import { apiRequest } from '@/lib/api';
 import { formatCurrency, formatDateTime } from '@/lib/format';
 import { FlightBooking, FlightBookingStatus } from '@/lib/types';
 
-const STATUSES: Array<FlightBookingStatus | ''> = ['', 'PENDING', 'CONFIRMED', 'CANCELLED', 'FAILED'];
+const STATUSES: Array<FlightBookingStatus | ''> = [
+  '',
+  'PENDING',
+  'CONFIRMED',
+  'ON_HOLD',
+  'HOLD_EXPIRED',
+  'TICKETED',
+  'REFUND_REQUESTED',
+  'REFUNDED',
+  'REISSUE_REQUESTED',
+  'REISSUED',
+  'VOID_REQUESTED',
+  'VOIDED',
+  'CANCELLED',
+  'EXPIRED',
+  'FAILED',
+];
 
 const STATUS_STYLES: Record<string, string> = {
   CONFIRMED: 'bg-green-100 text-green-700',
+  TICKETED: 'bg-green-100 text-green-700',
+  ON_HOLD: 'bg-blue-100 text-blue-700',
+  HOLD_EXPIRED: 'bg-slate-100 text-slate-500',
+  REFUND_REQUESTED: 'bg-amber-100 text-amber-700',
+  REFUNDED: 'bg-slate-100 text-slate-500',
+  REISSUE_REQUESTED: 'bg-amber-100 text-amber-700',
+  REISSUED: 'bg-green-100 text-green-700',
+  VOID_REQUESTED: 'bg-amber-100 text-amber-700',
+  VOIDED: 'bg-slate-100 text-slate-500',
   CANCELLED: 'bg-slate-100 text-slate-500',
+  EXPIRED: 'bg-slate-100 text-slate-500',
   PENDING: 'bg-amber-100 text-amber-700',
   FAILED: 'bg-red-100 text-red-700',
 };
@@ -71,6 +97,11 @@ export default function AdminFlightBookingsPage() {
                 <tr key={booking.id}>
                   <td className="px-4 py-2 font-medium text-slate-800">
                     {booking.bookingReference}
+                    {booking.isOfflineEntry && (
+                      <span className="ml-2 rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-purple-700">
+                        Manual
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-2 text-slate-600">
                     {booking.customer

@@ -75,7 +75,10 @@ describe('FlightRefundsService', () => {
         },
         {
           provide: FinancePostingService,
-          useValue: { postRefund: jest.fn(), cancelIncentivesForSource: jest.fn() },
+          useValue: {
+            postRefund: jest.fn(),
+            cancelIncentivesForSource: jest.fn(),
+          },
         },
       ],
     }).compile();
@@ -129,6 +132,27 @@ describe('FlightRefundsService', () => {
       const result = await service.requestRefund('booking-1', {
         requestedByStaffId: 'staff-1',
       });
+
+      expect(provider.requestRefund).not.toHaveBeenCalled();
+      expect(result.status).toBe(FlightRefundStatus.REQUESTED);
+    });
+
+    it('spec #40 — routes a manual/offline booking (no provider order) to the manual-required path instead of failing', async () => {
+      prisma.flightBooking.findUnique.mockResolvedValue({
+        ...booking,
+        providerOrderId: null,
+      });
+      provider.capabilities.mockResolvedValue({
+        ticketing: true,
+        refund: true,
+        reissue: false,
+      });
+      prisma.flightRefund.create.mockResolvedValue({
+        id: 'refund-1',
+        status: FlightRefundStatus.REQUESTED,
+      });
+
+      const result = await service.requestRefund('booking-1', {});
 
       expect(provider.requestRefund).not.toHaveBeenCalled();
       expect(result.status).toBe(FlightRefundStatus.REQUESTED);

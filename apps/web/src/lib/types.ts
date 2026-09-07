@@ -162,7 +162,133 @@ export type FlightBookingStatus =
   | 'REISSUE_REQUESTED'
   | 'REISSUED'
   | 'CANCELLED'
-  | 'FAILED';
+  | 'FAILED'
+  // Phase 10 additions.
+  | 'ON_HOLD'
+  | 'HOLD_EXPIRED'
+  | 'VOID_REQUESTED'
+  | 'VOIDED'
+  | 'EXPIRED';
+
+export type FlightVoidStatus = 'REQUESTED' | 'VOIDED' | 'FAILED' | 'REJECTED';
+export type FlightAncillaryType = 'BAGGAGE' | 'SEAT' | 'MEAL' | 'OTHER';
+export type FlightAncillaryStatus = 'REQUESTED' | 'CONFIRMED' | 'FAILED' | 'REFUNDED';
+export type FlightServiceFeeType =
+  | 'BOOKING'
+  | 'TICKETING'
+  | 'CANCELLATION'
+  | 'REFUND_PROCESSING'
+  | 'REISSUE'
+  | 'CHANGE'
+  | 'ANCILLARY';
+export type FlightSupplierType = 'GDS' | 'NDC' | 'LCC' | 'CONSOLIDATOR' | 'AIRLINE' | 'MANUAL';
+export type FlightSupplierStatus = 'ACTIVE' | 'SUSPENDED' | 'CLOSED';
+export type FlightSupplierContractStatus = 'DRAFT' | 'ACTIVE' | 'EXPIRED' | 'TERMINATED';
+export type FlightProviderName = 'MOCK' | 'DUFFEL' | 'SABRE' | 'AMADEUS' | 'TRAVELPORT' | 'TBO';
+
+export interface FlightVoid {
+  id: string;
+  bookingId: string;
+  requestedByStaffId: string;
+  ticketNumbers: string[];
+  voidDeadline: string;
+  amountVoided: number;
+  currency: string;
+  status: FlightVoidStatus;
+  providerResponse: { note?: string; errorMessage?: string } | null;
+  createdAt: string;
+  completedAt: string | null;
+}
+
+export interface VoidEligibility {
+  eligible: boolean;
+  voidDeadline: string | null;
+  reason: string | null;
+}
+
+export interface FlightAncillary {
+  id: string;
+  bookingId: string;
+  type: FlightAncillaryType;
+  description: string;
+  amount: number;
+  currency: string;
+  status: FlightAncillaryStatus;
+  purchasedByStaffId: string | null;
+  providerReference: string | null;
+  createdAt: string;
+}
+
+export interface FlightServiceFee {
+  id: string;
+  type: FlightServiceFeeType;
+  amount: number | null;
+  percent: number | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FlightProviderRoutingRule {
+  id: string;
+  origin: string | null;
+  destination: string | null;
+  providerPriority: FlightProviderName[];
+  isActive: boolean;
+  priority: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FlightSupplier {
+  id: string;
+  name: string;
+  type: FlightSupplierType;
+  providerCode: string | null;
+  apiProvider: string | null;
+  currency: string;
+  commissionPercent: number | null;
+  markupPercent: number | null;
+  serviceFee: number | null;
+  creditLimit: number | null;
+  paymentTerms: string | null;
+  settlementCycle: string | null;
+  status: FlightSupplierStatus;
+  apiStatus: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FlightSupplierBalance {
+  totalPayable: number;
+  totalPaid: number;
+  currentBalance: number;
+  creditLimit: number | null;
+  availableCredit: number | null;
+  utilization: number | null;
+  alert: string | null;
+}
+
+export interface FlightSupplierContract {
+  id: string;
+  supplierId: string;
+  name: string;
+  startDate: string;
+  endDate: string | null;
+  commissionPercent: number | null;
+  markupPercent: number | null;
+  currency: string;
+  settlementTerms: string | null;
+  ticketingTerms: string | null;
+  cancellationRules: string | null;
+  contactPerson: string | null;
+  documentUrl: string | null;
+  status: FlightSupplierContractStatus;
+  createdAt: string;
+  updatedAt: string;
+  supplier?: { name: string };
+}
 
 export type FlightRefundStatus =
   | 'REQUESTED'
@@ -274,6 +400,15 @@ export interface FlightBooking {
   baggageAllowance: { checked?: string; cabin?: string } | null;
   providerCost: number | null;
   markupAmount: number | null;
+  // Phase 10 additions.
+  holdExpiresAt: string | null;
+  isOfflineEntry: boolean;
+  offlineReason: string | null;
+  /** Computed by the API — see FlightsService.getBooking. Only meaningful
+   * when isOfflineEntry is true; tells the UI whether "Approve" still
+   * applies (approval IS the act of creating the incentive, there's no
+   * separate stored flag). */
+  awaitingManualApproval?: boolean;
 }
 
 export interface FlightRefund {

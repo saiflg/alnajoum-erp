@@ -126,4 +126,46 @@ describe('FlightTicketingService', () => {
     );
     expect(flightIncentivesService.createForTicketedBooking).toHaveBeenCalled();
   });
+
+  describe('spec #9 — hold reservations', () => {
+    it('allows ticketing an ON_HOLD booking within its hold window', async () => {
+      prisma.flightBooking.findUnique.mockResolvedValue({
+        ...bookingBase,
+        status: FlightBookingStatus.ON_HOLD,
+        holdExpiresAt: new Date(Date.now() + 60 * 60 * 1000), // 1 hour from now
+      });
+      provider.issueTicket.mockResolvedValue({
+        pnr: 'ABC123',
+        status: 'TICKETED',
+      });
+      prisma.flightBooking.update.mockResolvedValue({
+        ...bookingBase,
+        status: FlightBookingStatus.TICKETED,
+      });
+      prisma.customer.findUnique.mockResolvedValue({
+        identity: { email: 'a@example.com', id: 'id-1' },
+      });
+
+      const result = await service.issueTicket('booking-1', 'staff-1');
+
+      expect(result.status).toBe(FlightBookingStatus.TICKETED);
+    });
+
+    it('rejects ticketing and flips to HOLD_EXPIRED once the hold window has passed', async () => {
+      prisma.flightBooking.findUnique.mockResolvedValue({
+        ...bookingBase,
+        status: FlightBookingStatus.ON_HOLD,
+        holdExpiresAt: new Date(Date.now() - 60 * 60 * 1000), // 1 hour ago
+      });
+
+      await expect(service.issueTicket('booking-1', 'staff-1')).rejects.toThrow(
+        ConflictException,
+      );
+      expect(prisma.flightBooking.update).toHaveBeenCalledWith({
+        where: { id: 'booking-1' },
+        data: { status: FlightBookingStatus.HOLD_EXPIRED },
+      });
+      expect(provider.issueTicket).not.toHaveBeenCalled();
+    });
+  });
 });

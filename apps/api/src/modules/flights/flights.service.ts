@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import {
   FlightBookingStatus,
+  PassengerType,
   Prisma,
   ProviderOperation,
   ProviderTransactionStatus,
@@ -15,18 +16,24 @@ import {
 } from '@prisma/client';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
+import { AuditService } from '../audit/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { InvoicesService } from '../payments/invoices.service';
+import { CreateManualFlightBookingDto } from './dto/create-manual-flight-booking.dto';
 import { CreatePassengerDto } from './dto/create-passenger.dto';
 import { SearchFlightsDto } from './dto/search-flights.dto';
+import { FlightIncentivesService } from './flight-incentives.service';
 import { FlightPricingService } from './flight-pricing.service';
+import { FlightProviderRoutingService } from './flight-provider-routing.service';
 import { ProviderTransactionLogService } from './provider-transaction-log.service';
 import { FLIGHT_PROVIDER } from './providers/flight-provider.port';
 import type {
   BookingPassengerSnapshot,
   FlightOffer,
   FlightProviderPort,
+  SearchFlightsCriteria,
 } from './providers/flight-provider.port';
+import { FlightProviderRouter } from './providers/flight-provider.router';
 
 function generateBookingReference(): string {
   return `ANJ-${randomBytes(4).toString('hex').toUpperCase()}`;
@@ -48,21 +55,72 @@ export class FlightsService {
     private readonly notificationsService: NotificationsService,
     private readonly pricingService: FlightPricingService,
     private readonly providerLog: ProviderTransactionLogService,
+    private readonly providerRoutingService: FlightProviderRoutingService,
+    private readonly providerRouter: FlightProviderRouter,
+    private readonly auditService: AuditService,
+    private readonly flightIncentivesService: FlightIncentivesService,
   ) {}
 
+  /**
+   * Spec #30/#31 — when an administrator has configured a provider
+   * priority for this route (or globally), search tries each provider in
+   * order until one succeeds, falling back only on a genuine failure
+   * (never on "no results" — an empty result set from the first provider
+   * that answers is still a real answer, not tried against the next one).
+   * Fallback is search-only: whichever provider's offer the customer
+   * actually selects is what createBooking books through, so no fallback
+   * here can ever cause a duplicate booking. With no routing rule
+   * configured at all, this is byte-for-byte the pre-Phase-10 behavior —
+   * search through whichever single provider is currently active.
+   */
   async search(dto: SearchFlightsDto): Promise<FlightOffer[]> {
     this.validateLegCount(dto.tripType, dto.legs.length);
 
+    const criteria: SearchFlightsCriteria = {
+      tripType: dto.tripType,
+      legs: dto.legs,
+      adults: dto.adults,
+      children: dto.children,
+      infants: dto.infants,
+      cabinClass: dto.cabinClass,
+      directOnly: dto.directOnly,
+    };
+
+    const firstLeg = dto.legs[0];
+    const providerOrder = await this.providerRoutingService.resolveOrder(
+      firstLeg?.origin,
+      firstLeg?.destination,
+    );
+
+    if (providerOrder.length === 0) {
+      return this.searchViaProvider(this.provider, criteria, dto.directOnly);
+    }
+
+    let lastError: unknown;
+    for (const providerName of providerOrder) {
+      try {
+        return await this.searchViaProvider(
+          this.providerRouter.resolveByName(providerName),
+          criteria,
+          dto.directOnly,
+        );
+      } catch (error) {
+        lastError = error;
+        // Try the next provider in the configured priority order.
+      }
+    }
+    throw lastError instanceof Error
+      ? lastError
+      : new Error('All configured providers failed to return flight offers');
+  }
+
+  private async searchViaProvider(
+    provider: FlightProviderPort,
+    criteria: SearchFlightsCriteria,
+    directOnly?: boolean,
+  ): Promise<FlightOffer[]> {
     try {
-      const offers = await this.provider.searchOffers({
-        tripType: dto.tripType,
-        legs: dto.legs,
-        adults: dto.adults,
-        children: dto.children,
-        infants: dto.infants,
-        cabinClass: dto.cabinClass,
-        directOnly: dto.directOnly,
-      });
+      const offers = await provider.searchOffers(criteria);
       await this.providerLog.record({
         provider: offers[0]?.provider ?? 'MOCK',
         operation: ProviderOperation.SEARCH,
@@ -72,7 +130,7 @@ export class FlightsService {
       // Fare conditions/restrictions are shown as-is, never invented — the
       // customer/staff sees exactly what searchOffers's fareConditions
       // carried through from the provider (spec #4/#5).
-      return dto.directOnly
+      return directOnly
         ? offers.filter((o) => o.legs.every((l) => l.segments.length === 1))
         : offers;
     } catch (error) {
@@ -189,6 +247,7 @@ export class FlightsService {
     bookedByStaffId?: string,
     idempotencyKey?: string,
     expectedPrice?: number,
+    options?: { hold?: boolean },
   ) {
     // Duplicate-submission guard (spec #9) — a retried request with the
     // same key returns the booking that already exists instead of booking
@@ -220,7 +279,18 @@ export class FlightsService {
       passengerInputs,
     );
 
-    const result = await this.provider.createOrder(offer, snapshots);
+    if (options?.hold) {
+      const capabilities = await this.provider.capabilities();
+      if (!capabilities.hold) {
+        throw new ConflictException(
+          'The active flight provider does not support hold reservations for this offer.',
+        );
+      }
+    }
+
+    const result = options?.hold
+      ? await this.provider.createOrder(offer, snapshots, { hold: true })
+      : await this.provider.createOrder(offer, snapshots);
     await this.providerLog.record({
       provider: offer.provider,
       operation: ProviderOperation.CREATE_ORDER,
@@ -270,7 +340,12 @@ export class FlightsService {
           provider: offer.provider,
           providerOfferId: offer.id,
           providerOrderId: result.providerOrderId,
-          status: FlightBookingStatus.CONFIRMED,
+          status: result.holdExpiresAt
+            ? FlightBookingStatus.ON_HOLD
+            : FlightBookingStatus.CONFIRMED,
+          holdExpiresAt: result.holdExpiresAt
+            ? new Date(result.holdExpiresAt)
+            : undefined,
           currency: offer.currency,
           totalAmount: pricing.customerPrice,
           providerCost: offer.totalAmount,
@@ -334,6 +409,210 @@ export class FlightsService {
     return booking;
   }
 
+  /**
+   * A manual booking has no provider search offer to snapshot, but every
+   * admin/customer page that renders a booking (e.g. the admin detail
+   * page's `itinerary.legs.map`) assumes the same FlightOffer shape every
+   * real booking's `itinerary` column carries — an ad hoc
+   * `{ manual: true, ... }` blob crashes those pages. isOfflineEntry/
+   * offlineReason on the booking record are the actual "this was manual"
+   * signal; the itinerary itself just needs to look like every other one.
+   */
+  private buildManualItinerary(
+    dto: CreateManualFlightBookingDto,
+    providerOfferId: string,
+    totalAmount: number,
+  ): FlightOffer {
+    const departureAt = new Date(dto.departureAt).toISOString();
+    return {
+      id: providerOfferId,
+      provider: 'MOCK',
+      tripType: TripType.ONE_WAY,
+      cabinClass: dto.cabinClass,
+      currency: dto.currency ?? 'NGN',
+      totalAmount,
+      seatsAvailable: 1,
+      expiresAt: departureAt,
+      legs: [
+        {
+          origin: dto.origin,
+          destination: dto.destination,
+          departureAt,
+          arrivalAt: departureAt,
+          segments: [
+            {
+              origin: dto.origin,
+              destination: dto.destination,
+              departureAt,
+              arrivalAt: departureAt,
+              airline: dto.airline,
+              airlineCode: dto.airline.slice(0, 2).toUpperCase(),
+              flightNumber: dto.flightNumber ?? 'N/A',
+              cabinClass: dto.cabinClass,
+              durationMinutes: 0,
+            },
+          ],
+        },
+      ],
+      fareConditions: {
+        refundable: 'UNKNOWN',
+        warnings: [
+          {
+            message:
+              'Manually entered offline booking — fare rules were not returned by a live provider.',
+            verified: false,
+          },
+        ],
+      },
+    };
+  }
+
+  /**
+   * Phase 10 spec #40 — a manual/offline booking records what actually
+   * happened in an offline transaction (a phone call, a walk-in, an
+   * airline/agent counter sale) rather than fabricating a provider order —
+   * provider is set to MOCK purely as a technical placeholder (FlightBooking.
+   * provider is a required field); isOfflineEntry is the real signal every
+   * report/UI/audit trail actually keys off, same convention as
+   * VisaApplication.isOfflineEntry. Deliberately does NOT call
+   * FlightIncentivesService here even when status is TICKETED — spec #40's
+   * "manual transactions must require appropriate approval before becoming
+   * incentive-eligible" is enforced by approveManualBooking below being the
+   * only path that ever creates the incentive for one of these.
+   */
+  async createManualBooking(
+    dto: CreateManualFlightBookingDto,
+    staffId: string,
+  ) {
+    const customer = await this.prisma.customer.findUnique({
+      where: { id: dto.customerId },
+    });
+    if (!customer) {
+      throw new NotFoundException('Customer not found');
+    }
+    const bookedByStaff = await this.prisma.staff.findUnique({
+      where: { id: staffId },
+    });
+
+    const currency = dto.currency ?? 'NGN';
+    const isTicketed = dto.status === 'TICKETED';
+    const providerOfferId = `MANUAL-${randomBytes(4).toString('hex').toUpperCase()}`;
+
+    const booking = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.flightBooking.create({
+        data: {
+          bookingReference: generateBookingReference(),
+          customerId: dto.customerId,
+          bookedByStaffId: staffId,
+          branchId: bookedByStaff?.branchId,
+          provider: 'MOCK',
+          providerOfferId,
+          status: isTicketed
+            ? FlightBookingStatus.TICKETED
+            : FlightBookingStatus.CONFIRMED,
+          currency,
+          totalAmount: dto.sellingPrice,
+          providerCost: dto.companyCost,
+          markupAmount: dto.sellingPrice - dto.companyCost,
+          tripType: TripType.ONE_WAY,
+          origin: dto.origin,
+          destination: dto.destination,
+          departureAt: new Date(dto.departureAt),
+          cabinClass: dto.cabinClass,
+          itinerary: this.buildManualItinerary(
+            dto,
+            providerOfferId,
+            dto.sellingPrice,
+          ) as unknown as Prisma.InputJsonValue,
+          isOfflineEntry: true,
+          offlineReason: dto.offlineReason,
+          pnr: dto.pnr,
+          ticketedAt: isTicketed ? new Date() : undefined,
+          ticketedByStaffId: isTicketed ? staffId : undefined,
+          passengers: {
+            create: dto.passengers.map((p) => ({
+              type: PassengerType.ADULT,
+              firstName: p.firstName,
+              lastName: p.lastName,
+              dateOfBirth: p.dateOfBirth ? new Date(p.dateOfBirth) : undefined,
+              passportNumber: p.passportNumber,
+              ticketNumber: p.ticketNumber,
+            })),
+          },
+        },
+        include: { passengers: true },
+      });
+
+      await this.invoicesService.createForFlightBooking(created, tx);
+      return created;
+    });
+
+    if (dto.supplierName) {
+      // Recognized as an accounts-payable obligation immediately — same
+      // reasoning as FlightIncentivesService.createForTicketedBooking's own
+      // postCostOfServiceForBooking call, reused via SupplierPayable's
+      // existing generic (module-agnostic) ledger rather than a duplicate.
+      await this.prisma.supplierPayable.create({
+        data: {
+          supplierName: dto.supplierName,
+          sourceModule: 'FLIGHT_BOOKING',
+          sourceId: booking.id,
+          amount: dto.companyCost,
+          currency,
+        },
+      });
+    }
+
+    await this.auditService.record({
+      identityId: undefined,
+      action: 'flight_booking.manual_created',
+      entityType: 'FlightBooking',
+      entityId: booking.id,
+      metadata: {
+        staffId,
+        offlineReason: dto.offlineReason,
+        status: dto.status,
+      },
+    });
+
+    return booking;
+  }
+
+  /**
+   * The one sanctioned path that makes a manual booking incentive-eligible
+   * (spec #40) — gated by PERMISSIONS.FLIGHT.MANUAL_BOOKING_APPROVE at the
+   * controller, a different (higher) permission than the plain STAFF-level
+   * MANUAL_BOOKING used to create one, so the creator can't self-approve.
+   */
+  async approveManualBooking(bookingId: string, approvedByStaffId: string) {
+    const booking = await this.prisma.flightBooking.findUnique({
+      where: { id: bookingId },
+    });
+    if (!booking) {
+      throw new NotFoundException('Booking not found');
+    }
+    if (!booking.isOfflineEntry) {
+      throw new BadRequestException('This is not a manual/offline booking.');
+    }
+    if (booking.status !== FlightBookingStatus.TICKETED) {
+      throw new ConflictException(
+        'Only a ticketed manual booking can be approved for incentive eligibility.',
+      );
+    }
+
+    await this.flightIncentivesService.createForTicketedBooking(booking);
+
+    await this.auditService.record({
+      identityId: undefined,
+      action: 'flight_booking.manual_approved',
+      entityType: 'FlightBooking',
+      entityId: bookingId,
+      metadata: { approvedByStaffId },
+    });
+
+    return this.getBooking(bookingId);
+  }
+
   listForCustomer(customerId: string) {
     return this.prisma.flightBooking.findMany({
       where: { customerId },
@@ -367,7 +646,19 @@ export class FlightsService {
         'This booking does not belong to this customer',
       );
     }
-    return booking;
+
+    // Spec #40 — there's no stored "approved" flag by design (approval IS
+    // the act of creating the incentive, see approveManualBooking below);
+    // this computed flag just lets the UI know whether the approve action
+    // still applies, without the client having to know that convention.
+    const awaitingManualApproval =
+      booking.isOfflineEntry &&
+      booking.status === FlightBookingStatus.TICKETED &&
+      (await this.prisma.staffIncentive.findFirst({
+        where: { sourceType: 'FLIGHT_BOOKING', sourceId: booking.id },
+      })) === null;
+
+    return { ...booking, awaitingManualApproval };
   }
 
   /**

@@ -38,6 +38,15 @@ export const PERMISSIONS = {
     PRICING_MANAGE: 'flight:pricing_manage', // configure markup rules
     GROUP_MANAGE: 'flight:group_manage', // group bookings
     REPORTS_VIEW: 'flight:reports_view', // admin flight dashboard
+    // Phase 10 — GDS/supplier/servicing-center expansion.
+    VOID: 'flight:void', // request/complete a ticket void
+    ANCILLARY_MANAGE: 'flight:ancillary_manage', // purchase baggage/seat/meal add-ons
+    SUPPLIER_MANAGE: 'flight:supplier_manage', // configure FlightSupplier + contracts
+    PROVIDER_MANAGE: 'flight:provider_manage', // configure provider routing/priority, service fees
+    MANUAL_BOOKING: 'flight:manual_booking', // record an offline/manual booking
+    MANUAL_BOOKING_APPROVE: 'flight:manual_booking_approve', // approve a manual booking before it becomes incentive-eligible
+    HOLD: 'flight:hold', // create/pay/cancel a hold reservation
+    CORPORATE_APPROVE: 'flight:corporate_approve', // approve a booking pending corporate-policy sign-off
   },
   HOTEL: {
     BOOK: 'hotel:book',

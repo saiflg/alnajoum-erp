@@ -7,14 +7,18 @@ import { ConfigService } from '@nestjs/config';
 import { CabinClass, FlightProviderName, PassengerType } from '@prisma/client';
 import { IntegrationsService } from '../../integrations/integrations.service';
 import {
+  AncillaryRequest,
   BookingPassengerSnapshot,
+  CreateOrderOptions,
   CreateOrderResult,
   FlightLegOffer,
   FlightOffer,
   FlightProviderPort,
   IssueTicketResult,
+  ProviderAncillaryResult,
   ProviderCapabilities,
   ProviderRefundResult,
+  ProviderVoidResult,
   ReissueResult,
   SearchFlightsCriteria,
 } from './flight-provider.port';
@@ -249,7 +253,18 @@ export class DuffelFlightProviderService implements FlightProviderPort {
 
   capabilities(): Promise<ProviderCapabilities> {
     return Promise.resolve({
+      search: true,
+      // Duffel's real API supports `type: 'hold'` orders, but this
+      // integration hard-codes `type: 'instant'` (see createOrder below) —
+      // implementing hold would mean guessing at Duffel's payment-deadline/
+      // hold-expiry response shape without a sandbox account to verify
+      // against, the same reasoning every unimplemented capability here
+      // follows. Use the Mock provider to exercise the hold workflow
+      // locally (spec #50).
+      hold: false,
+      instantTicketing: true,
       ticketing: true,
+      cancellation: true,
       refund: true,
       // Duffel's real change flow (order_change_requests -> offers ->
       // order_changes) is genuinely multi-step and hasn't been implemented
@@ -259,6 +274,14 @@ export class DuffelFlightProviderService implements FlightProviderPort {
       // this ("show the operation as unavailable... controlled manual
       // workflow").
       reissue: false,
+      // Same reasoning — Duffel's void endpoint and ancillary-services flow
+      // (offer_requests with services, order_change_offers for baggage/
+      // seats) are real but unimplemented here.
+      void: false,
+      ancillary: false,
+      seatSelection: false,
+      baggage: false,
+      groupBooking: false,
     });
   }
 
@@ -359,7 +382,20 @@ export class DuffelFlightProviderService implements FlightProviderPort {
   async createOrder(
     offer: FlightOffer,
     passengers: BookingPassengerSnapshot[],
+    options?: CreateOrderOptions,
   ): Promise<CreateOrderResult> {
+    if (options?.hold) {
+      // capabilities().hold is false — a caller reaching here anyway (a
+      // bug upstream, not a user action) gets a clear failure rather than
+      // this silently instant-ticketing a "held" reservation the customer
+      // never agreed to pay for yet.
+      return {
+        providerOrderId: '',
+        status: 'FAILED',
+        errorMessage:
+          'Hold orders are not supported by the Duffel integration yet.',
+      };
+    }
     const res = await this.duffelFetch(`${this.baseUrl}/air/orders`, {
       method: 'POST',
       headers: await this.headers(),
@@ -538,6 +574,26 @@ export class DuffelFlightProviderService implements FlightProviderPort {
       status: 'FAILED',
       errorMessage:
         'Reissue is not available for Duffel through this integration yet — use the manual reissue workflow instead.',
+    });
+  }
+
+  requestVoid(): Promise<ProviderVoidResult> {
+    return Promise.resolve({
+      status: 'FAILED',
+      errorMessage:
+        'Void is not available for Duffel through this integration yet — use the manual void workflow instead.',
+    });
+  }
+
+  purchaseAncillary(
+    _providerOrderId: string,
+    request: AncillaryRequest,
+  ): Promise<ProviderAncillaryResult> {
+    return Promise.resolve({
+      status: 'FAILED',
+      amount: 0,
+      currency: 'NGN',
+      errorMessage: `Ancillary purchase (${request.type}) is not available for Duffel through this integration yet.`,
     });
   }
 }

@@ -196,15 +196,17 @@ export class AuthService {
     identity: Identity,
     meta: RequestMeta,
   ): Promise<TokenPair> {
-    const { roles, permissions } = await this.rbacService.getEffectiveAccess(
-      identity.id,
-    );
+    const { roles } = await this.rbacService.getEffectiveAccess(identity.id);
 
-    const payload: AuthContext = {
+    // `permissions` deliberately never goes into the signed payload — see
+    // JwtAccessStrategy.validate's doc comment: a large permission set
+    // (SUPER_ADMIN/COMPANY_ADMIN) would blow the access_token cookie past
+    // the ~4KB limit browsers silently enforce per cookie. The strategy
+    // resolves permissions fresh from the DB on every request instead.
+    const payload: Pick<AuthContext, 'sub' | 'type' | 'roles'> = {
       sub: identity.id,
       type: identity.type,
       roles,
-      permissions,
     };
 
     const accessTokenExpiresIn = this.configService.get<string>(

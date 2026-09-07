@@ -8,7 +8,34 @@ import { ADMIN_NAV } from '@/lib/admin-nav';
 import { apiRequest, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { formatCurrency, formatDateTime } from '@/lib/format';
-import { FlightBooking, RefundPreview } from '@/lib/types';
+import {
+  FlightAncillary,
+  FlightAncillaryType,
+  FlightBooking,
+  RefundPreview,
+  VoidEligibility,
+} from '@/lib/types';
+
+const ANCILLARY_TYPES: FlightAncillaryType[] = ['BAGGAGE', 'SEAT', 'MEAL', 'OTHER'];
+
+/** Live-updating "time left" string for the hold countdown. `now` is state
+ * (not read from Date.now() directly during render) so the render stays
+ * pure — the ticking interval is the only place that samples the clock. */
+function useCountdown(target: string | null): string | null {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!target) return;
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, [target]);
+  if (!target) return null;
+  const diffMs = new Date(target).getTime() - now;
+  if (diffMs <= 0) return 'expired';
+  const hours = Math.floor(diffMs / 3_600_000);
+  const minutes = Math.floor((diffMs % 3_600_000) / 60_000);
+  const seconds = Math.floor((diffMs % 60_000) / 1000);
+  return `${hours}h ${minutes}m ${seconds}s`;
+}
 
 export default function AdminFlightBookingDetailPage() {
   const params = useParams<{ id: string }>();
@@ -20,17 +47,46 @@ export default function AdminFlightBookingDetailPage() {
   const [refundPreview, setRefundPreview] = useState<RefundPreview | null>(null);
   const [refunding, setRefunding] = useState(false);
 
+  const [voidEligibility, setVoidEligibility] = useState<VoidEligibility | null>(null);
+  const [voiding, setVoiding] = useState(false);
+  const [ancillaries, setAncillaries] = useState<FlightAncillary[] | null>(null);
+  const [ancillaryType, setAncillaryType] = useState<FlightAncillaryType>('BAGGAGE');
+  const [ancillaryDescription, setAncillaryDescription] = useState('');
+  const [purchasingAncillary, setPurchasingAncillary] = useState(false);
+  const [approvingManual, setApprovingManual] = useState(false);
+
   const canCancel = !!user?.permissions.includes('flight:cancel');
   const canTicket = !!user?.permissions.includes('flight:ticket_issue');
   const canRefund = !!user?.permissions.includes('flight:refund');
+  const canVoid = !!user?.permissions.includes('flight:void');
+  const canManageAncillary = !!user?.permissions.includes('flight:ancillary_manage');
+  const canApproveManual = !!user?.permissions.includes('flight:manual_booking_approve');
+
+  const holdCountdown = useCountdown(
+    booking?.status === 'ON_HOLD' ? booking.holdExpiresAt : null,
+  );
 
   function load() {
     apiRequest<FlightBooking>(`/flights/bookings/${params.id}`)
-      .then(setBooking)
+      .then((b) => {
+        setBooking(b);
+        if (canVoid && b.status === 'TICKETED') {
+          apiRequest<VoidEligibility>(`/flights/bookings/${params.id}/void/eligibility`)
+            .then(setVoidEligibility)
+            .catch(() => setVoidEligibility(null));
+        } else {
+          setVoidEligibility(null);
+        }
+        if (canManageAncillary) {
+          apiRequest<FlightAncillary[]>(`/flights/bookings/${params.id}/ancillaries`)
+            .then(setAncillaries)
+            .catch(() => setAncillaries(null));
+        }
+      })
       .catch((err) => setError(err.message));
   }
 
-  useEffect(load, [params.id]);
+  useEffect(load, [params.id, canVoid, canManageAncillary]);
 
   async function handleCancel() {
     if (!confirm('Cancel this booking?')) return;
@@ -87,6 +143,66 @@ export default function AdminFlightBookingDetailPage() {
     }
   }
 
+  async function handleVoid() {
+    if (!voidEligibility?.eligible) return;
+    if (
+      !confirm(
+        'Void this ticket? This is a full, no-penalty reversal — the entire fare is refunded and any related staff incentive is cancelled.',
+      )
+    )
+      return;
+    setVoiding(true);
+    try {
+      await apiRequest(`/flights/bookings/${params.id}/void`, { method: 'POST', body: {} });
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to void ticket');
+    } finally {
+      setVoiding(false);
+    }
+  }
+
+  async function handlePurchaseAncillary() {
+    if (ancillaryDescription.trim().length < 2) {
+      setError('Enter a short description for the ancillary before purchasing.');
+      return;
+    }
+    setPurchasingAncillary(true);
+    try {
+      await apiRequest(`/flights/bookings/${params.id}/ancillaries`, {
+        method: 'POST',
+        body: { type: ancillaryType, description: ancillaryDescription.trim() },
+      });
+      setAncillaryDescription('');
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to purchase ancillary');
+    } finally {
+      setPurchasingAncillary(false);
+    }
+  }
+
+  async function handleApproveManual() {
+    if (
+      !confirm(
+        'Approve this manual booking? This makes it eligible for the booking staff member’s incentive.',
+      )
+    )
+      return;
+    setApprovingManual(true);
+    try {
+      await apiRequest(`/flights/bookings/${params.id}/approve-manual`, {
+        method: 'POST',
+        body: {},
+      });
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to approve manual booking');
+    } finally {
+      setApprovingManual(false);
+    }
+  }
+
   return (
     <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'COMPANY_ADMIN', 'BRANCH_MANAGER', 'STAFF', 'FINANCE_OFFICER']}>
       <AppShell title="Booking Detail" navLinks={ADMIN_NAV}>
@@ -99,7 +215,7 @@ export default function AdminFlightBookingDetailPage() {
                 {booking.bookingReference}
               </h2>
               <div className="flex gap-2">
-                {canTicket && booking.status === 'CONFIRMED' && (
+                {canTicket && (booking.status === 'CONFIRMED' || booking.status === 'ON_HOLD') && (
                   <button
                     onClick={handleIssueTicket}
                     disabled={ticketing}
@@ -114,6 +230,24 @@ export default function AdminFlightBookingDetailPage() {
                     className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
                   >
                     Preview refund
+                  </button>
+                )}
+                {canVoid && voidEligibility?.eligible && (
+                  <button
+                    onClick={handleVoid}
+                    disabled={voiding}
+                    className="rounded-md border border-amber-400 px-3 py-1.5 text-sm font-medium text-amber-800 hover:bg-amber-50 disabled:opacity-50"
+                  >
+                    {voiding ? 'Voiding…' : 'Void ticket'}
+                  </button>
+                )}
+                {canApproveManual && booking.awaitingManualApproval && (
+                  <button
+                    onClick={handleApproveManual}
+                    disabled={approvingManual}
+                    className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                  >
+                    {approvingManual ? 'Approving…' : 'Approve manual booking'}
                   </button>
                 )}
                 {canCancel && (booking.status === 'PENDING' || booking.status === 'CONFIRMED') && (
@@ -131,6 +265,39 @@ export default function AdminFlightBookingDetailPage() {
               <p className="text-sm text-slate-500">
                 {booking.customer.firstName} {booking.customer.lastName}
               </p>
+            )}
+
+            {booking.isOfflineEntry && (
+              <div className="mt-3 max-w-2xl rounded-lg border border-purple-200 bg-purple-50 p-3">
+                <p className="text-sm font-semibold text-purple-900">
+                  Manual / offline booking
+                </p>
+                <p className="mt-1 text-sm text-purple-800">{booking.offlineReason}</p>
+                {booking.awaitingManualApproval ? (
+                  <p className="mt-1 text-xs text-purple-700">
+                    Awaiting approval before the booking staff member’s incentive becomes
+                    eligible.
+                  </p>
+                ) : (
+                  <p className="mt-1 text-xs text-purple-700">
+                    Approved — incentive eligibility has been evaluated.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {booking.status === 'ON_HOLD' && (
+              <div className="mt-3 max-w-2xl rounded-lg border border-blue-200 bg-blue-50 p-3">
+                <p className="text-sm font-semibold text-blue-900">Held reservation</p>
+                <p className="mt-1 text-sm text-blue-800">
+                  This offer is held, not yet paid or ticketed. Time remaining:{' '}
+                  <strong>{holdCountdown}</strong>
+                </p>
+              </div>
+            )}
+
+            {voidEligibility && !voidEligibility.eligible && voidEligibility.reason && (
+              <p className="mt-2 text-xs text-slate-500">{voidEligibility.reason}</p>
             )}
 
             {refundPreview && (
@@ -243,6 +410,95 @@ export default function AdminFlightBookingDetailPage() {
                 </tbody>
               </table>
             </div>
+
+            {canManageAncillary && (
+              <>
+                <h3 className="mt-6 text-sm font-semibold text-slate-900">Ancillaries</h3>
+                <div className="mt-2 max-w-2xl overflow-hidden rounded-lg border border-slate-200 bg-white">
+                  <table className="min-w-full divide-y divide-slate-200 text-sm">
+                    <thead className="bg-slate-50">
+                      <tr>
+                        <th className="px-4 py-2 text-left font-medium text-slate-600">Type</th>
+                        <th className="px-4 py-2 text-left font-medium text-slate-600">
+                          Description
+                        </th>
+                        <th className="px-4 py-2 text-left font-medium text-slate-600">
+                          Amount
+                        </th>
+                        <th className="px-4 py-2 text-left font-medium text-slate-600">
+                          Status
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {ancillaries?.map((a) => (
+                        <tr key={a.id}>
+                          <td className="px-4 py-2 text-slate-700">{a.type}</td>
+                          <td className="px-4 py-2 text-slate-600">{a.description}</td>
+                          <td className="px-4 py-2 text-slate-600">
+                            {formatCurrency(a.amount, a.currency)}
+                          </td>
+                          <td className="px-4 py-2">
+                            <span
+                              className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                                a.status === 'CONFIRMED'
+                                  ? 'bg-green-100 text-green-700'
+                                  : a.status === 'FAILED'
+                                    ? 'bg-red-100 text-red-700'
+                                    : 'bg-amber-100 text-amber-700'
+                              }`}
+                            >
+                              {a.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                      {ancillaries?.length === 0 && (
+                        <tr>
+                          <td className="px-4 py-4 text-center text-slate-500" colSpan={4}>
+                            No ancillaries purchased yet.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                  <div className="flex items-end gap-2 border-t border-slate-100 p-3">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600">Type</label>
+                      <select
+                        value={ancillaryType}
+                        onChange={(e) => setAncillaryType(e.target.value as FlightAncillaryType)}
+                        className="mt-1 rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+                      >
+                        {ANCILLARY_TYPES.map((t) => (
+                          <option key={t} value={t}>
+                            {t}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex-1">
+                      <label className="block text-xs font-medium text-slate-600">
+                        Description
+                      </label>
+                      <input
+                        value={ancillaryDescription}
+                        onChange={(e) => setAncillaryDescription(e.target.value)}
+                        placeholder="e.g. Extra 23kg checked bag"
+                        className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+                      />
+                    </div>
+                    <button
+                      onClick={handlePurchaseAncillary}
+                      disabled={purchasingAncillary}
+                      className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                    >
+                      {purchasingAncillary ? 'Purchasing…' : 'Purchase'}
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
           </>
         )}
       </AppShell>

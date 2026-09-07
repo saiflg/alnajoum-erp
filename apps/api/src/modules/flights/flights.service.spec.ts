@@ -11,12 +11,16 @@ import {
   TripType,
 } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
+import { AuditService } from '../audit/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { InvoicesService } from '../payments/invoices.service';
+import { FlightIncentivesService } from './flight-incentives.service';
 import { FlightPricingService } from './flight-pricing.service';
+import { FlightProviderRoutingService } from './flight-provider-routing.service';
 import { FlightsService } from './flights.service';
 import { ProviderTransactionLogService } from './provider-transaction-log.service';
 import { FLIGHT_PROVIDER } from './providers/flight-provider.port';
+import { FlightProviderRouter } from './providers/flight-provider.router';
 
 const baseOffer = {
   id: 'offer-1',
@@ -50,6 +54,8 @@ describe('FlightsService', () => {
       findUnique: jest.Mock;
       update: jest.Mock;
     };
+    supplierPayable: { create: jest.Mock };
+    staffIncentive: { findFirst: jest.Mock };
     $transaction: jest.Mock;
   };
   let provider: {
@@ -57,6 +63,7 @@ describe('FlightsService', () => {
     getOffer: jest.Mock;
     createOrder: jest.Mock;
     cancelOrder: jest.Mock;
+    capabilities: jest.Mock;
   };
   let invoicesService: {
     createForFlightBooking: jest.Mock;
@@ -65,6 +72,10 @@ describe('FlightsService', () => {
   let notificationsService: { sendBookingConfirmation: jest.Mock };
   let pricingService: { priceOffer: jest.Mock };
   let providerLog: { record: jest.Mock };
+  let providerRoutingService: { resolveOrder: jest.Mock };
+  let providerRouter: { resolveByName: jest.Mock };
+  let auditService: { record: jest.Mock };
+  let flightIncentivesService: { createForTicketedBooking: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
@@ -77,6 +88,8 @@ describe('FlightsService', () => {
         findUnique: jest.fn(),
         update: jest.fn(),
       },
+      supplierPayable: { create: jest.fn() },
+      staffIncentive: { findFirst: jest.fn().mockResolvedValue(null) },
       $transaction: jest.fn((callback: (tx: unknown) => unknown) =>
         callback(prisma),
       ),
@@ -86,6 +99,7 @@ describe('FlightsService', () => {
       getOffer: jest.fn(),
       createOrder: jest.fn(),
       cancelOrder: jest.fn(),
+      capabilities: jest.fn().mockResolvedValue({ hold: false }),
     };
     invoicesService = {
       createForFlightBooking: jest.fn(),
@@ -100,6 +114,10 @@ describe('FlightsService', () => {
       }),
     };
     providerLog = { record: jest.fn() };
+    providerRoutingService = { resolveOrder: jest.fn().mockResolvedValue([]) };
+    providerRouter = { resolveByName: jest.fn() };
+    auditService = { record: jest.fn() };
+    flightIncentivesService = { createForTicketedBooking: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -109,7 +127,14 @@ describe('FlightsService', () => {
         { provide: InvoicesService, useValue: invoicesService },
         { provide: NotificationsService, useValue: notificationsService },
         { provide: FlightPricingService, useValue: pricingService },
+        {
+          provide: FlightProviderRoutingService,
+          useValue: providerRoutingService,
+        },
+        { provide: FlightProviderRouter, useValue: providerRouter },
         { provide: ProviderTransactionLogService, useValue: providerLog },
+        { provide: AuditService, useValue: auditService },
+        { provide: FlightIncentivesService, useValue: flightIncentivesService },
       ],
     }).compile();
 
@@ -186,6 +211,68 @@ describe('FlightsService', () => {
       });
 
       expect(provider.searchOffers).toHaveBeenCalled();
+    });
+
+    describe('spec #30 — provider routing fallback', () => {
+      it('with no routing rule configured, searches only the single active provider', async () => {
+        providerRoutingService.resolveOrder.mockResolvedValue([]);
+        provider.searchOffers.mockResolvedValue([baseOffer]);
+
+        await service.search({
+          tripType: TripType.ONE_WAY,
+          legs: [leg],
+          adults: 1,
+        });
+
+        expect(provider.searchOffers).toHaveBeenCalled();
+        expect(providerRouter.resolveByName).not.toHaveBeenCalled();
+      });
+
+      it('tries the next configured provider when the first one fails', async () => {
+        const secondProvider = {
+          searchOffers: jest.fn().mockResolvedValue([baseOffer]),
+        };
+        providerRoutingService.resolveOrder.mockResolvedValue([
+          FlightProviderName.DUFFEL,
+          FlightProviderName.TRAVELPORT,
+        ]);
+        providerRouter.resolveByName.mockImplementation(
+          (name: FlightProviderName) =>
+            name === FlightProviderName.DUFFEL
+              ? {
+                  searchOffers: jest
+                    .fn()
+                    .mockRejectedValue(new Error('Duffel timed out')),
+                }
+              : secondProvider,
+        );
+
+        const result = await service.search({
+          tripType: TripType.ONE_WAY,
+          legs: [leg],
+          adults: 1,
+        });
+
+        expect(result).toEqual([baseOffer]);
+        expect(secondProvider.searchOffers).toHaveBeenCalled();
+      });
+
+      it('throws when every configured provider fails', async () => {
+        providerRoutingService.resolveOrder.mockResolvedValue([
+          FlightProviderName.DUFFEL,
+        ]);
+        providerRouter.resolveByName.mockReturnValue({
+          searchOffers: jest.fn().mockRejectedValue(new Error('Duffel down')),
+        });
+
+        await expect(
+          service.search({
+            tripType: TripType.ONE_WAY,
+            legs: [leg],
+            adults: 1,
+          }),
+        ).rejects.toThrow('Duffel down');
+      });
     });
   });
 
@@ -365,6 +452,72 @@ describe('FlightsService', () => {
       ).rejects.toThrow(ConflictException);
       expect(prisma.flightBooking.create).not.toHaveBeenCalled();
     });
+
+    describe('spec #9 — hold reservations', () => {
+      beforeEach(() => {
+        provider.getOffer.mockResolvedValue(baseOffer);
+        prisma.customer.findUnique.mockResolvedValue({
+          firstName: 'Amina',
+          lastName: 'Bello',
+          dateOfBirth: null,
+          passportNumber: 'A1234567',
+        });
+      });
+
+      it('rejects a hold request when the active provider does not support it', async () => {
+        provider.capabilities.mockResolvedValue({ hold: false });
+
+        await expect(
+          service.createBooking(
+            'customer-1',
+            'offer-1',
+            [{ type: 'ADULT' as const }],
+            undefined,
+            undefined,
+            undefined,
+            { hold: true },
+          ),
+        ).rejects.toThrow(ConflictException);
+        expect(provider.createOrder).not.toHaveBeenCalled();
+      });
+
+      it('creates an ON_HOLD booking with holdExpiresAt when the provider honors the hold', async () => {
+        provider.capabilities.mockResolvedValue({ hold: true });
+        provider.createOrder.mockResolvedValue({
+          providerOrderId: 'MOCK-1',
+          status: 'CONFIRMED',
+          holdExpiresAt: '2027-01-05T00:00:00.000Z',
+        });
+        prisma.flightBooking.create.mockResolvedValue({ id: 'booking-1' });
+        prisma.customer.findUnique.mockResolvedValue({
+          identity: { email: 'amina@example.com' },
+        });
+
+        await service.createBooking(
+          'customer-1',
+          'offer-1',
+          [{ type: 'ADULT' as const }],
+          undefined,
+          undefined,
+          undefined,
+          { hold: true },
+        );
+
+        expect(provider.createOrder).toHaveBeenCalledWith(
+          baseOffer,
+          expect.any(Array),
+          { hold: true },
+        );
+        expect(prisma.flightBooking.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({
+              status: FlightBookingStatus.ON_HOLD,
+              holdExpiresAt: new Date('2027-01-05T00:00:00.000Z'),
+            }),
+          }),
+        );
+      });
+    });
   });
 
   describe('getBooking', () => {
@@ -385,6 +538,48 @@ describe('FlightsService', () => {
       await expect(
         service.getBooking('booking-1', 'customer-b'),
       ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('flags a ticketed manual booking as awaiting approval when no incentive exists yet', async () => {
+      prisma.flightBooking.findUnique.mockResolvedValue({
+        id: 'booking-1',
+        customerId: 'customer-1',
+        status: FlightBookingStatus.TICKETED,
+        isOfflineEntry: true,
+      });
+      prisma.staffIncentive.findFirst.mockResolvedValue(null);
+
+      const result = await service.getBooking('booking-1');
+
+      expect(result.awaitingManualApproval).toBe(true);
+    });
+
+    it('does not flag a manual booking as awaiting approval once it has been approved', async () => {
+      prisma.flightBooking.findUnique.mockResolvedValue({
+        id: 'booking-1',
+        customerId: 'customer-1',
+        status: FlightBookingStatus.TICKETED,
+        isOfflineEntry: true,
+      });
+      prisma.staffIncentive.findFirst.mockResolvedValue({ id: 'incentive-1' });
+
+      const result = await service.getBooking('booking-1');
+
+      expect(result.awaitingManualApproval).toBe(false);
+    });
+
+    it('never flags an ordinary (non-offline) booking as awaiting manual approval', async () => {
+      prisma.flightBooking.findUnique.mockResolvedValue({
+        id: 'booking-1',
+        customerId: 'customer-1',
+        status: FlightBookingStatus.TICKETED,
+        isOfflineEntry: false,
+      });
+
+      const result = await service.getBooking('booking-1');
+
+      expect(result.awaitingManualApproval).toBe(false);
+      expect(prisma.staffIncentive.findFirst).not.toHaveBeenCalled();
     });
   });
 
@@ -432,6 +627,159 @@ describe('FlightsService', () => {
       expect(provider.cancelOrder).toHaveBeenCalledWith('MOCK-1');
       expect(result.status).toBe(FlightBookingStatus.CANCELLED);
       expect(invoicesService.voidIfUnpaid).toHaveBeenCalledWith('booking-1');
+    });
+  });
+
+  describe('spec #40 — manual/offline booking', () => {
+    const manualDto = {
+      customerId: 'customer-1',
+      airline: 'Air Peace',
+      origin: 'LOS',
+      destination: 'ABV',
+      departureAt: '2027-01-10T08:00:00.000Z',
+      cabinClass: 'ECONOMY' as const,
+      passengers: [{ firstName: 'Amina', lastName: 'Bello' }],
+      companyCost: 60_000,
+      sellingPrice: 80_000,
+      status: 'TICKETED' as const,
+      offlineReason: 'Customer paid cash at the branch, booked by phone.',
+    };
+
+    describe('createManualBooking', () => {
+      it('throws NotFound for a missing customer', async () => {
+        prisma.customer.findUnique.mockResolvedValue(null);
+
+        await expect(
+          service.createManualBooking(manualDto, 'staff-1'),
+        ).rejects.toThrow(NotFoundException);
+      });
+
+      it('creates the booking flagged isOfflineEntry, without touching the provider or the incentive engine', async () => {
+        prisma.customer.findUnique.mockResolvedValue({ id: 'customer-1' });
+        prisma.staff.findUnique.mockResolvedValue({
+          id: 'staff-1',
+          branchId: 'branch-1',
+        });
+        prisma.flightBooking.create.mockResolvedValue({ id: 'booking-1' });
+
+        await service.createManualBooking(manualDto, 'staff-1');
+
+        expect(prisma.flightBooking.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({
+              isOfflineEntry: true,
+              offlineReason: manualDto.offlineReason,
+              status: FlightBookingStatus.TICKETED,
+              totalAmount: 80_000,
+              providerCost: 60_000,
+              markupAmount: 20_000,
+            }),
+          }),
+        );
+        expect(provider.createOrder).not.toHaveBeenCalled();
+        expect(
+          flightIncentivesService.createForTicketedBooking,
+        ).not.toHaveBeenCalled();
+      });
+
+      it('builds a full FlightOffer-shaped itinerary snapshot, not an ad hoc blob', async () => {
+        // Regression: every page that renders a booking (e.g. the admin
+        // detail page) assumes `itinerary.legs` exists unconditionally,
+        // same as a real provider-search booking's snapshot — an
+        // itinerary missing `legs` crashes that page for every manual
+        // booking, which is spec #40's whole feature.
+        prisma.customer.findUnique.mockResolvedValue({ id: 'customer-1' });
+        prisma.staff.findUnique.mockResolvedValue({ id: 'staff-1' });
+        prisma.flightBooking.create.mockResolvedValue({ id: 'booking-1' });
+
+        await service.createManualBooking(manualDto, 'staff-1');
+
+        expect(prisma.flightBooking.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({
+              itinerary: expect.objectContaining({
+                legs: expect.arrayContaining([
+                  expect.objectContaining({
+                    origin: 'LOS',
+                    destination: 'ABV',
+                    segments: expect.arrayContaining([
+                      expect.objectContaining({ airline: 'Air Peace' }),
+                    ]),
+                  }),
+                ]),
+              }),
+            }),
+          }),
+        );
+      });
+
+      it('records a SupplierPayable when a supplier name is given', async () => {
+        prisma.customer.findUnique.mockResolvedValue({ id: 'customer-1' });
+        prisma.staff.findUnique.mockResolvedValue({ id: 'staff-1' });
+        prisma.flightBooking.create.mockResolvedValue({ id: 'booking-1' });
+
+        await service.createManualBooking(
+          { ...manualDto, supplierName: 'Al Rajhi Travel' },
+          'staff-1',
+        );
+
+        expect(prisma.supplierPayable.create).toHaveBeenCalledWith({
+          data: expect.objectContaining({
+            supplierName: 'Al Rajhi Travel',
+            sourceModule: 'FLIGHT_BOOKING',
+            amount: 60_000,
+          }),
+        });
+      });
+    });
+
+    describe('approveManualBooking', () => {
+      it('throws NotFound for a missing booking', async () => {
+        prisma.flightBooking.findUnique.mockResolvedValue(null);
+
+        await expect(
+          service.approveManualBooking('missing', 'approver-1'),
+        ).rejects.toThrow(NotFoundException);
+      });
+
+      it('rejects a non-manual booking', async () => {
+        prisma.flightBooking.findUnique.mockResolvedValue({
+          id: 'booking-1',
+          isOfflineEntry: false,
+          status: FlightBookingStatus.TICKETED,
+        });
+
+        await expect(
+          service.approveManualBooking('booking-1', 'approver-1'),
+        ).rejects.toThrow(BadRequestException);
+      });
+
+      it('rejects a manual booking that is not yet TICKETED', async () => {
+        prisma.flightBooking.findUnique.mockResolvedValue({
+          id: 'booking-1',
+          isOfflineEntry: true,
+          status: FlightBookingStatus.CONFIRMED,
+        });
+
+        await expect(
+          service.approveManualBooking('booking-1', 'approver-1'),
+        ).rejects.toThrow(ConflictException);
+      });
+
+      it('creates the incentive only once explicitly approved', async () => {
+        prisma.flightBooking.findUnique.mockResolvedValue({
+          id: 'booking-1',
+          isOfflineEntry: true,
+          status: FlightBookingStatus.TICKETED,
+          passengers: [],
+        });
+
+        await service.approveManualBooking('booking-1', 'approver-1');
+
+        expect(
+          flightIncentivesService.createForTicketedBooking,
+        ).toHaveBeenCalled();
+      });
     });
   });
 });

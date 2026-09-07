@@ -97,10 +97,23 @@ export interface BookingPassengerSnapshot {
   passportNumber?: string | null;
 }
 
+export interface CreateOrderOptions {
+  /** Only meaningful when capabilities().hold is true — creates a held
+   * reservation (space confirmed, payment deferred) instead of an
+   * instantly-ticketed order. A provider that doesn't support hold must
+   * reject this rather than silently instant-ticketing anyway; see
+   * MockFlightProviderService.createOrder for the reference behavior. */
+  hold?: boolean;
+}
+
 export interface CreateOrderResult {
   providerOrderId: string;
   status: 'CONFIRMED' | 'FAILED';
   errorMessage?: string;
+  /** Set only when `hold: true` was requested and honored — when this
+   * expires without payment, the reservation is released by the provider.
+   * FlightsService snapshots this onto FlightBooking.holdExpiresAt. */
+  holdExpiresAt?: string;
 }
 
 export interface IssueTicketResult {
@@ -131,16 +144,56 @@ export interface ReissueResult {
   errorMessage?: string;
 }
 
+/** Only called when capabilities().void is true (spec #18). */
+export interface ProviderVoidResult {
+  status: 'VOIDED' | 'FAILED';
+  errorMessage?: string;
+}
+
+export interface AncillaryRequest {
+  type: 'BAGGAGE' | 'SEAT' | 'MEAL' | 'OTHER';
+  description: string;
+}
+
+/** Only called when capabilities().ancillary is true (spec #19). */
+export interface ProviderAncillaryResult {
+  status: 'CONFIRMED' | 'FAILED';
+  amount: number;
+  currency: string;
+  providerReference?: string;
+  errorMessage?: string;
+}
+
 /** Which of the non-search/book operations a given provider actually
  * supports through its API today — gates FlightTicketingService/
  * FlightRefundsService/FlightReissueService so an unsupported operation is
  * shown as unavailable with a manual workflow, per spec #10/#23, instead of
  * silently failing or (worse) being implemented against undocumented
- * guesses. */
+ * guesses.
+ *
+ * Phase 10 spec #2's "capabilities must be detectable... UI must only show
+ * operations supported by the selected provider" extends this beyond
+ * ticketing/refund/reissue — every field is required (not optional) so
+ * each provider must explicitly declare true/false rather than an
+ * unsupported operation silently defaulting to "available". search/
+ * instantTicketing are true for every provider in this codebase today
+ * (every provider implements searchOffers, and issueTicket always either
+ * ticket-issues or throws — none has a deferred-ticketing mode yet), kept
+ * as real fields anyway so a future provider that genuinely lacks one of
+ * them has somewhere honest to say so. */
 export interface ProviderCapabilities {
+  search: boolean;
+  hold: boolean;
+  instantTicketing: boolean;
   ticketing: boolean;
+  cancellation: boolean;
   refund: boolean;
   reissue: boolean;
+  void: boolean;
+  ancillary: boolean;
+  seatSelection: boolean;
+  baggage: boolean;
+  groupBooking: boolean;
 }
 
 /**
@@ -161,6 +214,7 @@ export interface FlightProviderPort {
   createOrder(
     offer: FlightOffer,
     passengers: BookingPassengerSnapshot[],
+    options?: CreateOrderOptions,
   ): Promise<CreateOrderResult>;
   /** Confirms/retrieves the ticket for an already-created order. For a
    * provider whose orders are instant-ticketed at creation (e.g. Duffel),
@@ -184,4 +238,14 @@ export interface FlightProviderPort {
     newOffer: FlightOffer,
     passengers: BookingPassengerSnapshot[],
   ): Promise<ReissueResult>;
+  /** Only called when capabilities().void is true (spec #18). */
+  requestVoid(
+    providerOrderId: string,
+    ticketNumbers: string[],
+  ): Promise<ProviderVoidResult>;
+  /** Only called when capabilities().ancillary is true (spec #19). */
+  purchaseAncillary(
+    providerOrderId: string,
+    request: AncillaryRequest,
+  ): Promise<ProviderAncillaryResult>;
 }

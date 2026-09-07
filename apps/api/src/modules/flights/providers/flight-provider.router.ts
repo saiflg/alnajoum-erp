@@ -4,13 +4,17 @@ import { IntegrationsService } from '../../integrations/integrations.service';
 import { AmadeusFlightProviderService } from './amadeus-flight-provider.service';
 import { DuffelFlightProviderService } from './duffel-flight-provider.service';
 import {
+  AncillaryRequest,
   BookingPassengerSnapshot,
+  CreateOrderOptions,
   CreateOrderResult,
   FlightOffer,
   FlightProviderPort,
   IssueTicketResult,
+  ProviderAncillaryResult,
   ProviderCapabilities,
   ProviderRefundResult,
+  ProviderVoidResult,
   ReissueResult,
   SearchFlightsCriteria,
 } from './flight-provider.port';
@@ -18,6 +22,7 @@ import { MockFlightProviderService } from './mock-flight-provider.service';
 import { SabreFlightProviderService } from './sabre-flight-provider.service';
 import { TboFlightProviderService } from './tbo-flight-provider.service';
 import { TravelportFlightProviderService } from './travelport-flight-provider.service';
+import { FlightProviderName } from '@prisma/client';
 
 /**
  * Resolves which concrete FlightProviderPort implementation handles each
@@ -45,16 +50,47 @@ export class FlightProviderRouter implements FlightProviderPort {
     const active = await this.integrationsService.getActiveProvider('FLIGHT');
     const providerName =
       active ?? this.configService.get<string>('FLIGHT_PROVIDER', 'mock');
-    switch (providerName) {
+    return this.resolveByName(this.normalizeProviderName(providerName));
+  }
+
+  private normalizeProviderName(name: string): FlightProviderName {
+    switch (name) {
       case 'duffel':
-        return this.duffelProvider;
+        return FlightProviderName.DUFFEL;
       case 'sabre':
-        return this.sabreProvider;
+        return FlightProviderName.SABRE;
       case 'amadeus':
-        return this.amadeusProvider;
+        return FlightProviderName.AMADEUS;
       case 'travelport':
-        return this.travelportProvider;
+        return FlightProviderName.TRAVELPORT;
       case 'tbo':
+        return FlightProviderName.TBO;
+      default:
+        return FlightProviderName.MOCK;
+    }
+  }
+
+  /**
+   * Resolves a specific named provider regardless of which one is
+   * currently active — used by FlightsService's provider-routing fallback
+   * (spec #30) to try providers in a configured priority order for
+   * *search only*. Never used for booking/ticketing/refund/reissue — those
+   * always go through whichever provider actually holds the order (see
+   * FlightsService.createBooking/FlightTicketingService, which inject the
+   * FLIGHT_PROVIDER token, not this method), so spec #31's duplicate-
+   * booking protection is never at risk from a routing-rule change.
+   */
+  resolveByName(name: FlightProviderName): FlightProviderPort {
+    switch (name) {
+      case FlightProviderName.DUFFEL:
+        return this.duffelProvider;
+      case FlightProviderName.SABRE:
+        return this.sabreProvider;
+      case FlightProviderName.AMADEUS:
+        return this.amadeusProvider;
+      case FlightProviderName.TRAVELPORT:
+        return this.travelportProvider;
+      case FlightProviderName.TBO:
         return this.tboProvider;
       default:
         return this.mockProvider;
@@ -76,8 +112,9 @@ export class FlightProviderRouter implements FlightProviderPort {
   async createOrder(
     offer: FlightOffer,
     passengers: BookingPassengerSnapshot[],
+    options?: CreateOrderOptions,
   ): Promise<CreateOrderResult> {
-    return (await this.resolve()).createOrder(offer, passengers);
+    return (await this.resolve()).createOrder(offer, passengers, options);
   }
 
   async issueTicket(
@@ -113,5 +150,19 @@ export class FlightProviderRouter implements FlightProviderPort {
       newOffer,
       passengers,
     );
+  }
+
+  async requestVoid(
+    providerOrderId: string,
+    ticketNumbers: string[],
+  ): Promise<ProviderVoidResult> {
+    return (await this.resolve()).requestVoid(providerOrderId, ticketNumbers);
+  }
+
+  async purchaseAncillary(
+    providerOrderId: string,
+    request: AncillaryRequest,
+  ): Promise<ProviderAncillaryResult> {
+    return (await this.resolve()).purchaseAncillary(providerOrderId, request);
   }
 }

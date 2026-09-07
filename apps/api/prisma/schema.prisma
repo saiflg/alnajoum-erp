@@ -356,6 +356,9 @@ model Staff {
   coordinatedUmrahGroups    UmrahGroup[]               @relation("UmrahGroupCoordinator")
   pilgrimCheckIns           PilgrimCheckIn[]
   pilgrimReadinessOverrides PilgrimReadinessOverride[]
+  flightVoids               FlightVoid[]
+  flightAncillaries         FlightAncillary[]
+  flightScheduleChanges     FlightScheduleChange[]
 
   @@index([companyId])
   @@index([branchId])
@@ -548,6 +551,17 @@ enum FlightBookingStatus {
   REISSUED
   CANCELLED
   FAILED
+  // Phase 10 additions — same append-only discipline. ON_HOLD/HOLD_EXPIRED
+  // only apply to a booking created via createBooking(..., { hold: true })
+  // against a provider whose capabilities().hold is true (spec #9).
+  // VOID_REQUESTED/VOIDED are driven by FlightVoidsService, distinct from
+  // the refund workflow (spec #18 — void is "the ticket never existed",
+  // refund is "the ticket existed and is being cancelled with a penalty").
+  ON_HOLD
+  HOLD_EXPIRED
+  VOID_REQUESTED
+  VOIDED
+  EXPIRED
 }
 
 enum FlightRefundStatus {
@@ -688,20 +702,50 @@ model FlightBooking {
   // payment and duplicate ticket issuance... use idempotency keys").
   idempotencyKey String? @unique
 
+  // Phase 10 spec #9 — set when this booking was created with hold: true
+  // against a provider whose capabilities().hold is true. Null for every
+  // instant-ticketed booking (the pre-Phase-10 default). Never let payment
+  // proceed once this has passed — see FlightsService.issueTicket's guard.
+  holdExpiresAt DateTime?
+
+  // Phase 10 spec #40 — same isOfflineEntry/offlineReason convention as
+  // VisaApplication: a booking staff recorded from a phone call/walk-in
+  // rather than a live provider search, never fabricating a provider
+  // order. Still flows through the same finance/incentive/audit pipeline —
+  // see FlightIncentivesService's manual-booking approval gate.
+  isOfflineEntry Boolean @default(false)
+  offlineReason  String?
+
+  // Phase 10 spec #21 — set when this booking bills a corporate account
+  // instead of (or alongside) the individual customer; null for every
+  // ordinary self-service/staff booking. Policy limits (max fare, allowed
+  // cabins, approval requirement) are enforced against this account at
+  // booking time — see FlightsService.enforceCorporatePolicy.
+  corporateAccountId      String?
+  corporateAccount        CorporateAccount? @relation(fields: [corporateAccountId], references: [id], onDelete: SetNull)
+  // Set at booking time when corporateAccount.requiresApproval is true;
+  // null when no approval is required. Ticketing is blocked while PENDING.
+  corporateApprovalStatus ApprovalStatus?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  passengers FlightBookingPassenger[]
-  invoice    Invoice?
-  refunds    FlightRefund[]
-  reissues   FlightReissue[]
-  logs       ProviderTransactionLog[]
+  passengers      FlightBookingPassenger[]
+  invoice         Invoice?
+  refunds         FlightRefund[]
+  reissues        FlightReissue[]
+  voids           FlightVoid[]
+  ancillaries     FlightAncillary[]
+  logs            ProviderTransactionLog[]
+  webhookEvents   FlightWebhookEvent[]
+  scheduleChanges FlightScheduleChange[]
 
   @@index([customerId])
   @@index([status])
   @@index([bookedByStaffId])
   @@index([branchId])
   @@index([pricingRuleId])
+  @@index([corporateAccountId])
   @@map("flight_bookings")
 }
 
@@ -771,6 +815,89 @@ model FlightReissue {
   @@map("flight_reissues")
 }
 
+enum FlightVoidStatus {
+  REQUESTED
+  VOIDED
+  FAILED
+  REJECTED
+}
+
+/**
+ * Phase 10 spec #18 — ticket void, deliberately a separate model/workflow
+ * from FlightRefund: a void undoes a ticket within the airline's same-day
+ * void window as if it never existed (no penalty, full reversal), while a
+ * refund cancels an already-accepted ticket with a penalty. Only
+ * meaningful once a booking is TICKETED, and only while `voidDeadline`
+ * (the ticket's issue date/time plus the provider's void window, snapshot
+ * at request time) hasn't passed.
+ */
+model FlightVoid {
+  id String @id @default(cuid())
+
+  bookingId String
+  booking   FlightBooking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  requestedByStaffId String
+  requestedByStaff   Staff  @relation(fields: [requestedByStaffId], references: [id], onDelete: Restrict)
+
+  ticketNumbers String[] // snapshot of FlightBookingPassenger.ticketNumber at request time
+  voidDeadline  DateTime
+  amountVoided  Int // whole amount reversed — a void has no penalty, unlike FlightRefund
+  currency      String
+
+  status           FlightVoidStatus @default(REQUESTED)
+  providerResponse Json?
+
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  @@index([bookingId])
+  @@map("flight_voids")
+}
+
+enum FlightAncillaryType {
+  BAGGAGE
+  SEAT
+  MEAL
+  OTHER
+}
+
+enum FlightAncillaryStatus {
+  REQUESTED
+  CONFIRMED
+  FAILED
+  REFUNDED
+}
+
+/**
+ * Phase 10 spec #19 — a baggage/seat/meal/other add-on purchased against an
+ * existing booking, recorded separately from the base fare (never folded
+ * into FlightBooking.totalAmount) so accounting/reporting can distinguish
+ * ancillary revenue from ticket revenue, per the spec's own instruction.
+ */
+model FlightAncillary {
+  id String @id @default(cuid())
+
+  bookingId String
+  booking   FlightBooking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  type        FlightAncillaryType
+  description String
+  amount      Int
+  currency    String
+
+  status FlightAncillaryStatus @default(REQUESTED)
+
+  purchasedByStaffId String?
+  purchasedByStaff   Staff?  @relation(fields: [purchasedByStaffId], references: [id], onDelete: SetNull)
+
+  providerReference String?
+  createdAt         DateTime @default(now())
+
+  @@index([bookingId])
+  @@map("flight_ancillaries")
+}
+
 /**
  * Configurable agency markup rule (spec #18) — resolved by
  * FlightPricingService against a search/offer's route, airline, cabin,
@@ -821,6 +948,172 @@ model FlightPricingRule {
   @@index([isActive])
   @@index([priority])
   @@map("flight_pricing_rules")
+}
+
+enum FlightServiceFeeType {
+  BOOKING
+  TICKETING
+  CANCELLATION
+  REFUND_PROCESSING
+  REISSUE
+  CHANGE
+  ANCILLARY
+}
+
+/**
+ * Phase 10 spec #26 — configurable flat/percentage fees layered on top of
+ * FlightPricingRule's fare markup, e.g. a flat ₦2,000 ticketing fee applied
+ * to every ticket issued regardless of route/airline. Resolved by
+ * FlightServiceFeesService.resolve(type) — the single active fee for a
+ * given type wins; deliberately simpler than FlightPricingRule's
+ * route/airline scoping since service fees are a flat agency charge, not a
+ * fare markup.
+ */
+model FlightServiceFee {
+  id   String               @id @default(cuid())
+  type FlightServiceFeeType
+
+  amount  Int? // whole currency units, for a flat fee
+  percent Float? // e.g. 2.5 = 2.5% of the base amount, for a percentage fee
+
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([type, isActive])
+  @@map("flight_service_fees")
+}
+
+/**
+ * Phase 10 spec #30 — administrator-configured provider try-order for
+ * flight *search only* (never booking/ticketing — see
+ * FlightProviderRoutingService's doc comment and spec #31's duplicate-
+ * booking protection). A rule with origin/destination left null applies
+ * globally; a route-scoped rule (e.g. "NG → SA") takes priority over the
+ * global default when both exist, same specific-beats-generic resolution
+ * as FlightPricingRule/CountryVisaRule.
+ */
+model FlightProviderRoutingRule {
+  id String @id @default(cuid())
+
+  origin      String? // ISO country code or IATA airport code prefix, staff's choice — free text, never parsed
+  destination String?
+
+  // Ordered list of FlightProviderName values, e.g. ["DUFFEL","TRAVELPORT","SABRE"] —
+  // stored as JSON rather than a relation table since the order itself (not
+  // just membership) is the data being configured.
+  providerPriority Json
+
+  isActive Boolean @default(true)
+  priority Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive])
+  @@map("flight_provider_routing_rules")
+}
+
+enum FlightSupplierType {
+  GDS
+  NDC
+  LCC
+  CONSOLIDATOR
+  AIRLINE
+  MANUAL
+}
+
+enum FlightSupplierStatus {
+  ACTIVE
+  SUSPENDED
+  CLOSED
+}
+
+/**
+ * Phase 10 spec #22/#23 — a supplier *master record*, distinct from the
+ * existing generic SupplierPayable/SupplierPayment AP ledger (which is
+ * free-text-keyed and shared across Flight/Hotel/Visa). This is what a
+ * FlightSupplier actually IS (contract terms, credit limit, API status);
+ * SupplierPayable rows are linked to it via the new optional
+ * flightSupplierId below rather than duplicating balance-tracking — the
+ * balance itself is always computed live from those linked payables/
+ * payments (see FlightSuppliersService.getBalance), same
+ * never-a-stored-balance-column discipline as Wallet.
+ */
+model FlightSupplier {
+  id   String             @id @default(cuid())
+  name String
+  type FlightSupplierType
+
+  providerCode String? // e.g. matches FlightProviderName when this supplier IS a provider account
+  apiProvider  String? // free-text — which FlightProviderPort implementation settles through this supplier, if any
+
+  currency          String @default("NGN")
+  commissionPercent Float? // supplier pays the agency this % back
+  markupPercent     Float? // agency's default markup when booking through this supplier (falls back to FlightPricingRule when unset)
+  serviceFee        Int?
+
+  creditLimit     Int?
+  paymentTerms    String? // free text, e.g. "Net 30"
+  settlementCycle String? // free text, e.g. "Weekly"
+
+  status    FlightSupplierStatus @default(ACTIVE)
+  apiStatus String? // free-text last-known API health, e.g. "Connected" | "Auth failed" — set by whatever sync/health-check calls this supplier
+
+  notes String?
+
+  contracts FlightSupplierContract[]
+  payables  SupplierPayable[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@map("flight_suppliers")
+}
+
+enum FlightSupplierContractStatus {
+  DRAFT
+  ACTIVE
+  EXPIRED
+  TERMINATED
+}
+
+/**
+ * Phase 10 spec #24 — a supplier agreement, versioned as its own row (a
+ * supplier can have several contracts over time) rather than overwriting
+ * FlightSupplier's own commission/markup fields, so history is preserved.
+ */
+model FlightSupplierContract {
+  id String @id @default(cuid())
+
+  supplierId String
+  supplier   FlightSupplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  name      String
+  startDate DateTime
+  endDate   DateTime?
+
+  commissionPercent Float?
+  markupPercent     Float?
+  currency          String @default("NGN")
+
+  settlementTerms   String?
+  ticketingTerms    String?
+  cancellationRules String?
+
+  contactPerson String?
+  documentUrl   String? // path under the existing document-storage abstraction, not a raw filesystem path
+
+  status FlightSupplierContractStatus @default(DRAFT)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([supplierId])
+  @@index([status])
+  @@map("flight_supplier_contracts")
 }
 
 /**
@@ -912,6 +1205,82 @@ model ProviderTransactionLog {
   @@index([bookingId])
   @@index([createdAt])
   @@map("provider_transaction_logs")
+}
+
+enum FlightWebhookEventStatus {
+  RECEIVED
+  PROCESSED
+  IGNORED
+  FAILED
+}
+
+/**
+ * Phase 10 spec #32 — every inbound provider webhook call, recorded before
+ * processing. `externalId` (the provider's own event id) is unique, so a
+ * retried webhook delivery is a no-op rather than double-applying its
+ * effect — the idempotency mechanism spec #32/#31 asks for, mirroring
+ * FlightBooking.idempotencyKey's own uniqueness-based approach.
+ */
+model FlightWebhookEvent {
+  id String @id @default(cuid())
+
+  provider   FlightProviderName
+  eventType  String
+  externalId String             @unique
+
+  // Sanitized payload only — never the raw provider secret/signature
+  // header, same "no unnecessary sensitive data" rule ProviderTransactionLog
+  // already follows.
+  payload Json
+
+  status       FlightWebhookEventStatus @default(RECEIVED)
+  errorMessage String?
+
+  bookingId String?
+  booking   FlightBooking? @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+
+  createdAt   DateTime  @default(now())
+  processedAt DateTime?
+
+  @@index([provider])
+  @@index([status])
+  @@map("flight_webhook_events")
+}
+
+enum FlightScheduleChangeStatus {
+  DETECTED
+  CUSTOMER_NOTIFIED
+  ACCEPTED
+  ALTERNATIVE_REQUESTED
+  REFUND_REQUESTED
+}
+
+/**
+ * Phase 10 spec #43 — an airline-initiated schedule change on an already-
+ * ticketed booking. old/newSegmentSnapshot are full FlightSegment[] JSON
+ * captures (see flight-provider.port.ts), never a diffed/interpreted
+ * summary, so staff can review exactly what the provider reported.
+ */
+model FlightScheduleChange {
+  id String @id @default(cuid())
+
+  bookingId String
+  booking   FlightBooking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  oldSegmentSnapshot Json
+  newSegmentSnapshot Json
+
+  status FlightScheduleChangeStatus @default(DETECTED)
+
+  detectedAt         DateTime  @default(now())
+  customerNotifiedAt DateTime?
+  resolvedByStaffId  String?
+  resolvedByStaff    Staff?    @relation(fields: [resolvedByStaffId], references: [id], onDelete: SetNull)
+  resolvedAt         DateTime?
+
+  @@index([bookingId])
+  @@index([status])
+  @@map("flight_schedule_changes")
 }
 
 model FlightBookingPassenger {
@@ -2754,11 +3123,26 @@ model CorporateAccount {
 
   isActive Boolean @default(true)
 
+  // Phase 10 spec #21 — corporate travel policy, enforced by
+  // FlightsService.enforceCorporatePolicy whenever a flight booking links
+  // to this account. Every field is optional/empty-means-unrestricted,
+  // same "no rule configured = nothing blocks it" discipline as
+  // CountryVisaRule — a corporate account with no policy set behaves
+  // exactly as before this phase.
+  creditLimit         Int? // outstanding CorporateBooking total this account may carry before requiring approval
+  maxFareAmount       Int? // no single flight booking on this account may exceed this, in `maxFareCurrency`
+  maxFareCurrency     String?
+  allowedCabinClasses CabinClass[] // empty = every cabin allowed
+  preferredAirlines   String[] // IATA codes; empty = no preference enforced
+  requiresApproval    Boolean      @default(false) // every booking on this account needs staff sign-off (FlightBooking.corporateApprovalStatus) before ticketing — same ad-hoc per-module approval pattern as ManualPaymentSubmission/Guarantor, no shared approval-engine exists in this codebase
+  advanceBookingDays  Int? // minimum days before departure a booking must be made
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  travelers CorporateTraveler[]
-  bookings  CorporateBooking[]
+  travelers      CorporateTraveler[]
+  bookings       CorporateBooking[]
+  flightBookings FlightBooking[]
 
   @@index([managedBranchId])
   @@map("corporate_accounts")
@@ -3064,6 +3448,15 @@ model SupplierPayable {
   sourceModule String // "FLIGHT_BOOKING" | "HOTEL_BOOKING" | "VISA_APPLICATION"
   sourceId     String
 
+  // Phase 10 — links this payable to a FlightSupplier master record when
+  // one exists for `supplierName`, so FlightSuppliersService.getBalance()
+  // can compute a real per-supplier exposure. Null for every payable that
+  // predates this phase or belongs to a supplier with no master record yet
+  // (Hotel/Visa suppliers, or a flight supplier not yet onboarded) — the
+  // existing supplierName free-text keeps working exactly as before.
+  flightSupplierId String?
+  flightSupplier   FlightSupplier? @relation(fields: [flightSupplierId], references: [id], onDelete: SetNull)
+
   amount     Int
   currency   String
   amountPaid Int    @default(0)
@@ -3078,6 +3471,7 @@ model SupplierPayable {
 
   @@index([status])
   @@index([sourceModule, sourceId])
+  @@index([flightSupplierId])
   @@map("supplier_payables")
 }
 

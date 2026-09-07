@@ -1,12 +1,16 @@
 import { Injectable, NotImplementedException } from '@nestjs/common';
 import {
+  AncillaryRequest,
   BookingPassengerSnapshot,
+  CreateOrderOptions,
   CreateOrderResult,
   FlightOffer,
   FlightProviderPort,
   IssueTicketResult,
+  ProviderAncillaryResult,
   ProviderCapabilities,
   ProviderRefundResult,
+  ProviderVoidResult,
   ReissueResult,
   SearchFlightsCriteria,
 } from './flight-provider.port';
@@ -37,7 +41,20 @@ export class TboFlightProviderService implements FlightProviderPort {
   }
 
   capabilities(): Promise<ProviderCapabilities> {
-    return Promise.resolve({ ticketing: false, refund: false, reissue: false });
+    return Promise.resolve({
+      search: false,
+      hold: false,
+      instantTicketing: false,
+      ticketing: false,
+      cancellation: false,
+      refund: false,
+      reissue: false,
+      void: false,
+      ancillary: false,
+      seatSelection: false,
+      baggage: false,
+      groupBooking: false,
+    });
   }
 
   searchOffers(_criteria: SearchFlightsCriteria): Promise<FlightOffer[]> {
@@ -51,6 +68,7 @@ export class TboFlightProviderService implements FlightProviderPort {
   createOrder(
     _offer: FlightOffer,
     _passengers: BookingPassengerSnapshot[],
+    _options?: CreateOrderOptions,
   ): Promise<CreateOrderResult> {
     this.notImplemented();
   }
@@ -79,6 +97,20 @@ export class TboFlightProviderService implements FlightProviderPort {
     _newOffer: FlightOffer,
     _passengers: BookingPassengerSnapshot[],
   ): Promise<ReissueResult> {
+    this.notImplemented();
+  }
+
+  requestVoid(
+    _providerOrderId: string,
+    _ticketNumbers: string[],
+  ): Promise<ProviderVoidResult> {
+    this.notImplemented();
+  }
+
+  purchaseAncillary(
+    _providerOrderId: string,
+    _request: AncillaryRequest,
+  ): Promise<ProviderAncillaryResult> {
     this.notImplemented();
   }
 }

@@ -2,6 +2,7 @@ import { Type } from 'class-transformer';
 import {
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsInt,
   IsOptional,
   IsString,
@@ -33,4 +34,10 @@ export class CreateOwnBookingDto {
   @IsOptional()
   @IsString()
   idempotencyKey?: string;
+
+  /** Requests a held reservation instead of instant ticketing — only
+   * honored when the active provider's capabilities().hold is true. */
+  @IsOptional()
+  @IsBoolean()
+  hold?: boolean;
 }
