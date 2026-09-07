@@ -16,6 +16,8 @@ describe('AuthService', () => {
   let prisma: {
     identity: Record<string, jest.Mock>;
     refreshToken: Record<string, jest.Mock>;
+    staff: Record<string, jest.Mock>;
+    customer: Record<string, jest.Mock>;
   };
   let rbacService: { getEffectiveAccess: jest.Mock };
   let auditService: { record: jest.Mock };
@@ -45,6 +47,8 @@ describe('AuthService', () => {
         update: jest.fn(),
         updateMany: jest.fn(),
       },
+      staff: { findUnique: jest.fn() },
+      customer: { findUnique: jest.fn() },
     };
     rbacService = {
       getEffectiveAccess: jest

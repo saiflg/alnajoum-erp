@@ -35,6 +35,8 @@ import { FinanceModule } from './modules/finance/finance.module';
 import { CrmModule } from './modules/crm/crm.module';
 import { SupportModule } from './modules/support/support.module';
 import { HajjOpsModule } from './modules/hajj-ops/hajj-ops.module';
+import { GovernanceModule } from './modules/governance/governance.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -70,6 +72,8 @@ import { HajjOpsModule } from './modules/hajj-ops/hajj-ops.module';
     CrmModule,
     SupportModule,
     HajjOpsModule,
+    GovernanceModule,
+    DashboardModule,
   ],
   controllers: [AppController],
   providers: [

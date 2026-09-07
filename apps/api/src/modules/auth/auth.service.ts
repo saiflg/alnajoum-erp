@@ -136,6 +136,32 @@ export class AuthService {
     return this.issueTokenPair(identity, meta);
   }
 
+  /** Phase 11 — same lookup JwtAccessStrategy does for a live session,
+   * needed here too so a login-time security event (failed attempt,
+   * lockout, unlock) lands on the right tenant's audit trail instead of
+   * every one going out with companyId null — which would make them
+   * invisible on a Tenant Admin's own dashboard/audit search even though
+   * they're clearly that tenant's own staff/customer. */
+  private async resolveCompanyIdForAudit(
+    identity: Identity,
+  ): Promise<string | undefined> {
+    if (identity.type === IdentityType.STAFF) {
+      const staff = await this.prisma.staff.findUnique({
+        where: { identityId: identity.id },
+        select: { companyId: true },
+      });
+      return staff?.companyId;
+    }
+    if (identity.type === IdentityType.CUSTOMER) {
+      const customer = await this.prisma.customer.findUnique({
+        where: { identityId: identity.id },
+        select: { companyId: true },
+      });
+      return customer?.companyId;
+    }
+    return undefined;
+  }
+
   async validateCredentials(
     email: string,
     password: string,
@@ -176,11 +202,13 @@ export class AuthService {
 
       // Phase 11 spec #17/#18 — every failed attempt and every lockout is
       // a security event, not just a silent counter increment.
+      const auditCompanyId = await this.resolveCompanyIdForAudit(identity);
       await this.auditService.record({
         identityId: identity.id,
         action: 'security.login_failed',
         entityType: 'Identity',
         entityId: identity.id,
+        companyId: auditCompanyId,
         ipAddress: meta.ipAddress,
         userAgent: meta.userAgent,
       });
@@ -190,6 +218,7 @@ export class AuthService {
           action: 'security.account_locked',
           entityType: 'Identity',
           entityId: identity.id,
+          companyId: auditCompanyId,
           metadata: { durationMinutes: ACCOUNT_LOCK_DURATION_MINUTES },
           ipAddress: meta.ipAddress,
           userAgent: meta.userAgent,
@@ -210,6 +239,7 @@ export class AuthService {
           action: 'security.account_unlocked',
           entityType: 'Identity',
           entityId: identity.id,
+          companyId: await this.resolveCompanyIdForAudit(identity),
           ipAddress: meta.ipAddress,
           userAgent: meta.userAgent,
         });
@@ -270,6 +300,7 @@ export class AuthService {
       action: 'auth.login',
       entityType: 'Identity',
       entityId: identity.id,
+      companyId: await this.resolveCompanyIdForAudit(identity),
       ipAddress: meta.ipAddress,
       userAgent: meta.userAgent,
     });
@@ -312,6 +343,7 @@ export class AuthService {
         action: 'security.login_failed',
         entityType: 'Identity',
         entityId: identity.id,
+        companyId: await this.resolveCompanyIdForAudit(identity),
         metadata: { reason: '2fa_code_invalid' },
         ipAddress: meta.ipAddress,
         userAgent: meta.userAgent,
@@ -328,6 +360,7 @@ export class AuthService {
       action: 'auth.login',
       entityType: 'Identity',
       entityId: identity.id,
+      companyId: await this.resolveCompanyIdForAudit(identity),
       metadata: { via2fa: true },
       ipAddress: meta.ipAddress,
       userAgent: meta.userAgent,

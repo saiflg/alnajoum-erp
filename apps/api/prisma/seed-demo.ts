@@ -4050,15 +4050,26 @@ async function seedPhase10FlightGds() {
  * unit-test mocks — see spec #65's explicit demand for this.
  */
 async function seedPhase11EnterpriseGovernance() {
+  const primaryCompany = await prisma.company.findFirstOrThrow();
+  const agentIdentity = await prisma.identity.findUniqueOrThrow({
+    where: { email: 'fatima.sule@demo.alnajoum.travel' },
+  });
+  const financeIdentity = await prisma.identity.findUniqueOrThrow({
+    where: { email: 'ibrahim.musa@demo.alnajoum.travel' },
+  });
+
+  // Each block below is independently idempotent (its own existence check)
+  // rather than one big guard at the top — this function has grown to
+  // seed several unrelated things (a second tenant, feature flags,
+  // approval rules, currencies, demo approval requests) and a single
+  // early-return would silently skip everything after whichever piece
+  // happened to exist first from an earlier partial run.
   const existingSecondTenant = await prisma.company.findFirst({
     where: { name: 'Zamzam Horizon Travels' },
   });
   if (existingSecondTenant) {
-    console.log('Phase 11 enterprise/governance demo data already present — skipping');
-    return;
-  }
-
-  const primaryCompany = await prisma.company.findFirstOrThrow();
+    console.log('Phase 11 second demo tenant already present — skipping that step');
+  } else {
   await prisma.company.update({
     where: { id: primaryCompany.id },
     data: {
@@ -4180,6 +4191,155 @@ async function seedPhase11EnterpriseGovernance() {
     'This tenant exists ONLY to prove cross-tenant isolation — Tenant A ' +
       '(Alnajoum Travel Agency) staff must never be able to read, list, or ' +
       'modify anything belonging to it, and vice versa.',
+  );
+  }
+
+  // --- Spec #39: feature flags, seeded exactly as the spec enumerates them.
+  // Provider ones default OFF (this platform's mock providers stay the safe
+  // default locally); the module-level ones default ON since every one of
+  // those modules is already live in this codebase from earlier phases.
+  const featureFlags: Array<{
+    key: string;
+    description: string;
+    isEnabledByDefault: boolean;
+  }> = [
+    { key: 'ENABLE_DUFFEL', description: 'Real Duffel flight provider integration', isEnabledByDefault: false },
+    { key: 'ENABLE_TRAVELPORT', description: 'Travelport GDS integration (mock-only until real credentials exist)', isEnabledByDefault: false },
+    { key: 'ENABLE_SABRE', description: 'Sabre GDS integration (mock-only until real credentials exist)', isEnabledByDefault: false },
+    { key: 'ENABLE_HOTELS', description: 'Hotel booking module', isEnabledByDefault: true },
+    { key: 'ENABLE_VISA', description: 'Visa & immigration operations module', isEnabledByDefault: true },
+    { key: 'ENABLE_HAJJ', description: 'Hajj packages & operations module', isEnabledByDefault: true },
+    { key: 'ENABLE_UMRAH', description: 'Umrah packages & operations module', isEnabledByDefault: true },
+    { key: 'ENABLE_CORPORATE_TRAVEL', description: 'Corporate travel accounts & policy enforcement', isEnabledByDefault: true },
+    { key: 'ENABLE_GROUP_BOOKINGS', description: 'Flight group booking workflow', isEnabledByDefault: true },
+    { key: 'ENABLE_AUTOMATIC_PAYOUT', description: 'Automatic staff incentive payout processing (vs. manual finance review)', isEnabledByDefault: false },
+  ];
+  for (const flag of featureFlags) {
+    await prisma.featureFlag.upsert({
+      where: { key: flag.key },
+      create: flag,
+      update: {},
+    });
+  }
+  console.log(`Seeded ${featureFlags.length} feature flags`);
+
+  // --- Spec #10: the worked example from the spec itself, verbatim. ---
+  const existingThresholdRule = await prisma.approvalThresholdRule.findFirst({
+    where: { type: 'FLIGHT_REFUND' },
+  });
+  if (existingThresholdRule) {
+    console.log('Phase 11 approval threshold rules already present — skipping that step');
+  } else {
+    await prisma.approvalThresholdRule.create({
+      data: {
+        type: 'FLIGHT_REFUND',
+        minAmount: 0,
+        maxAmount: 100_000,
+        requiredApprovals: 1,
+      },
+    });
+    await prisma.approvalThresholdRule.create({
+      data: {
+        type: 'FLIGHT_REFUND',
+        minAmount: 100_001,
+        maxAmount: 1_000_000,
+        requiredApprovals: 2,
+      },
+    });
+    await prisma.approvalThresholdRule.create({
+      data: {
+        type: 'FLIGHT_REFUND',
+        minAmount: 1_000_001,
+        maxAmount: null,
+        requiredApprovals: 3,
+      },
+    });
+    console.log(
+      'Seeded 3 FLIGHT_REFUND approval threshold rules (₦0-100k: 1 approval, ' +
+        '₦100,001-1,000,000: 2 approvals, above: 3 approvals) — the spec\'s own worked example',
+    );
+  }
+
+  // --- Spec #21: reference currency data. ---
+  const currencies: Array<{
+    code: string;
+    name: string;
+    symbol: string;
+    exchangeRateToBase: number;
+  }> = [
+    { code: 'NGN', name: 'Nigerian Naira', symbol: '₦', exchangeRateToBase: 1 },
+    { code: 'USD', name: 'US Dollar', symbol: '$', exchangeRateToBase: 1650 },
+    { code: 'SAR', name: 'Saudi Riyal', symbol: 'ر.س', exchangeRateToBase: 440 },
+    { code: 'GBP', name: 'British Pound', symbol: '£', exchangeRateToBase: 2100 },
+    { code: 'AED', name: 'UAE Dirham', symbol: 'د.إ', exchangeRateToBase: 449 },
+  ];
+  for (const currency of currencies) {
+    await prisma.currency.upsert({
+      where: { code: currency.code },
+      create: currency,
+      update: {},
+    });
+  }
+  console.log(`Seeded ${currencies.length} reference currencies`);
+
+  // --- Spec #10/#11: one demo approval request in each meaningful state,
+  // so the admin approvals queue isn't empty on first look. ---
+  const existingApprovalRequest = await prisma.approvalRequest.findFirst({
+    where: { companyId: primaryCompany.id, type: 'FLIGHT_REFUND' },
+  });
+  if (existingApprovalRequest) {
+    console.log('Phase 11 demo approval requests already present — skipping that step');
+    return;
+  }
+  const pendingApproval = await prisma.approvalRequest.create({
+    data: {
+      companyId: primaryCompany.id,
+      type: 'FLIGHT_REFUND',
+      amount: 350_000,
+      currency: 'NGN',
+      entityType: 'FlightRefund',
+      requestedByIdentityId: agentIdentity.id,
+      reason: 'Customer travel plans cancelled — refund per fare rules',
+      requiredApprovals: 2,
+    },
+  });
+  await prisma.approvalDecision.create({
+    data: {
+      approvalRequestId: pendingApproval.id,
+      decidedByIdentityId: financeIdentity.id,
+      decision: 'APPROVED',
+    },
+  });
+  await prisma.approvalRequest.update({
+    where: { id: pendingApproval.id },
+    data: { status: 'UNDER_REVIEW' },
+  });
+
+  const rejectedApproval = await prisma.approvalRequest.create({
+    data: {
+      companyId: primaryCompany.id,
+      type: 'FLIGHT_REFUND',
+      amount: 1_500_000,
+      currency: 'NGN',
+      entityType: 'FlightRefund',
+      requestedByIdentityId: agentIdentity.id,
+      reason: 'Large group cancellation refund',
+      requiredApprovals: 3,
+      status: 'REJECTED',
+      resolvedAt: new Date(),
+    },
+  });
+  await prisma.approvalDecision.create({
+    data: {
+      approvalRequestId: rejectedApproval.id,
+      decidedByIdentityId: financeIdentity.id,
+      decision: 'REJECTED',
+      reason: 'Amount exceeds the fare rules\' refundable portion — see manual refund record instead',
+    },
+  });
+  console.log(
+    `Created 2 demo approval requests — ${pendingApproval.id} awaiting a second ` +
+      `approval (1 of 2 received), ${rejectedApproval.id} rejected with a reason`,
   );
 }
 
