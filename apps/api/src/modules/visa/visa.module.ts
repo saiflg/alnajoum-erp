@@ -3,6 +3,7 @@ import { AuditModule } from '../audit/audit.module';
 import { CrmModule } from '../crm/crm.module';
 import { CustomersModule } from '../customers/customers.module';
 import { FinanceModule } from '../finance/finance.module';
+import { GovernanceModule } from '../governance/governance.module';
 import { IntegrationsModule } from '../integrations/integrations.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { PaymentsModule } from '../payments/payments.module';
@@ -57,6 +58,7 @@ import { VisaService } from './visa.service';
     FinanceModule,
     IntegrationsModule,
     CrmModule,
+    GovernanceModule,
   ],
   controllers: [
     VisaApplicationsOwnController,

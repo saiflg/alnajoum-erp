@@ -13,7 +13,9 @@ import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { UsersService } from '../users/users.service';
 import { AddProviderMessageDto } from './dto/add-provider-message.dto';
 import { VisaSubmissionsService } from './visa-submissions.service';
+import { RequireFeature } from '../../common/decorators/require-feature.decorator';
 
+@RequireFeature('ENABLE_VISA')
 @Controller('visa/applications/:id/submission')
 export class VisaSubmissionsController {
   constructor(

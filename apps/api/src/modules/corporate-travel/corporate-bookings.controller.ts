@@ -3,7 +3,9 @@ import { CorporateBookingStatus } from '@prisma/client';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { CorporateTravelService } from './corporate-travel.service';
+import { RequireFeature } from '../../common/decorators/require-feature.decorator';
 
+@RequireFeature('ENABLE_CORPORATE_TRAVEL')
 @Controller('corporate-travel/bookings')
 export class CorporateBookingsController {
   constructor(

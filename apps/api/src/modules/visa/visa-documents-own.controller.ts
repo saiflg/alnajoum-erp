@@ -25,8 +25,10 @@ import {
   VISA_DOCUMENTS_NAMESPACE,
   VisaDocumentsService,
 } from './visa-documents.service';
+import { RequireFeature } from '../../common/decorators/require-feature.decorator';
 
 /** Customer self-service document upload/download for one of their own visa applications. */
+@RequireFeature('ENABLE_VISA')
 @Controller('visa/applications/me/:applicationId/documents')
 export class VisaDocumentsOwnController {
   constructor(

@@ -1,4 +1,13 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { PackageStatus } from '@prisma/client';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
@@ -8,7 +17,9 @@ import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { CreateHajjPackageDto } from './dto/create-hajj-package.dto';
 import { UpdateHajjPackageDto } from './dto/update-hajj-package.dto';
 import { HajjPackagesService } from './hajj-packages.service';
+import { RequireFeature } from '../../common/decorators/require-feature.decorator';
 
+@RequireFeature('ENABLE_HAJJ')
 @Controller('hajj/packages')
 export class HajjPackagesController {
   constructor(private readonly packagesService: HajjPackagesService) {}

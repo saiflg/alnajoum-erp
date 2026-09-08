@@ -7,7 +7,9 @@ import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { UsersService } from '../users/users.service';
 import { RegisterUmrahDto } from './dto/register-umrah.dto';
 import { UmrahRegistrationsService } from './umrah-registrations.service';
+import { RequireFeature } from '../../common/decorators/require-feature.decorator';
 
+@RequireFeature('ENABLE_UMRAH')
 @Controller('umrah/registrations')
 export class UmrahRegistrationsAdminController {
   constructor(

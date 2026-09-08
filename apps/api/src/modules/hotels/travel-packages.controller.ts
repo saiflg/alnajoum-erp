@@ -6,7 +6,9 @@ import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { UsersService } from '../users/users.service';
 import { CreateTravelPackageDto } from './dto/create-travel-package.dto';
 import { TravelPackagesService } from './travel-packages.service';
+import { RequireFeature } from '../../common/decorators/require-feature.decorator';
 
+@RequireFeature('ENABLE_HOTELS')
 @Controller('travel-packages')
 @RequirePermissions(PERMISSIONS.HOTEL.PACKAGE_MANAGE)
 export class TravelPackagesController {

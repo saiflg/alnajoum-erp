@@ -11,8 +11,10 @@ import { CustomersService } from '../customers/customers.service';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { CreateGuarantorDto } from './dto/create-guarantor.dto';
 import { GuarantorsService } from './guarantors.service';
+import { RequireFeature } from '../../common/decorators/require-feature.decorator';
 
 /** Customer self-service: attach a guarantor to their own visa application. */
+@RequireFeature('ENABLE_VISA')
 @Controller('visa/applications/me/:applicationId/guarantor')
 export class GuarantorsOwnController {
   constructor(

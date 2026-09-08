@@ -7,7 +7,9 @@ import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { UsersService } from '../users/users.service';
 import { RegisterHajjDto } from './dto/register-hajj.dto';
 import { HajjRegistrationsService } from './hajj-registrations.service';
+import { RequireFeature } from '../../common/decorators/require-feature.decorator';
 
+@RequireFeature('ENABLE_HAJJ')
 @Controller('hajj/registrations')
 export class HajjRegistrationsAdminController {
   constructor(

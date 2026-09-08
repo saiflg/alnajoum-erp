@@ -1,6 +1,7 @@
 import { Controller, Get } from '@nestjs/common';
 import { Public } from '../../common/decorators/public.decorator';
 import { VisaServicesService } from './visa-services.service';
+import { RequireFeature } from '../../common/decorators/require-feature.decorator';
 
 /**
  * Customer-facing visa catalog — active + available services only, and
@@ -10,6 +11,7 @@ import { VisaServicesService } from './visa-services.service';
  * VisaServicesController (visa/services, staff-only) is the equivalent
  * full-detail endpoint.
  */
+@RequireFeature('ENABLE_VISA')
 @Controller('visa/services/public')
 export class VisaPublicController {
   constructor(private readonly visaServicesService: VisaServicesService) {}

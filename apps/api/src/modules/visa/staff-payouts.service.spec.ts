@@ -8,14 +8,26 @@ import { IncentiveStatus, PayoutStatus } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { FinancePostingService } from '../finance/finance-posting.service';
+import { FeatureFlagsService } from '../governance/feature-flags.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { STAFF_PAYOUT_PROVIDER } from './providers/staff-payout-provider.port';
 import { StaffPayoutsService } from './staff-payouts.service';
 
+// @nestjs/schedule ships an ESM build Jest's default transform can't parse —
+// same workaround as visa-ops-automation.service.spec.ts/hajj-ops-automation.service.spec.ts.
+jest.mock('@nestjs/schedule', () => ({
+  Cron: () => () => undefined,
+  CronExpression: { EVERY_30_MINUTES: '*/30 * * * *' },
+}));
+
 describe('StaffPayoutsService', () => {
   let service: StaffPayoutsService;
   let prisma: {
-    staffIncentive: { findUnique: jest.Mock; update: jest.Mock };
+    staffIncentive: {
+      findUnique: jest.Mock;
+      update: jest.Mock;
+      findMany: jest.Mock;
+    };
     staffPayout: { upsert: jest.Mock; update: jest.Mock; findMany: jest.Mock };
     staff: { findUnique: jest.Mock };
     identity: { findMany: jest.Mock };
@@ -26,6 +38,7 @@ describe('StaffPayoutsService', () => {
     sendIncentiveUpdate: jest.Mock;
     sendGeneric: jest.Mock;
   };
+  let featureFlagsService: { isEnabled: jest.Mock };
 
   const staffWithBankDetails = {
     id: 'staff-1',
@@ -50,7 +63,11 @@ describe('StaffPayoutsService', () => {
 
   beforeEach(async () => {
     prisma = {
-      staffIncentive: { findUnique: jest.fn(), update: jest.fn() },
+      staffIncentive: {
+        findUnique: jest.fn(),
+        update: jest.fn(),
+        findMany: jest.fn(),
+      },
       staffPayout: {
         upsert: jest.fn(),
         update: jest.fn(),
@@ -65,6 +82,7 @@ describe('StaffPayoutsService', () => {
       sendIncentiveUpdate: jest.fn(),
       sendGeneric: jest.fn(),
     };
+    featureFlagsService = { isEnabled: jest.fn().mockResolvedValue(false) };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -77,6 +95,7 @@ describe('StaffPayoutsService', () => {
           provide: FinancePostingService,
           useValue: { postIncentivePaid: jest.fn() },
         },
+        { provide: FeatureFlagsService, useValue: featureFlagsService },
       ],
     }).compile();
 
@@ -228,6 +247,87 @@ describe('StaffPayoutsService', () => {
       expect(prisma.staffPayout.upsert).toHaveBeenCalledWith(
         expect.objectContaining({ where: { incentiveId: 'inc-1' } }),
       );
+    });
+  });
+
+  /**
+   * Spec #39's ENABLE_AUTOMATIC_PAYOUT — the flag has to actually gate
+   * something real, per company, or "wiring it in" is just theater.
+   */
+  describe('runAutomaticPayoutSweep', () => {
+    const candidate = {
+      id: 'inc-1',
+      staff: { companyId: 'company-a' },
+    };
+
+    it('skips every candidate when the flag is off for that company (the seeded default)', async () => {
+      prisma.staffIncentive.findMany.mockResolvedValue([candidate]);
+      featureFlagsService.isEnabled.mockResolvedValue(false);
+
+      const result = await service.runAutomaticPayoutSweep();
+
+      expect(featureFlagsService.isEnabled).toHaveBeenCalledWith(
+        'ENABLE_AUTOMATIC_PAYOUT',
+        'company-a',
+      );
+      expect(prisma.staffIncentive.findUnique).not.toHaveBeenCalled();
+      expect(result).toEqual({ considered: 1, paidOut: 0, failed: 0 });
+    });
+
+    it('pays out via the same attemptPayout path when the flag is on for that company', async () => {
+      prisma.staffIncentive.findMany.mockResolvedValue([candidate]);
+      featureFlagsService.isEnabled.mockResolvedValue(true);
+      provider.sendPayout.mockResolvedValue({
+        success: true,
+        providerReference: 'MOCKPAY-3',
+      });
+      prisma.staffPayout.update.mockResolvedValue({
+        id: 'payout-1',
+        status: PayoutStatus.SUCCESSFUL,
+      });
+
+      const result = await service.runAutomaticPayoutSweep();
+
+      expect(prisma.staffIncentive.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'inc-1' } }),
+      );
+      expect(prisma.staffPayout.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create: expect.objectContaining({ requestedByStaffId: null }),
+        }),
+      );
+      expect(result).toEqual({ considered: 1, paidOut: 1, failed: 0 });
+    });
+
+    it('keeps sweeping the rest of the batch when one candidate throws', async () => {
+      const second = { id: 'inc-2', staff: { companyId: 'company-a' } };
+      prisma.staffIncentive.findMany.mockResolvedValue([candidate, second]);
+      featureFlagsService.isEnabled.mockResolvedValue(true);
+      prisma.staffIncentive.findUnique
+        .mockRejectedValueOnce(new Error('db hiccup'))
+        .mockResolvedValueOnce(approvedIncentive);
+      provider.sendPayout.mockResolvedValue({
+        success: true,
+        providerReference: 'MOCKPAY-4',
+      });
+      prisma.staffPayout.update.mockResolvedValue({
+        id: 'payout-1',
+        status: PayoutStatus.SUCCESSFUL,
+      });
+
+      const result = await service.runAutomaticPayoutSweep();
+
+      expect(result).toEqual({ considered: 2, paidOut: 1, failed: 1 });
+    });
+
+    it('only checks the flag once per company even with multiple candidates', async () => {
+      const second = { id: 'inc-2', staff: { companyId: 'company-a' } };
+      prisma.staffIncentive.findMany.mockResolvedValue([candidate, second]);
+      featureFlagsService.isEnabled.mockResolvedValue(false);
+
+      await service.runAutomaticPayoutSweep();
+
+      expect(featureFlagsService.isEnabled).toHaveBeenCalledTimes(1);
     });
   });
 });

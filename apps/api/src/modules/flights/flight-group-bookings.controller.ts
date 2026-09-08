@@ -7,7 +7,9 @@ import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { UsersService } from '../users/users.service';
 import { CreateFlightGroupBookingDto } from './dto/create-flight-group-booking.dto';
 import { FlightGroupBookingsService } from './flight-group-bookings.service';
+import { RequireFeature } from '../../common/decorators/require-feature.decorator';
 
+@RequireFeature('ENABLE_GROUP_BOOKINGS')
 @Controller('flights/group-bookings')
 @RequirePermissions(PERMISSIONS.FLIGHT.GROUP_MANAGE)
 export class FlightGroupBookingsController {

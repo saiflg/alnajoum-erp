@@ -30,7 +30,9 @@ import {
   VISA_DOCUMENTS_NAMESPACE,
   VisaDocumentsService,
 } from './visa-documents.service';
+import { RequireFeature } from '../../common/decorators/require-feature.decorator';
 
+@RequireFeature('ENABLE_VISA')
 @Controller('visa/documents')
 export class VisaDocumentsAdminController {
   constructor(

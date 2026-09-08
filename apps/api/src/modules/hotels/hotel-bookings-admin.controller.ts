@@ -20,7 +20,9 @@ import { RequestHotelRefundDto } from './dto/request-hotel-refund.dto';
 import { HotelCompletionService } from './hotel-completion.service';
 import { HotelRefundsService } from './hotel-refunds.service';
 import { HotelsService } from './hotels.service';
+import { RequireFeature } from '../../common/decorators/require-feature.decorator';
 
+@RequireFeature('ENABLE_HOTELS')
 @Controller('hotels/bookings')
 export class HotelBookingsAdminController {
   constructor(

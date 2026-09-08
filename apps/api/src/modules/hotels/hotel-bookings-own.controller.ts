@@ -6,6 +6,7 @@ import { CreateOwnHotelBookingDto } from './dto/create-own-hotel-booking.dto';
 import { RequestHotelRefundDto } from './dto/request-hotel-refund.dto';
 import { HotelRefundsService } from './hotel-refunds.service';
 import { HotelsService } from './hotels.service';
+import { RequireFeature } from '../../common/decorators/require-feature.decorator';
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -26,6 +27,7 @@ function sanitizeForCustomer(booking: UnknownRecord): UnknownRecord {
   return rest;
 }
 
+@RequireFeature('ENABLE_HOTELS')
 @Controller('hotels/bookings/me')
 export class HotelBookingsOwnController {
   constructor(

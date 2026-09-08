@@ -17,7 +17,9 @@ import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { UsersService } from '../users/users.service';
 import { UpdateBankDetailsDto } from './dto/update-bank-details.dto';
 import { StaffPayoutsService } from './staff-payouts.service';
+import { RequireFeature } from '../../common/decorators/require-feature.decorator';
 
+@RequireFeature('ENABLE_VISA')
 @Controller('visa/payouts')
 export class StaffPayoutsController {
   constructor(

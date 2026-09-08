@@ -15,7 +15,9 @@ import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { CountryVisaRulesService } from './country-visa-rules.service';
 import { CreateCountryVisaRuleDto } from './dto/create-country-visa-rule.dto';
 import { UpdateCountryVisaRuleDto } from './dto/update-country-visa-rule.dto';
+import { RequireFeature } from '../../common/decorators/require-feature.decorator';
 
+@RequireFeature('ENABLE_VISA')
 @Controller('visa/country-rules')
 export class CountryVisaRulesController {
   constructor(private readonly service: CountryVisaRulesService) {}

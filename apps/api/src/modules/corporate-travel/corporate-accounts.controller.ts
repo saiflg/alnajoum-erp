@@ -18,7 +18,9 @@ import { CreateCorporateAccountDto } from './dto/create-corporate-account.dto';
 import { CreateCorporateBookingDto } from './dto/create-corporate-booking.dto';
 import { CreateCorporateTravelerDto } from './dto/create-corporate-traveler.dto';
 import { UpdateCorporateAccountDto } from './dto/update-corporate-account.dto';
+import { RequireFeature } from '../../common/decorators/require-feature.decorator';
 
+@RequireFeature('ENABLE_CORPORATE_TRAVEL')
 @Controller('corporate-travel/accounts')
 export class CorporateAccountsController {
   constructor(

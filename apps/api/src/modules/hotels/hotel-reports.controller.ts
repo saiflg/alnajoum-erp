@@ -2,7 +2,9 @@ import { Controller, Get, Query } from '@nestjs/common';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { HotelReportsService } from './hotel-reports.service';
+import { RequireFeature } from '../../common/decorators/require-feature.decorator';
 
+@RequireFeature('ENABLE_HOTELS')
 @Controller('hotels/reports')
 @RequirePermissions(PERMISSIONS.HOTEL.REPORTS_VIEW)
 export class HotelReportsController {

@@ -13,7 +13,9 @@ import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { UsersService } from '../users/users.service';
 import { CreateChecklistExceptionDto } from './dto/create-checklist-exception.dto';
 import { VisaChecklistService } from './visa-checklist.service';
+import { RequireFeature } from '../../common/decorators/require-feature.decorator';
 
+@RequireFeature('ENABLE_VISA')
 @Controller('visa/applications/:id/checklist')
 export class VisaChecklistController {
   constructor(

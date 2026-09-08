@@ -16,7 +16,9 @@ import { UsersService } from '../users/users.service';
 import { CreateGuarantorDto } from './dto/create-guarantor.dto';
 import { VerifyGuarantorDto } from './dto/verify-guarantor.dto';
 import { GuarantorsService } from './guarantors.service';
+import { RequireFeature } from '../../common/decorators/require-feature.decorator';
 
+@RequireFeature('ENABLE_VISA')
 @Controller('visa/guarantors')
 export class GuarantorsAdminController {
   constructor(

@@ -6,6 +6,7 @@ import { RequestVisaRefundDto } from './dto/request-visa-refund.dto';
 import { SubmitVisaApplicationDto } from './dto/submit-visa-application.dto';
 import { VisaRefundsService } from './visa-refunds.service';
 import { VisaService } from './visa.service';
+import { RequireFeature } from '../../common/decorators/require-feature.decorator';
 
 /**
  * Strips internal cost/margin fields before a visa application (and its
@@ -39,6 +40,7 @@ function sanitizeForCustomer(application: UnknownRecord): UnknownRecord {
   return rest;
 }
 
+@RequireFeature('ENABLE_VISA')
 @Controller('visa/applications/me')
 export class VisaApplicationsOwnController {
   constructor(

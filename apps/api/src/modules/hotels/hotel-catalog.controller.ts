@@ -17,7 +17,9 @@ import { CreateHotelDto } from './dto/create-hotel.dto';
 import { UpdateHotelRoomTypeDto } from './dto/update-hotel-room-type.dto';
 import { UpdateHotelDto } from './dto/update-hotel.dto';
 import { HotelCatalogService } from './hotel-catalog.service';
+import { RequireFeature } from '../../common/decorators/require-feature.decorator';
 
+@RequireFeature('ENABLE_HOTELS')
 @Controller('hotels/catalog')
 @RequirePermissions(PERMISSIONS.HOTEL.MANAGE_CATALOG)
 export class HotelCatalogController {

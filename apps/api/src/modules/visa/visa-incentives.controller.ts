@@ -15,7 +15,9 @@ import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { UsersService } from '../users/users.service';
 import { RejectIncentiveDto } from './dto/reject-incentive.dto';
 import { VisaIncentivesService } from './visa-incentives.service';
+import { RequireFeature } from '../../common/decorators/require-feature.decorator';
 
+@RequireFeature('ENABLE_VISA')
 @Controller('visa/incentives')
 export class VisaIncentivesController {
   constructor(

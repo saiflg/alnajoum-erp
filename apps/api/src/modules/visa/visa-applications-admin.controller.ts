@@ -21,7 +21,9 @@ import { RequestVisaRefundDto } from './dto/request-visa-refund.dto';
 import { UpdateVisaStatusDto } from './dto/update-visa-status.dto';
 import { VisaRefundsService } from './visa-refunds.service';
 import { VisaService } from './visa.service';
+import { RequireFeature } from '../../common/decorators/require-feature.decorator';
 
+@RequireFeature('ENABLE_VISA')
 @Controller('visa/applications')
 export class VisaApplicationsAdminController {
   constructor(

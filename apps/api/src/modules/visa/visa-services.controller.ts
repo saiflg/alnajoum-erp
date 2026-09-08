@@ -15,6 +15,7 @@ import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { CreateVisaServiceDto } from './dto/create-visa-service.dto';
 import { UpdateVisaServiceDto } from './dto/update-visa-service.dto';
 import { VisaServicesService } from './visa-services.service';
+import { RequireFeature } from '../../common/decorators/require-feature.decorator';
 
 /**
  * The visa product catalog — staff-facing (includes cost/margin). The
@@ -23,6 +24,7 @@ import { VisaServicesService } from './visa-services.service';
  * responding (customers must never see internal cost or incentive data —
  * see the spec's "CUSTOMER PORTAL" section).
  */
+@RequireFeature('ENABLE_VISA')
 @Controller('visa/services')
 export class VisaServicesController {
   constructor(private readonly visaServicesService: VisaServicesService) {}

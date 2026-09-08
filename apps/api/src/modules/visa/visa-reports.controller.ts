@@ -3,7 +3,9 @@ import { VisaApplicationStatus, VisaType } from '@prisma/client';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { VisaReportsService } from './visa-reports.service';
+import { RequireFeature } from '../../common/decorators/require-feature.decorator';
 
+@RequireFeature('ENABLE_VISA')
 @Controller('visa/reports')
 export class VisaReportsController {
   constructor(private readonly visaReportsService: VisaReportsService) {}

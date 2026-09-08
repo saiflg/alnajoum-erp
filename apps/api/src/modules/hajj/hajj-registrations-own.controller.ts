@@ -4,7 +4,9 @@ import type { AuthContext } from '../../common/interfaces/auth-context.interface
 import { CustomersService } from '../customers/customers.service';
 import { RegisterHajjDto } from './dto/register-hajj.dto';
 import { HajjRegistrationsService } from './hajj-registrations.service';
+import { RequireFeature } from '../../common/decorators/require-feature.decorator';
 
+@RequireFeature('ENABLE_HAJJ')
 @Controller('hajj/registrations/me')
 export class HajjRegistrationsOwnController {
   constructor(

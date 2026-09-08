@@ -2,7 +2,9 @@ import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { Public } from '../../common/decorators/public.decorator';
 import { SearchHotelsDto } from './dto/search-hotels.dto';
 import { HotelsService } from './hotels.service';
+import { RequireFeature } from '../../common/decorators/require-feature.decorator';
 
+@RequireFeature('ENABLE_HOTELS')
 @Controller('hotels')
 export class HotelsController {
   constructor(private readonly hotelsService: HotelsService) {}
