@@ -11,6 +11,7 @@ import { VisaApplicationStatus } from '@prisma/client';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import type { AuthContext } from '../../common/interfaces/auth-context.interface';
+import { resolveTenantFilter } from '../../common/utils/tenant.util';
 import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { UsersService } from '../users/users.service';
 import { AddVisaNoteDto } from './dto/add-visa-note.dto';
@@ -40,17 +41,25 @@ export class VisaApplicationsAdminController {
   @Get()
   @RequirePermissions(PERMISSIONS.VISA_APPLICATION.READ)
   list(
+    @CurrentUser() user: AuthContext,
     @Query('customerId') customerId?: string,
     @Query('status') status?: VisaApplicationStatus,
     @Query('assignedStaffId') assignedStaffId?: string,
   ) {
-    return this.visaService.listAll({ customerId, status, assignedStaffId });
+    return this.visaService.listAll(
+      { customerId, status, assignedStaffId },
+      resolveTenantFilter(user),
+    );
   }
 
   @Get(':id')
   @RequirePermissions(PERMISSIONS.VISA_APPLICATION.READ)
-  findOne(@Param('id') id: string) {
-    return this.visaService.getApplication(id);
+  findOne(@CurrentUser() user: AuthContext, @Param('id') id: string) {
+    return this.visaService.getApplication(
+      id,
+      undefined,
+      resolveTenantFilter(user),
+    );
   }
 
   /**

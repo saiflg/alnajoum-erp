@@ -14,7 +14,30 @@ import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 export class Customer360Service {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getProfile(customerId: string) {
+  /**
+   * Phase 11 spec #3/#65 fix — every method below aggregates deeply
+   * personal/financial data keyed by a raw customerId with no ownership
+   * check at all; a Tenant A caller could pull a full 360 view (identity,
+   * wallet, invoices, bookings across every module) of a Tenant B
+   * customer just by knowing their id. Every public method now takes an
+   * optional tenantCompanyId and calls this guard first — NotFound (not
+   * Forbidden) for a cross-tenant id, same reasoning as CustomersService.
+   */
+  private async assertCustomerInTenant(
+    customerId: string,
+    tenantCompanyId?: string,
+  ): Promise<void> {
+    if (tenantCompanyId === undefined) return;
+    const customer = await this.prisma.customer.findUnique({
+      where: { id: customerId },
+      select: { companyId: true },
+    });
+    if (!customer || customer.companyId !== tenantCompanyId) {
+      throw new NotFoundException('Customer not found');
+    }
+  }
+
+  async getProfile(customerId: string, tenantCompanyId?: string) {
     const customer = await this.prisma.customer.findUnique({
       where: { id: customerId },
       include: {
@@ -31,13 +54,17 @@ export class Customer360Service {
         tagAssignments: { include: { tag: true } },
       },
     });
-    if (!customer) {
+    if (
+      !customer ||
+      (tenantCompanyId !== undefined && customer.companyId !== tenantCompanyId)
+    ) {
       throw new NotFoundException('Customer not found');
     }
     return customer;
   }
 
-  async getBookings(customerId: string) {
+  async getBookings(customerId: string, tenantCompanyId?: string) {
+    await this.assertCustomerInTenant(customerId, tenantCompanyId);
     const [flights, hotels, visas, hajj, umrah, packages, tickets, complaints] =
       await Promise.all([
         this.prisma.flightBooking.findMany({
@@ -88,7 +115,8 @@ export class Customer360Service {
     };
   }
 
-  async getFinancials(customerId: string) {
+  async getFinancials(customerId: string, tenantCompanyId?: string) {
+    await this.assertCustomerInTenant(customerId, tenantCompanyId);
     const [invoices, wallet, walletBalance] = await Promise.all([
       this.prisma.invoice.findMany({
         where: { customerId },
@@ -113,7 +141,8 @@ export class Customer360Service {
     };
   }
 
-  timeline(customerId: string) {
+  async timeline(customerId: string, tenantCompanyId?: string) {
+    await this.assertCustomerInTenant(customerId, tenantCompanyId);
     return this.prisma.customerTimelineEvent.findMany({
       where: { customerId },
       include: {
@@ -123,7 +152,13 @@ export class Customer360Service {
     });
   }
 
-  async addNote(customerId: string, note: string, staffId: string) {
+  async addNote(
+    customerId: string,
+    note: string,
+    staffId: string,
+    tenantCompanyId?: string,
+  ) {
+    await this.assertCustomerInTenant(customerId, tenantCompanyId);
     const created = await this.prisma.customerNote.create({
       data: { customerId, note, createdByStaffId: staffId },
     });
@@ -138,7 +173,8 @@ export class Customer360Service {
     return created;
   }
 
-  listNotes(customerId: string) {
+  async listNotes(customerId: string, tenantCompanyId?: string) {
+    await this.assertCustomerInTenant(customerId, tenantCompanyId);
     return this.prisma.customerNote.findMany({
       where: { customerId },
       include: {
@@ -156,7 +192,13 @@ export class Customer360Service {
     return this.prisma.customerTag.create({ data: { name } });
   }
 
-  async assignTag(customerId: string, tagId: string, staffId?: string) {
+  async assignTag(
+    customerId: string,
+    tagId: string,
+    staffId?: string,
+    tenantCompanyId?: string,
+  ) {
+    await this.assertCustomerInTenant(customerId, tenantCompanyId);
     return this.prisma.customerTagAssignment.upsert({
       where: { customerId_tagId: { customerId, tagId } },
       create: { customerId, tagId, assignedByStaffId: staffId },
@@ -164,7 +206,8 @@ export class Customer360Service {
     });
   }
 
-  async removeTag(customerId: string, tagId: string) {
+  async removeTag(customerId: string, tagId: string, tenantCompanyId?: string) {
+    await this.assertCustomerInTenant(customerId, tenantCompanyId);
     await this.prisma.customerTagAssignment.deleteMany({
       where: { customerId, tagId },
     });
@@ -175,7 +218,8 @@ export class Customer360Service {
    * stored, so a segment can never drift out of sync with reality (see
    * CustomerTag's doc comment in schema.prisma).
    */
-  async segments(customerId: string) {
+  async segments(customerId: string, tenantCompanyId?: string) {
+    await this.assertCustomerInTenant(customerId, tenantCompanyId);
     const [hajj, umrah, visa, flight, hotel] = await Promise.all([
       this.prisma.hajjRegistration.count({ where: { customerId } }),
       this.prisma.umrahRegistration.count({ where: { customerId } }),
@@ -194,8 +238,14 @@ export class Customer360Service {
     return segments;
   }
 
-  /** Spec #32 — global CRM search, gated by the caller's own permission scope in the controller. */
-  async search(query: string) {
+  /**
+   * Spec #32 — global CRM search, gated by the caller's own permission
+   * scope in the controller. Phase 11 spec #3/#65 fix — every branch here
+   * was unscoped by tenant; `tenantCompanyId` (undefined only for
+   * SUPER_ADMIN) is now applied directly on Customer (which has its own
+   * companyId) and joined through the customer relation everywhere else.
+   */
+  async search(query: string, tenantCompanyId?: string) {
     const [customers, flights, hotels, visas, tickets] = await Promise.all([
       this.prisma.customer.findMany({
         where: {
@@ -206,6 +256,7 @@ export class Customer360Service {
             { identity: { phone: { contains: query } } },
             { id: query },
           ],
+          ...(tenantCompanyId !== undefined && { companyId: tenantCompanyId }),
         },
         select: {
           id: true,
@@ -216,24 +267,42 @@ export class Customer360Service {
         take: 10,
       }),
       this.prisma.flightBooking.findMany({
-        where: { bookingReference: { contains: query, mode: 'insensitive' } },
+        where: {
+          bookingReference: { contains: query, mode: 'insensitive' },
+          ...(tenantCompanyId !== undefined && {
+            customer: { companyId: tenantCompanyId },
+          }),
+        },
         select: { id: true, bookingReference: true, customerId: true },
         take: 10,
       }),
       this.prisma.hotelBooking.findMany({
-        where: { bookingReference: { contains: query, mode: 'insensitive' } },
+        where: {
+          bookingReference: { contains: query, mode: 'insensitive' },
+          ...(tenantCompanyId !== undefined && {
+            customer: { companyId: tenantCompanyId },
+          }),
+        },
         select: { id: true, bookingReference: true, customerId: true },
         take: 10,
       }),
       this.prisma.visaApplication.findMany({
         where: {
           applicationReference: { contains: query, mode: 'insensitive' },
+          ...(tenantCompanyId !== undefined && {
+            customer: { companyId: tenantCompanyId },
+          }),
         },
         select: { id: true, applicationReference: true, customerId: true },
         take: 10,
       }),
       this.prisma.supportTicket.findMany({
-        where: { ticketNumber: { contains: query, mode: 'insensitive' } },
+        where: {
+          ticketNumber: { contains: query, mode: 'insensitive' },
+          ...(tenantCompanyId !== undefined && {
+            customer: { companyId: tenantCompanyId },
+          }),
+        },
         select: { id: true, ticketNumber: true, customerId: true },
         take: 10,
       }),

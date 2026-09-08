@@ -114,15 +114,26 @@ export class SupportTicketsService {
     return { ...ticket, messages: this.sanitizeMessages(ticket.messages) };
   }
 
-  listAll(filters: {
-    status?: TicketStatus;
-    priority?: TicketPriority;
-    assignedStaffId?: string;
-    branchId?: string;
-    categoryId?: string;
-  }) {
+  /** Phase 11 spec #3/#65 fix — SupportTicket has no companyId of its
+   * own; the filter joins through the (required) customer relation, same
+   * pattern as every other module fixed in this sweep. */
+  listAll(
+    filters: {
+      status?: TicketStatus;
+      priority?: TicketPriority;
+      assignedStaffId?: string;
+      branchId?: string;
+      categoryId?: string;
+    },
+    tenantCompanyId?: string,
+  ) {
     return this.prisma.supportTicket.findMany({
-      where: filters,
+      where: {
+        ...filters,
+        ...(tenantCompanyId !== undefined && {
+          customer: { companyId: tenantCompanyId },
+        }),
+      },
       include: {
         customer: { select: { firstName: true, lastName: true } },
         category: true,
@@ -133,11 +144,18 @@ export class SupportTicketsService {
     });
   }
 
-  async get(id: string) {
+  async get(id: string, tenantCompanyId?: string) {
     const ticket = await this.prisma.supportTicket.findUnique({
       where: { id },
       include: {
-        customer: { select: { id: true, firstName: true, lastName: true } },
+        customer: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            companyId: true,
+          },
+        },
         category: true,
         assignedStaff: { select: { firstName: true, lastName: true } },
         branch: { select: { name: true } },
@@ -150,7 +168,11 @@ export class SupportTicketsService {
         escalations: { orderBy: { triggeredAt: 'desc' } },
       },
     });
-    if (!ticket) {
+    if (
+      !ticket ||
+      (tenantCompanyId !== undefined &&
+        ticket.customer.companyId !== tenantCompanyId)
+    ) {
       throw new NotFoundException('Support ticket not found');
     }
     return ticket;

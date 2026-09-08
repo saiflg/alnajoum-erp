@@ -126,14 +126,31 @@ export class LeadsService {
     return lead;
   }
 
-  listAll(filters: {
-    stageId?: string;
-    status?: LeadStatus;
-    assignedStaffId?: string;
-    assignedBranchId?: string;
-  }) {
+  /**
+   * Phase 11 spec #3/#65 fix — Lead has no companyId of its own and both
+   * assignedStaffId/assignedBranchId are nullable (a fresh, unassigned
+   * lead has no tenant-derivable field at all). The filter joins through
+   * assignedBranch.companyId, same conservative choice as
+   * InvoicesService's standalone-invoice edge case: an unassigned lead
+   * is excluded from every tenant-scoped view rather than guessed at,
+   * remaining visible only to SUPER_ADMIN's unfiltered view.
+   */
+  listAll(
+    filters: {
+      stageId?: string;
+      status?: LeadStatus;
+      assignedStaffId?: string;
+      assignedBranchId?: string;
+    },
+    tenantCompanyId?: string,
+  ) {
     return this.prisma.lead.findMany({
-      where: filters,
+      where: {
+        ...filters,
+        ...(tenantCompanyId !== undefined && {
+          assignedBranch: { companyId: tenantCompanyId },
+        }),
+      },
       include: {
         stage: true,
         assignedStaff: { select: { firstName: true, lastName: true } },
@@ -144,13 +161,22 @@ export class LeadsService {
     });
   }
 
-  async get(id: string) {
+  /**
+   * Phase 11 spec #3/#65 fix — deliberately more permissive than
+   * listAll's filter: an unassigned lead (assignedBranch null) is let
+   * through here even under a tenant filter, since it's genuinely
+   * ambiguous rather than provably a different tenant's — a Tenant
+   * Admin who already has a specific unclaimed lead's (unguessable
+   * cuid) id can still open and claim it. Only a lead definitively
+   * assigned to a DIFFERENT company's branch is blocked (NotFound).
+   */
+  async get(id: string, tenantCompanyId?: string) {
     const lead = await this.prisma.lead.findUnique({
       where: { id },
       include: {
         stage: true,
         assignedStaff: { select: { firstName: true, lastName: true } },
-        assignedBranch: { select: { name: true } },
+        assignedBranch: { select: { name: true, companyId: true } },
         campaign: { select: { name: true } },
         activities: {
           orderBy: { createdAt: 'desc' },
@@ -164,7 +190,12 @@ export class LeadsService {
         },
       },
     });
-    if (!lead) {
+    if (
+      !lead ||
+      (tenantCompanyId !== undefined &&
+        lead.assignedBranch &&
+        lead.assignedBranch.companyId !== tenantCompanyId)
+    ) {
       throw new NotFoundException('Lead not found');
     }
     return lead;

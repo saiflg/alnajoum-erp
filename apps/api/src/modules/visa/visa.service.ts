@@ -305,13 +305,24 @@ export class VisaService {
     });
   }
 
-  listAll(filters: {
-    customerId?: string;
-    status?: VisaApplicationStatus;
-    assignedStaffId?: string;
-  }) {
+  /** Phase 11 spec #3/#65 fix — VisaApplication has no companyId of its
+   * own; the filter joins through the (required) customer relation, same
+   * pattern as FlightsService/HotelsService. */
+  listAll(
+    filters: {
+      customerId?: string;
+      status?: VisaApplicationStatus;
+      assignedStaffId?: string;
+    },
+    tenantCompanyId?: string,
+  ) {
     return this.prisma.visaApplication.findMany({
-      where: filters,
+      where: {
+        ...filters,
+        ...(tenantCompanyId !== undefined && {
+          customer: { companyId: tenantCompanyId },
+        }),
+      },
       include: {
         invoice: { include: { payments: true, lineItems: true } },
         customer: { select: { firstName: true, lastName: true } },
@@ -330,7 +341,11 @@ export class VisaService {
    * instead, so there's exactly one code path that can return them and
    * VisaApplicationsOwnController never has to remember to strip them.
    */
-  async getApplication(id: string, ownerCustomerId?: string) {
+  async getApplication(
+    id: string,
+    ownerCustomerId?: string,
+    tenantCompanyId?: string,
+  ) {
     const application = await this.prisma.visaApplication.findUnique({
       where: { id },
       include: {
@@ -338,9 +353,14 @@ export class VisaService {
         visaService: true,
         guarantor: true,
         assignedStaff: { select: { firstName: true, lastName: true } },
+        customer: { select: { companyId: true } },
       },
     });
-    if (!application) {
+    if (
+      !application ||
+      (tenantCompanyId !== undefined &&
+        application.customer.companyId !== tenantCompanyId)
+    ) {
       throw new NotFoundException('Visa application not found');
     }
     if (ownerCustomerId && application.customerId !== ownerCustomerId) {

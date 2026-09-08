@@ -217,9 +217,20 @@ export class HotelsService {
     });
   }
 
-  listAll(filters: { customerId?: string; status?: HotelBookingStatus }) {
+  /** Phase 11 spec #3/#65 fix — see FlightsService.listAll's identical
+   * doc comment; HotelBooking has no companyId of its own either, so the
+   * filter joins through the (required) customer relation. */
+  listAll(
+    filters: { customerId?: string; status?: HotelBookingStatus },
+    tenantCompanyId?: string,
+  ) {
     return this.prisma.hotelBooking.findMany({
-      where: filters,
+      where: {
+        ...filters,
+        ...(tenantCompanyId !== undefined && {
+          customer: { companyId: tenantCompanyId },
+        }),
+      },
       include: {
         customer: { select: { firstName: true, lastName: true } },
         guestRecords: true,
@@ -228,12 +239,23 @@ export class HotelsService {
     });
   }
 
-  async getBooking(id: string, ownerCustomerId?: string) {
+  async getBooking(
+    id: string,
+    ownerCustomerId?: string,
+    tenantCompanyId?: string,
+  ) {
     const booking = await this.prisma.hotelBooking.findUnique({
       where: { id },
-      include: { guestRecords: true },
+      include: {
+        guestRecords: true,
+        customer: { select: { companyId: true } },
+      },
     });
-    if (!booking) {
+    if (
+      !booking ||
+      (tenantCompanyId !== undefined &&
+        booking.customer.companyId !== tenantCompanyId)
+    ) {
       throw new NotFoundException('Booking not found');
     }
     if (ownerCustomerId && booking.customerId !== ownerCustomerId) {

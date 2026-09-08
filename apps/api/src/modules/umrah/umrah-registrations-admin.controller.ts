@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import type { AuthContext } from '../../common/interfaces/auth-context.interface';
+import { resolveTenantFilter } from '../../common/utils/tenant.util';
 import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { UsersService } from '../users/users.service';
 import { RegisterUmrahDto } from './dto/register-umrah.dto';
@@ -17,16 +18,24 @@ export class UmrahRegistrationsAdminController {
   @Get()
   @RequirePermissions(PERMISSIONS.UMRAH_REGISTRATION.READ)
   list(
+    @CurrentUser() user: AuthContext,
     @Query('customerId') customerId?: string,
     @Query('packageId') packageId?: string,
   ) {
-    return this.registrationsService.listAll({ customerId, packageId });
+    return this.registrationsService.listAll(
+      { customerId, packageId },
+      resolveTenantFilter(user),
+    );
   }
 
   @Get(':id')
   @RequirePermissions(PERMISSIONS.UMRAH_REGISTRATION.READ)
-  findOne(@Param('id') id: string) {
-    return this.registrationsService.getRegistration(id);
+  findOne(@CurrentUser() user: AuthContext, @Param('id') id: string) {
+    return this.registrationsService.getRegistration(
+      id,
+      undefined,
+      resolveTenantFilter(user),
+    );
   }
 
   /** Staff registering a customer on their behalf (walk-in / phone booking). */

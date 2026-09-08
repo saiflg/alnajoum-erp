@@ -15,6 +15,7 @@ import {
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import type { AuthContext } from '../../common/interfaces/auth-context.interface';
+import { resolveTenantFilter } from '../../common/utils/tenant.util';
 import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { UsersService } from '../users/users.service';
 import { AddTicketMessageDto } from './dto/add-ticket-message.dto';
@@ -30,24 +31,22 @@ export class SupportTicketsAdminController {
 
   @Get()
   listAll(
+    @CurrentUser() user: AuthContext,
     @Query('status') status?: TicketStatus,
     @Query('priority') priority?: TicketPriority,
     @Query('assignedStaffId') assignedStaffId?: string,
     @Query('branchId') branchId?: string,
     @Query('categoryId') categoryId?: string,
   ) {
-    return this.ticketsService.listAll({
-      status,
-      priority,
-      assignedStaffId,
-      branchId,
-      categoryId,
-    });
+    return this.ticketsService.listAll(
+      { status, priority, assignedStaffId, branchId, categoryId },
+      resolveTenantFilter(user),
+    );
   }
 
   @Get(':id')
-  get(@Param('id') id: string) {
-    return this.ticketsService.get(id);
+  get(@CurrentUser() user: AuthContext, @Param('id') id: string) {
+    return this.ticketsService.get(id, resolveTenantFilter(user));
   }
 
   @Post(':id/assign')

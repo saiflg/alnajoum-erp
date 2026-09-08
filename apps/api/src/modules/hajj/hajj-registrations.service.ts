@@ -89,9 +89,7 @@ export class HajjRegistrationsService {
       throw new NotFoundException('Hajj package not found');
     }
     if (pkg.status !== PackageStatus.PUBLISHED) {
-      throw new ConflictException(
-        'This package is not open for registration',
-      );
+      throw new ConflictException('This package is not open for registration');
     }
     if (pilgrimInputs.length > pkg.seatsAvailable) {
       throw new BadRequestException(
@@ -133,8 +131,7 @@ export class HajjRegistrationsService {
         where: { id: pkg.id },
         data: {
           seatsAvailable: remainingSeats,
-          status:
-            remainingSeats <= 0 ? PackageStatus.FULLY_BOOKED : pkg.status,
+          status: remainingSeats <= 0 ? PackageStatus.FULLY_BOOKED : pkg.status,
         },
       });
 
@@ -171,14 +168,29 @@ export class HajjRegistrationsService {
   listForCustomer(customerId: string) {
     return this.prisma.hajjRegistration.findMany({
       where: { customerId },
-      include: { pilgrims: true, package: true, invoice: { include: { payments: true, lineItems: true } } },
+      include: {
+        pilgrims: true,
+        package: true,
+        invoice: { include: { payments: true, lineItems: true } },
+      },
       orderBy: { createdAt: 'desc' },
     });
   }
 
-  listAll(filters: { customerId?: string; packageId?: string }) {
+  /** Phase 11 spec #3/#65 fix — HajjRegistration has no companyId of its
+   * own; the filter joins through the (required) customer relation, same
+   * pattern as FlightsService/HotelsService/VisaService. */
+  listAll(
+    filters: { customerId?: string; packageId?: string },
+    tenantCompanyId?: string,
+  ) {
     return this.prisma.hajjRegistration.findMany({
-      where: filters,
+      where: {
+        ...filters,
+        ...(tenantCompanyId !== undefined && {
+          customer: { companyId: tenantCompanyId },
+        }),
+      },
       include: {
         pilgrims: true,
         package: true,
@@ -189,12 +201,25 @@ export class HajjRegistrationsService {
     });
   }
 
-  async getRegistration(id: string, ownerCustomerId?: string) {
+  async getRegistration(
+    id: string,
+    ownerCustomerId?: string,
+    tenantCompanyId?: string,
+  ) {
     const registration = await this.prisma.hajjRegistration.findUnique({
       where: { id },
-      include: { pilgrims: true, package: true, invoice: { include: { payments: true, lineItems: true } } },
+      include: {
+        pilgrims: true,
+        package: true,
+        invoice: { include: { payments: true, lineItems: true } },
+        customer: { select: { companyId: true } },
+      },
     });
-    if (!registration) {
+    if (
+      !registration ||
+      (tenantCompanyId !== undefined &&
+        registration.customer.companyId !== tenantCompanyId)
+    ) {
       throw new NotFoundException('Hajj registration not found');
     }
     if (ownerCustomerId && registration.customerId !== ownerCustomerId) {

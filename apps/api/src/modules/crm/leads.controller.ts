@@ -12,6 +12,7 @@ import { LeadStatus } from '@prisma/client';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import type { AuthContext } from '../../common/interfaces/auth-context.interface';
+import { resolveTenantFilter } from '../../common/utils/tenant.util';
 import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { UsersService } from '../users/users.service';
 import { CreateLeadDto } from './dto/create-lead.dto';
@@ -61,12 +62,15 @@ export class LeadsController {
       scopedStaffId =
         (await this.usersService.getStaffIdForIdentity(user.sub)) ?? undefined;
     }
-    return this.leadsService.listAll({
-      stageId,
-      status,
-      assignedStaffId: scopedStaffId,
-      assignedBranchId,
-    });
+    return this.leadsService.listAll(
+      {
+        stageId,
+        status,
+        assignedStaffId: scopedStaffId,
+        assignedBranchId,
+      },
+      resolveTenantFilter(user),
+    );
   }
 
   @Get('stages')
@@ -83,8 +87,8 @@ export class LeadsController {
 
   @Get(':id')
   @RequirePermissions(PERMISSIONS.CRM.LEAD_READ)
-  get(@Param('id') id: string) {
-    return this.leadsService.get(id);
+  get(@CurrentUser() user: AuthContext, @Param('id') id: string) {
+    return this.leadsService.get(id, resolveTenantFilter(user));
   }
 
   @Patch(':id')

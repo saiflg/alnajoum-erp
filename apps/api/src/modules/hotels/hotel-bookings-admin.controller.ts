@@ -11,6 +11,7 @@ import { HotelBookingStatus } from '@prisma/client';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import type { AuthContext } from '../../common/interfaces/auth-context.interface';
+import { resolveTenantFilter } from '../../common/utils/tenant.util';
 import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { UsersService } from '../users/users.service';
 import { CreateHotelBookingDto } from './dto/create-hotel-booking.dto';
@@ -68,16 +69,24 @@ export class HotelBookingsAdminController {
   @Get()
   @RequirePermissions(PERMISSIONS.HOTEL.READ)
   list(
+    @CurrentUser() user: AuthContext,
     @Query('customerId') customerId?: string,
     @Query('status') status?: HotelBookingStatus,
   ) {
-    return this.hotelsService.listAll({ customerId, status });
+    return this.hotelsService.listAll(
+      { customerId, status },
+      resolveTenantFilter(user),
+    );
   }
 
   @Get(':id')
   @RequirePermissions(PERMISSIONS.HOTEL.READ)
-  findOne(@Param('id') id: string) {
-    return this.hotelsService.getBooking(id);
+  findOne(@CurrentUser() user: AuthContext, @Param('id') id: string) {
+    return this.hotelsService.getBooking(
+      id,
+      undefined,
+      resolveTenantFilter(user),
+    );
   }
 
   @Post(':id/cancel')
