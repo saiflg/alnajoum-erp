@@ -245,9 +245,38 @@ export class InvoicesService {
     });
   }
 
-  listAll(filters: { customerId?: string; status?: InvoiceStatus }) {
+  /**
+   * Phase 11 spec #3/#65 fix — `Invoice.customerId` is nullable (a
+   * corporate-billed invoice has none, see the model's own doc comment),
+   * so a single `customer.companyId` join would silently drop every
+   * corporate invoice out of a tenant-scoped list rather than just
+   * failing to filter it. The OR covers both billing paths: a normal
+   * customer invoice via customer.companyId, a corporate one via its
+   * booking's staff (bookedByStaff.companyId is required, unlike the
+   * corporate account itself having no direct companyId).
+   */
+  private tenantWhere(tenantCompanyId: string) {
+    return {
+      OR: [
+        { customer: { companyId: tenantCompanyId } },
+        {
+          corporateBooking: {
+            bookedByStaff: { companyId: tenantCompanyId },
+          },
+        },
+      ],
+    };
+  }
+
+  listAll(
+    filters: { customerId?: string; status?: InvoiceStatus },
+    tenantCompanyId?: string,
+  ) {
     return this.prisma.invoice.findMany({
-      where: filters,
+      where: {
+        ...filters,
+        ...(tenantCompanyId !== undefined && this.tenantWhere(tenantCompanyId)),
+      },
       include: {
         lineItems: true,
         payments: true,
@@ -257,11 +286,25 @@ export class InvoicesService {
     });
   }
 
-  async getInvoice(id: string, ownerCustomerId?: string) {
-    const invoice = await this.prisma.invoice.findUnique({
-      where: { id },
-      include: { lineItems: true, payments: true },
-    });
+  async getInvoice(
+    id: string,
+    ownerCustomerId?: string,
+    tenantCompanyId?: string,
+  ) {
+    // findUnique can't be combined with an OR condition (Prisma only
+    // accepts unique fields there) — fetched by id alone, tenant checked
+    // afterward, same "fetch then verify, NotFound either way" pattern as
+    // CustomersService.findOne/FlightsService.getBooking.
+    const invoice =
+      tenantCompanyId === undefined
+        ? await this.prisma.invoice.findUnique({
+            where: { id },
+            include: { lineItems: true, payments: true },
+          })
+        : await this.prisma.invoice.findFirst({
+            where: { id, ...this.tenantWhere(tenantCompanyId) },
+            include: { lineItems: true, payments: true },
+          });
     if (!invoice) {
       throw new NotFoundException('Invoice not found');
     }

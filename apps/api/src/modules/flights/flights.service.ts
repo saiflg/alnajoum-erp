@@ -621,9 +621,26 @@ export class FlightsService {
     });
   }
 
-  listAll(filters: { customerId?: string; status?: FlightBookingStatus }) {
+  /**
+   * Phase 11 spec #3/#65 fix — FlightBooking has no companyId column of
+   * its own (adding one to every already-tenant-derivable table would be
+   * a much larger migration than the isolation fix itself needs), so the
+   * tenant filter joins through `customer.companyId` — every booking has
+   * a required customerId, and every customer has a required companyId
+   * as of this phase, so the join is always resolvable. `tenantCompanyId`
+   * is resolveTenantFilter(user): undefined only for SUPER_ADMIN.
+   */
+  listAll(
+    filters: { customerId?: string; status?: FlightBookingStatus },
+    tenantCompanyId?: string,
+  ) {
     return this.prisma.flightBooking.findMany({
-      where: filters,
+      where: {
+        ...filters,
+        ...(tenantCompanyId !== undefined && {
+          customer: { companyId: tenantCompanyId },
+        }),
+      },
       include: {
         passengers: true,
         customer: { select: { firstName: true, lastName: true } },
@@ -632,13 +649,24 @@ export class FlightsService {
     });
   }
 
-  /** Fetches a booking, optionally enforcing that it belongs to `ownerCustomerId`. */
-  async getBooking(id: string, ownerCustomerId?: string) {
+  /** Fetches a booking, optionally enforcing that it belongs to
+   * `ownerCustomerId` (self-service) and/or `tenantCompanyId` (staff —
+   * same NotFound-not-Forbidden reasoning as CustomersService.findOne,
+   * so a cross-tenant id can't be distinguished from a missing one). */
+  async getBooking(
+    id: string,
+    ownerCustomerId?: string,
+    tenantCompanyId?: string,
+  ) {
     const booking = await this.prisma.flightBooking.findUnique({
       where: { id },
-      include: { passengers: true },
+      include: { passengers: true, customer: { select: { companyId: true } } },
     });
-    if (!booking) {
+    if (
+      !booking ||
+      (tenantCompanyId !== undefined &&
+        booking.customer.companyId !== tenantCompanyId)
+    ) {
       throw new NotFoundException('Booking not found');
     }
     if (ownerCustomerId && booking.customerId !== ownerCustomerId) {

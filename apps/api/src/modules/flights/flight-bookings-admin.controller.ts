@@ -3,6 +3,7 @@ import { FlightBookingStatus } from '@prisma/client';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import type { AuthContext } from '../../common/interfaces/auth-context.interface';
+import { resolveTenantFilter } from '../../common/utils/tenant.util';
 import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { UsersService } from '../users/users.service';
 import { CreateBookingDto } from './dto/create-booking.dto';
@@ -65,16 +66,24 @@ export class FlightBookingsAdminController {
   @Get()
   @RequirePermissions(PERMISSIONS.FLIGHT.READ)
   list(
+    @CurrentUser() user: AuthContext,
     @Query('customerId') customerId?: string,
     @Query('status') status?: FlightBookingStatus,
   ) {
-    return this.flightsService.listAll({ customerId, status });
+    return this.flightsService.listAll(
+      { customerId, status },
+      resolveTenantFilter(user),
+    );
   }
 
   @Get(':id')
   @RequirePermissions(PERMISSIONS.FLIGHT.READ)
-  findOne(@Param('id') id: string) {
-    return this.flightsService.getBooking(id);
+  findOne(@CurrentUser() user: AuthContext, @Param('id') id: string) {
+    return this.flightsService.getBooking(
+      id,
+      undefined,
+      resolveTenantFilter(user),
+    );
   }
 
   @Post(':id/cancel')

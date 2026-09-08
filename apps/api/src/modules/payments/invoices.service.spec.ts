@@ -26,6 +26,7 @@ describe('InvoicesService', () => {
         findMany: jest.fn(),
         findUnique: jest.fn(),
         findUniqueOrThrow: jest.fn(),
+        findFirst: jest.fn(),
         update: jest.fn(),
       },
     };
@@ -131,7 +132,9 @@ describe('InvoicesService', () => {
       const created = tx.invoice.create.mock.calls[0][0].data.lineItems.create;
       const amounts = created.map((item: { amount: number }) => item.amount);
       expect(amounts).toEqual([3_333_333, 3_333_333, 3_333_334]);
-      expect(amounts.reduce((a: number, b: number) => a + b, 0)).toBe(10_000_000);
+      expect(amounts.reduce((a: number, b: number) => a + b, 0)).toBe(
+        10_000_000,
+      );
     });
   });
 
@@ -153,6 +156,79 @@ describe('InvoicesService', () => {
       await expect(
         service.getInvoice('invoice-1', 'customer-b'),
       ).rejects.toThrow(ForbiddenException);
+    });
+
+    /**
+     * Phase 11 spec #65 — Invoice.customerId is nullable (corporate-billed
+     * invoices have none), so the tenant filter is an OR across the
+     * customer path and the corporate-booking path, applied via findFirst
+     * rather than findUnique (which can't take an OR). A cross-tenant id
+     * must come back as NotFound.
+     */
+    it('scopes the lookup to the tenant via findFirst when a tenant filter is given', async () => {
+      prisma.invoice.findFirst.mockResolvedValue({
+        id: 'invoice-1',
+        customerId: 'customer-a',
+      });
+
+      await service.getInvoice('invoice-1', undefined, 'company-a');
+
+      expect(prisma.invoice.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            id: 'invoice-1',
+            OR: [
+              { customer: { companyId: 'company-a' } },
+              {
+                corporateBooking: {
+                  bookedByStaff: { companyId: 'company-a' },
+                },
+              },
+            ],
+          }),
+        }),
+      );
+      expect(prisma.invoice.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('throws NotFound when findFirst finds nothing in the tenant scope', async () => {
+      prisma.invoice.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.getInvoice('invoice-1', undefined, 'company-a'),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('listAll', () => {
+    it('scopes the query with an OR across the customer and corporate-booking paths', async () => {
+      prisma.invoice.findMany.mockResolvedValue([]);
+
+      await service.listAll({}, 'company-a');
+
+      expect(prisma.invoice.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            OR: [
+              { customer: { companyId: 'company-a' } },
+              {
+                corporateBooking: {
+                  bookedByStaff: { companyId: 'company-a' },
+                },
+              },
+            ],
+          }),
+        }),
+      );
+    });
+
+    it('applies no tenant filter when none is given (SUPER_ADMIN)', async () => {
+      prisma.invoice.findMany.mockResolvedValue([]);
+
+      await service.listAll({});
+
+      const call = prisma.invoice.findMany.mock.calls[0][0];
+      expect(call.where).not.toHaveProperty('OR');
     });
   });
 

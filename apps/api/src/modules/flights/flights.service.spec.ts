@@ -540,6 +540,36 @@ describe('FlightsService', () => {
       ).rejects.toThrow(ForbiddenException);
     });
 
+    /**
+     * Phase 11 spec #65 — FlightBooking has no companyId column of its
+     * own; tenant scoping joins through the (required) customer relation
+     * instead. A cross-tenant id must come back as NotFound, never a
+     * value or a Forbidden that would confirm the id exists.
+     */
+    it('throws NotFound for a booking belonging to a different tenant', async () => {
+      prisma.flightBooking.findUnique.mockResolvedValue({
+        id: 'booking-1',
+        customerId: 'customer-a',
+        customer: { companyId: 'company-b' },
+      });
+
+      await expect(
+        service.getBooking('booking-1', undefined, 'company-a'),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it("returns the booking when it belongs to the caller's own tenant", async () => {
+      prisma.flightBooking.findUnique.mockResolvedValue({
+        id: 'booking-1',
+        customerId: 'customer-a',
+        customer: { companyId: 'company-a' },
+      });
+
+      await expect(
+        service.getBooking('booking-1', undefined, 'company-a'),
+      ).resolves.toEqual(expect.objectContaining({ id: 'booking-1' }));
+    });
+
     it('flags a ticketed manual booking as awaiting approval when no incentive exists yet', async () => {
       prisma.flightBooking.findUnique.mockResolvedValue({
         id: 'booking-1',
@@ -580,6 +610,31 @@ describe('FlightsService', () => {
 
       expect(result.awaitingManualApproval).toBe(false);
       expect(prisma.staffIncentive.findFirst).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('listAll', () => {
+    it('scopes the query through customer.companyId when a tenant filter is given', async () => {
+      prisma.flightBooking.findMany.mockResolvedValue([]);
+
+      await service.listAll({}, 'company-a');
+
+      expect(prisma.flightBooking.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            customer: { companyId: 'company-a' },
+          }),
+        }),
+      );
+    });
+
+    it('applies no tenant filter when none is given (SUPER_ADMIN)', async () => {
+      prisma.flightBooking.findMany.mockResolvedValue([]);
+
+      await service.listAll({});
+
+      const call = prisma.flightBooking.findMany.mock.calls[0][0];
+      expect(call.where).not.toHaveProperty('customer');
     });
   });
 

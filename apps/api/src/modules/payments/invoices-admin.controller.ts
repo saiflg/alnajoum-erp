@@ -13,6 +13,7 @@ import type { Response } from 'express';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import type { AuthContext } from '../../common/interfaces/auth-context.interface';
+import { resolveTenantFilter } from '../../common/utils/tenant.util';
 import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { UsersService } from '../users/users.service';
 import { RecordPaymentDto } from './dto/record-payment.dto';
@@ -32,16 +33,24 @@ export class InvoicesAdminController {
   @Get()
   @RequirePermissions(PERMISSIONS.INVOICE.READ)
   list(
+    @CurrentUser() user: AuthContext,
     @Query('customerId') customerId?: string,
     @Query('status') status?: InvoiceStatus,
   ) {
-    return this.invoicesService.listAll({ customerId, status });
+    return this.invoicesService.listAll(
+      { customerId, status },
+      resolveTenantFilter(user),
+    );
   }
 
   @Get(':id')
   @RequirePermissions(PERMISSIONS.INVOICE.READ)
-  findOne(@Param('id') id: string) {
-    return this.invoicesService.getInvoice(id);
+  findOne(@CurrentUser() user: AuthContext, @Param('id') id: string) {
+    return this.invoicesService.getInvoice(
+      id,
+      undefined,
+      resolveTenantFilter(user),
+    );
   }
 
   @Post(':id/payments')
