@@ -47,6 +47,11 @@ export const ADMIN_NAV: NavLink[] = [
   { href: '/admin/staff-bank-verification', label: 'Staff Bank Verification', icon: 'shield' },
   { href: '/admin/notifications', label: 'Notifications', icon: 'bell' },
   { href: '/admin/roles', label: 'Roles', icon: 'shield' },
+  { href: '/admin/approvals', label: 'Approvals', icon: 'shield' },
+  { href: '/admin/audit-log', label: 'Audit Log', icon: 'audit' },
+  { href: '/admin/feature-flags', label: 'Feature Flags', icon: 'flag' },
+  { href: '/admin/system-settings', label: 'System Settings', icon: 'gear' },
+  { href: '/admin/api-keys', label: 'API Keys', icon: 'key' },
   { href: '/admin/integrations', label: 'Integrations', icon: 'plug' },
   { href: '/admin/account', label: 'My Account', icon: 'account' },
 ];
@@ -67,5 +72,6 @@ export const FINANCE_NAV: NavLink[] = [
   { href: '/admin/visa-incentives', label: 'Staff Incentives & Payouts', icon: 'wallet' },
   { href: '/admin/wallets', label: 'Wallets', icon: 'wallet' },
   { href: '/admin/notifications', label: 'Notifications', icon: 'bell' },
+  { href: '/admin/api-keys', label: 'API Keys', icon: 'key' },
   { href: '/admin/account', label: 'My Account', icon: 'account' },
 ];

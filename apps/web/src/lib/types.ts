@@ -13,6 +13,7 @@ export interface CurrentUser {
   /** Real tenant context — null for customers, who aren't scoped to a company. */
   companyName: string | null;
   branchName: string | null;
+  twoFactorEnabled: boolean;
 }
 
 export interface Company {

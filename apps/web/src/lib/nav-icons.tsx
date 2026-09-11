@@ -25,7 +25,11 @@ export type NavIconName =
   | 'family'
   | 'plug'
   | 'visa'
-  | 'corporate';
+  | 'corporate'
+  | 'flag'
+  | 'gear'
+  | 'key'
+  | 'audit';
 
 const ICON_PATHS: Record<NavIconName, React.ReactNode> = {
   dashboard: (
@@ -182,6 +186,35 @@ const ICON_PATHS: Record<NavIconName, React.ReactNode> = {
       <path d="M8.5 8.5V6a1.5 1.5 0 0 1 1.5-1.5h4A1.5 1.5 0 0 1 15.5 6v2.5" strokeLinejoin="round" />
       <path d="M3 13.5h18" />
       <rect x="10.5" y="12" width="3" height="3" rx="0.4" fill="currentColor" stroke="none" />
+    </>
+  ),
+  flag: (
+    <>
+      <path d="M5 2.5v19" strokeLinecap="round" />
+      <path d="M5 4c2-1.2 4-1.2 6 0s4 1.2 6 0v9c-2 1.2-4 1.2-6 0s-4-1.2-6 0Z" strokeLinejoin="round" />
+    </>
+  ),
+  gear: (
+    <>
+      <circle cx="12" cy="12" r="3" />
+      <path
+        d="M12 3v2.2M12 18.8V21M21 12h-2.2M5.2 12H3M18.1 5.9l-1.6 1.6M7.5 16.5l-1.6 1.6M18.1 18.1l-1.6-1.6M7.5 7.5 5.9 5.9"
+        strokeLinecap="round"
+      />
+    </>
+  ),
+  key: (
+    <>
+      <circle cx="8" cy="15" r="4.5" />
+      <path d="M11.5 11.5 20 3M16.5 6.5l2.5 2.5M13.5 9.5l2 2" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  ),
+  audit: (
+    <>
+      <path d="M6 2.5h9l3 3V21a.5.5 0 0 1-.5.5H6a.5.5 0 0 1-.5-.5V3a.5.5 0 0 1 .5-.5Z" strokeLinejoin="round" />
+      <path d="M8.5 9h7M8.5 12.5h4.5" strokeLinecap="round" />
+      <circle cx="9.5" cy="17" r="2" />
+      <path d="M11 18.5 12.5 20" strokeLinecap="round" />
     </>
   ),
 };

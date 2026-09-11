@@ -505,6 +505,9 @@ export class AuthService {
       type: identity.type,
       status: identity.status,
       emailVerifiedAt: identity.emailVerifiedAt,
+      // Phase 11 spec #15 — the account page needs this to know whether to
+      // offer "Enable 2FA" or "Disable 2FA" without a separate round trip.
+      twoFactorEnabled: identity.twoFactorEnabled,
       roles,
       permissions,
       dashboardPath: this.resolveDashboardPath(roles),
