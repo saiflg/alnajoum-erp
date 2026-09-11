@@ -12,6 +12,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { FinancePostingService } from '../finance/finance-posting.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { InvoicesService } from '../payments/invoices.service';
 import { FlightIncentivesService } from './flight-incentives.service';
@@ -76,6 +77,7 @@ describe('FlightsService', () => {
   let providerRouter: { resolveByName: jest.Mock };
   let auditService: { record: jest.Mock };
   let flightIncentivesService: { createForTicketedBooking: jest.Mock };
+  let financePostingService: { postCostOfServiceForBooking: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
@@ -118,6 +120,7 @@ describe('FlightsService', () => {
     providerRouter = { resolveByName: jest.fn() };
     auditService = { record: jest.fn() };
     flightIncentivesService = { createForTicketedBooking: jest.fn() };
+    financePostingService = { postCostOfServiceForBooking: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -135,6 +138,7 @@ describe('FlightsService', () => {
         { provide: ProviderTransactionLogService, useValue: providerLog },
         { provide: AuditService, useValue: auditService },
         { provide: FlightIncentivesService, useValue: flightIncentivesService },
+        { provide: FinancePostingService, useValue: financePostingService },
       ],
     }).compile();
 
@@ -778,13 +782,16 @@ describe('FlightsService', () => {
           'staff-1',
         );
 
-        expect(prisma.supplierPayable.create).toHaveBeenCalledWith({
-          data: expect.objectContaining({
+        expect(
+          financePostingService.postCostOfServiceForBooking,
+        ).toHaveBeenCalledWith(
+          expect.objectContaining({
             supplierName: 'Al Rajhi Travel',
             sourceModule: 'FLIGHT_BOOKING',
+            sourceId: 'booking-1',
             amount: 60_000,
           }),
-        });
+        );
       });
     });
 

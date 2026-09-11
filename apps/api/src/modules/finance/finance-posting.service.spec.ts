@@ -1,5 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { IncentiveStatus, InvestmentType, JournalEntryStatus, PaymentMethod } from '@prisma/client';
+import {
+  IncentiveStatus,
+  InvestmentType,
+  JournalEntryStatus,
+  PaymentMethod,
+} from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { ACCOUNT_CODES } from './constants/account-codes.constant';
 import { FinancePostingService } from './finance-posting.service';
@@ -19,11 +24,28 @@ describe('FinancePostingService', () => {
   let prisma: Record<string, any>;
 
   beforeEach(async () => {
-    ledger = { post: jest.fn().mockResolvedValue({ id: 'entry-1' }), reverseEntry: jest.fn() };
+    ledger = {
+      post: jest.fn().mockResolvedValue({ id: 'entry-1' }),
+      reverseEntry: jest.fn(),
+    };
     prisma = {
-      supplierPayable: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn() },
-      staffIncentive: { findMany: jest.fn().mockResolvedValue([]), update: jest.fn() },
+      supplierPayable: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: jest.fn(),
+      },
+      staffIncentive: {
+        findMany: jest.fn().mockResolvedValue([]),
+        update: jest.fn(),
+      },
       journalEntry: { findFirst: jest.fn().mockResolvedValue(null) },
+      flightBooking: { findUnique: jest.fn() },
+      hotelBooking: { findUnique: jest.fn() },
+      visaApplication: {
+        findUnique: jest
+          .fn()
+          .mockResolvedValue({ customer: { companyId: 'company-1' } }),
+      },
+      flightSupplier: { findFirst: jest.fn().mockResolvedValue(null) },
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -39,8 +61,18 @@ describe('FinancePostingService', () => {
 
   it('spec #33 step 1: recognizes the full ₦800,000 as Visa Revenue against Cash on a cash payment', async () => {
     await service.postRevenueForPayment(
-      { id: 'pay-1', paymentReference: 'PAY-1', amount: 800_000, method: PaymentMethod.CASH } as never,
-      { id: 'inv-1', invoiceNumber: 'INV-1', currency: 'NGN', visaApplicationId: 'app-1' } as never,
+      {
+        id: 'pay-1',
+        paymentReference: 'PAY-1',
+        amount: 800_000,
+        method: PaymentMethod.CASH,
+      } as never,
+      {
+        id: 'inv-1',
+        invoiceNumber: 'INV-1',
+        currency: 'NGN',
+        visaApplicationId: 'app-1',
+      } as never,
     );
 
     expect(ledger.post).toHaveBeenCalledWith(
@@ -62,7 +94,12 @@ describe('FinancePostingService', () => {
     });
 
     expect(prisma.supplierPayable.create).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ amount: 600_000 }) }),
+      expect.objectContaining({
+        data: expect.objectContaining({
+          amount: 600_000,
+          companyId: 'company-1',
+        }),
+      }),
     );
     expect(ledger.post).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -83,6 +120,116 @@ describe('FinancePostingService', () => {
       currency: 'NGN',
     });
     expect(ledger.post).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Phase 11 spec #2/#65 fix — this is the one place that ever needs to
+   * walk the polymorphic sourceModule/sourceId pointer back to a company,
+   * since SupplierPayable.companyId is resolved here at creation time
+   * rather than joined at read time.
+   */
+  describe('resolving a tenant for the new supplier payable', () => {
+    it('resolves via flight_bookings for a FLIGHT_BOOKING source', async () => {
+      prisma.flightBooking.findUnique.mockResolvedValue({
+        customer: { companyId: 'company-flight' },
+      });
+
+      await service.postCostOfServiceForBooking({
+        sourceModule: 'FLIGHT_BOOKING',
+        sourceId: 'booking-1',
+        supplierName: 'Air Peace',
+        amount: 100_000,
+        currency: 'NGN',
+      });
+
+      expect(prisma.flightBooking.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'booking-1' } }),
+      );
+      expect(prisma.supplierPayable.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ companyId: 'company-flight' }),
+        }),
+      );
+    });
+
+    it('resolves via hotel_bookings for a HOTEL_BOOKING source', async () => {
+      prisma.hotelBooking.findUnique.mockResolvedValue({
+        customer: { companyId: 'company-hotel' },
+      });
+
+      await service.postCostOfServiceForBooking({
+        sourceModule: 'HOTEL_BOOKING',
+        sourceId: 'booking-1',
+        supplierName: 'Some Hotel',
+        amount: 100_000,
+        currency: 'NGN',
+      });
+
+      expect(prisma.supplierPayable.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ companyId: 'company-hotel' }),
+        }),
+      );
+    });
+
+    it('refuses to create an unattributable payable when the source booking cannot be resolved', async () => {
+      prisma.flightBooking.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.postCostOfServiceForBooking({
+          sourceModule: 'FLIGHT_BOOKING',
+          sourceId: 'missing-booking',
+          supplierName: 'Air Peace',
+          amount: 100_000,
+          currency: 'NGN',
+        }),
+      ).rejects.toThrow();
+      expect(prisma.supplierPayable.create).not.toHaveBeenCalled();
+    });
+
+    it("links flightSupplierId to this tenant's own matching FlightSupplier, case-insensitively", async () => {
+      prisma.flightSupplier.findFirst.mockResolvedValue({ id: 'supplier-1' });
+
+      await service.postCostOfServiceForBooking({
+        sourceModule: 'VISA_APPLICATION',
+        sourceId: 'app-1',
+        supplierName: 'visa service provider',
+        amount: 600_000,
+        currency: 'NGN',
+      });
+
+      expect(prisma.flightSupplier.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            companyId: 'company-1',
+            name: { equals: 'visa service provider', mode: 'insensitive' },
+          },
+        }),
+      );
+      expect(prisma.supplierPayable.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ flightSupplierId: 'supplier-1' }),
+        }),
+      );
+    });
+
+    it('leaves flightSupplierId unset when no matching supplier exists for this tenant', async () => {
+      prisma.flightSupplier.findFirst.mockResolvedValue(null);
+
+      await service.postCostOfServiceForBooking({
+        sourceModule: 'VISA_APPLICATION',
+        sourceId: 'app-1',
+        supplierName: 'An unknown supplier',
+        amount: 600_000,
+        currency: 'NGN',
+      });
+
+      expect(prisma.supplierPayable.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ flightSupplierId: undefined }),
+        }),
+      );
+    });
   });
 
   it('spec #33 at 100% incentive: staff incentive = margin, company share = 0', async () => {
@@ -108,7 +255,7 @@ describe('FinancePostingService', () => {
     );
   });
 
-  it('spec #33 at 50% incentive: staff incentive = half the margin, company share = the other half', async () => {
+  it('spec #33 at 50% incentive: staff incentive = half the margin, company share = the other half', () => {
     const margin = 800_000 - 600_000;
     const staffIncentiveAmount = Math.round(margin * 0.5);
     const companyShare = margin - staffIncentiveAmount;
@@ -157,9 +304,16 @@ describe('FinancePostingService', () => {
     prisma.staffIncentive.findMany.mockResolvedValue([
       { id: 'inc-approved', status: IncentiveStatus.APPROVED },
     ]);
-    prisma.journalEntry.findFirst.mockResolvedValue({ id: 'entry-approved', status: JournalEntryStatus.POSTED });
+    prisma.journalEntry.findFirst.mockResolvedValue({
+      id: 'entry-approved',
+      status: JournalEntryStatus.POSTED,
+    });
 
-    await service.cancelIncentivesForSource('FLIGHT_BOOKING', 'booking-1', 'Booking refunded');
+    await service.cancelIncentivesForSource(
+      'FLIGHT_BOOKING',
+      'booking-1',
+      'Booking refunded',
+    );
 
     expect(prisma.staffIncentive.update).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -167,7 +321,10 @@ describe('FinancePostingService', () => {
         data: expect.objectContaining({ status: IncentiveStatus.CANCELLED }),
       }),
     );
-    expect(ledger.reverseEntry).toHaveBeenCalledWith('entry-approved', 'Booking refunded');
+    expect(ledger.reverseEntry).toHaveBeenCalledWith(
+      'entry-approved',
+      'Booking refunded',
+    );
 
     // A PAID incentive is never touched by cancelIncentivesForSource — the
     // query itself excludes PAID/CANCELLED/REJECTED, verified structurally:

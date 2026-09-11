@@ -11,6 +11,7 @@ import { SupplierPayableStatus } from '@prisma/client';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import type { AuthContext } from '../../common/interfaces/auth-context.interface';
+import { resolveTenantFilter } from '../../common/utils/tenant.util';
 import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { UsersService } from '../users/users.service';
 import { RecordSupplierPaymentDto } from './dto/record-supplier-payment.dto';
@@ -26,16 +27,20 @@ export class SupplierPayablesController {
 
   @Get()
   async listAll(
+    @CurrentUser() user: AuthContext,
     @Query('status') status?: SupplierPayableStatus,
     @Query('supplierName') supplierName?: string,
   ) {
     await this.service.markOverdue();
-    return this.service.listAll({ status, supplierName });
+    return this.service.listAll(
+      { status, supplierName },
+      resolveTenantFilter(user),
+    );
   }
 
   @Get(':id')
-  get(@Param('id') id: string) {
-    return this.service.get(id);
+  get(@CurrentUser() user: AuthContext, @Param('id') id: string) {
+    return this.service.get(id, resolveTenantFilter(user));
   }
 
   @Post(':id/payments')
@@ -48,6 +53,12 @@ export class SupplierPayablesController {
     if (!staffId) {
       throw new ForbiddenException('Only staff can record a supplier payment');
     }
-    return this.service.recordPayment(id, dto, staffId, user.sub);
+    return this.service.recordPayment(
+      id,
+      dto,
+      staffId,
+      user.sub,
+      resolveTenantFilter(user),
+    );
   }
 }

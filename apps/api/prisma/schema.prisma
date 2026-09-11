@@ -420,6 +420,8 @@ model Company {
   systemSettings SystemSetting[]
   approvalRequests ApprovalRequest[]
   approvalThresholdRules ApprovalThresholdRule[]
+  flightSuppliers FlightSupplier[]
+  supplierPayables SupplierPayable[]
 
   @@map("companies")
 }
@@ -1110,6 +1112,14 @@ enum FlightSupplierStatus {
  */
 model FlightSupplier {
   id   String             @id @default(cuid())
+
+  // Phase 11 spec #2/#65 fix — a supplier's negotiated commission/markup/
+  // credit terms are exactly the kind of commercially sensitive per-tenant
+  // data spec #2's tenant isolation is about; each company maintains its
+  // own supplier list rather than sharing one platform-wide catalogue.
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
   name String
   type FlightSupplierType
 
@@ -1137,6 +1147,7 @@ model FlightSupplier {
   updatedAt DateTime @updatedAt
 
   @@index([status])
+  @@index([companyId])
   @@map("flight_suppliers")
 }
 
@@ -3511,6 +3522,16 @@ enum SupplierPayableStatus {
 model SupplierPayable {
   id String @id @default(cuid())
 
+  // Phase 11 spec #2/#65 fix — resolved from the source booking's customer
+  // at creation time (see FinancePostingService.postCostOfServiceForBooking)
+  // rather than joined through sourceModule/sourceId at read time, since
+  // that pointer is polymorphic and Prisma can't express a relation-based
+  // filter across three different target tables. Kept even when
+  // flightSupplierId also resolves to a company — this is the company that
+  // owes the money (the booking's), which is what actually matters here.
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
   supplierName String
   sourceModule String // "FLIGHT_BOOKING" | "HOTEL_BOOKING" | "VISA_APPLICATION"
   sourceId     String
@@ -3537,6 +3558,7 @@ model SupplierPayable {
   payments SupplierPayment[]
 
   @@index([status])
+  @@index([companyId])
   @@index([sourceModule, sourceId])
   @@index([flightSupplierId])
   @@map("supplier_payables")

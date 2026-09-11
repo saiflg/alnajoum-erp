@@ -24,25 +24,36 @@ export class SupplierPayablesService {
     private readonly ledger: LedgerService,
   ) {}
 
-  listAll(filters: { status?: SupplierPayableStatus; supplierName?: string }) {
+  /** Phase 11 spec #2/#65 fix — companyId is set directly on this model at
+   * creation time (see FinancePostingService.postCostOfServiceForBooking),
+   * so no join is needed here — just the same conditional filter used
+   * throughout the cross-tenant sweep. */
+  listAll(
+    filters: { status?: SupplierPayableStatus; supplierName?: string },
+    tenantCompanyId?: string,
+  ) {
     return this.prisma.supplierPayable.findMany({
       where: {
         status: filters.status,
         supplierName: filters.supplierName
           ? { contains: filters.supplierName, mode: 'insensitive' }
           : undefined,
+        ...(tenantCompanyId !== undefined && { companyId: tenantCompanyId }),
       },
       include: { payments: true },
       orderBy: { createdAt: 'desc' },
     });
   }
 
-  async get(id: string) {
+  async get(id: string, tenantCompanyId?: string) {
     const payable = await this.prisma.supplierPayable.findUnique({
       where: { id },
       include: { payments: true },
     });
-    if (!payable) {
+    if (
+      !payable ||
+      (tenantCompanyId !== undefined && payable.companyId !== tenantCompanyId)
+    ) {
       throw new NotFoundException('Supplier payable not found');
     }
     return payable;
@@ -53,8 +64,9 @@ export class SupplierPayablesService {
     dto: RecordSupplierPaymentDto,
     recordedByStaffId: string,
     actorIdentityId?: string,
+    tenantCompanyId?: string,
   ) {
-    const payable = await this.get(payableId);
+    const payable = await this.get(payableId, tenantCompanyId);
     const outstanding = payable.amount - payable.amountPaid;
     if (dto.amount > outstanding) {
       throw new BadRequestException(
@@ -108,7 +120,7 @@ export class SupplierPayablesService {
       metadata: { amount: dto.amount, recordedByStaffId },
     });
 
-    return this.get(payableId);
+    return this.get(payableId, tenantCompanyId);
   }
 
   /** A cron-free "run this occasionally" sweep — flips OUTSTANDING/PARTIALLY_PAID rows past their dueDate to OVERDUE. Called from the reports controller on read rather than on a schedule, since this codebase has no background job runner yet. */

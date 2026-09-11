@@ -17,6 +17,7 @@ import {
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { FinancePostingService } from '../finance/finance-posting.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { InvoicesService } from '../payments/invoices.service';
 import { CreateManualFlightBookingDto } from './dto/create-manual-flight-booking.dto';
@@ -59,6 +60,7 @@ export class FlightsService {
     private readonly providerRouter: FlightProviderRouter,
     private readonly auditService: AuditService,
     private readonly flightIncentivesService: FlightIncentivesService,
+    private readonly financePostingService: FinancePostingService,
   ) {}
 
   /**
@@ -549,17 +551,16 @@ export class FlightsService {
 
     if (dto.supplierName) {
       // Recognized as an accounts-payable obligation immediately — same
-      // reasoning as FlightIncentivesService.createForTicketedBooking's own
-      // postCostOfServiceForBooking call, reused via SupplierPayable's
-      // existing generic (module-agnostic) ledger rather than a duplicate.
-      await this.prisma.supplierPayable.create({
-        data: {
-          supplierName: dto.supplierName,
-          sourceModule: 'FLIGHT_BOOKING',
-          sourceId: booking.id,
-          amount: dto.companyCost,
-          currency,
-        },
+      // path as FlightIncentivesService.createForTicketedBooking, not a
+      // second hand-rolled supplierPayable.create() (a prior version of
+      // this method had one, which skipped both the ledger posting and
+      // tenant/supplier-link resolution that this shared method does).
+      await this.financePostingService.postCostOfServiceForBooking({
+        sourceModule: 'FLIGHT_BOOKING',
+        sourceId: booking.id,
+        supplierName: dto.supplierName,
+        amount: dto.companyCost,
+        currency,
       });
     }
 

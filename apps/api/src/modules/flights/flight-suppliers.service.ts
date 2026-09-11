@@ -23,33 +23,51 @@ export interface FlightSupplierBalance {
  * across Flight/Hotel/Visa — see that model's own doc comment). Balance is
  * never a stored column, same discipline as Wallet: always computed live
  * from this supplier's linked SupplierPayable/SupplierPayment rows.
+ *
+ * Phase 11 spec #2/#65 fix — a supplier's negotiated commission/markup/
+ * credit terms are commercially sensitive per-tenant data; every method
+ * now takes an optional tenantCompanyId (undefined only for SUPER_ADMIN)
+ * and scopes to it, same pattern as every other module in this phase's
+ * cross-tenant sweep.
  */
 @Injectable()
 export class FlightSuppliersService {
   constructor(private readonly prisma: PrismaService) {}
 
-  listAll(filters: { status?: string } = {}) {
+  listAll(filters: { status?: string } = {}, tenantCompanyId?: string) {
     return this.prisma.flightSupplier.findMany({
-      where: filters.status ? { status: filters.status as never } : undefined,
+      where: {
+        ...(filters.status && { status: filters.status as never }),
+        ...(tenantCompanyId !== undefined && { companyId: tenantCompanyId }),
+      },
       orderBy: { name: 'asc' },
     });
   }
 
-  async create(dto: CreateFlightSupplierDto) {
-    return this.prisma.flightSupplier.create({ data: dto });
+  async create(dto: CreateFlightSupplierDto, companyId: string) {
+    return this.prisma.flightSupplier.create({ data: { ...dto, companyId } });
   }
 
-  async get(id: string) {
+  async get(id: string, tenantCompanyId?: string) {
     const supplier = await this.prisma.flightSupplier.findUnique({
       where: { id },
       include: { contracts: true },
     });
-    if (!supplier) throw new NotFoundException('Flight supplier not found');
+    if (
+      !supplier ||
+      (tenantCompanyId !== undefined && supplier.companyId !== tenantCompanyId)
+    ) {
+      throw new NotFoundException('Flight supplier not found');
+    }
     return supplier;
   }
 
-  async update(id: string, dto: UpdateFlightSupplierDto) {
-    await this.get(id);
+  async update(
+    id: string,
+    dto: UpdateFlightSupplierDto,
+    tenantCompanyId?: string,
+  ) {
+    await this.get(id, tenantCompanyId);
     return this.prisma.flightSupplier.update({ where: { id }, data: dto });
   }
 
@@ -58,8 +76,11 @@ export class FlightSuppliersService {
    * live on the linked SupplierPayable/SupplierPayment rows; this just
    * totals them rather than tracking a second, driftable balance.
    */
-  async getBalance(id: string): Promise<FlightSupplierBalance> {
-    const supplier = await this.get(id);
+  async getBalance(
+    id: string,
+    tenantCompanyId?: string,
+  ): Promise<FlightSupplierBalance> {
+    const supplier = await this.get(id, tenantCompanyId);
     const payables = await this.prisma.supplierPayable.findMany({
       where: { flightSupplierId: id },
     });

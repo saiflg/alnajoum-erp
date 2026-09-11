@@ -42,6 +42,83 @@ describe('FlightSuppliersService', () => {
 
       await expect(service.get('missing')).rejects.toThrow(NotFoundException);
     });
+
+    /**
+     * Phase 11 spec #2/#65 fix — a supplier's negotiated commission/markup/
+     * credit terms are commercially sensitive per-tenant data; this is the
+     * mandatory cross-tenant test for the one module left unscoped after
+     * the rest of this phase's sweep.
+     */
+    it('throws NotFound for a supplier belonging to a different tenant', async () => {
+      prisma.flightSupplier.findUnique.mockResolvedValue({
+        id: 'sup-1',
+        companyId: 'company-b',
+      });
+
+      await expect(service.get('sup-1', 'company-a')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it("returns the supplier when it belongs to the caller's own tenant", async () => {
+      prisma.flightSupplier.findUnique.mockResolvedValue({
+        id: 'sup-1',
+        companyId: 'company-a',
+      });
+
+      await expect(service.get('sup-1', 'company-a')).resolves.toEqual(
+        expect.objectContaining({ id: 'sup-1' }),
+      );
+    });
+
+    it('applies no tenant check when none is given (SUPER_ADMIN)', async () => {
+      prisma.flightSupplier.findUnique.mockResolvedValue({
+        id: 'sup-1',
+        companyId: 'company-b',
+      });
+
+      await expect(service.get('sup-1')).resolves.toEqual(
+        expect.objectContaining({ id: 'sup-1' }),
+      );
+    });
+  });
+
+  describe('listAll', () => {
+    it('scopes by companyId when a tenant filter is given', async () => {
+      prisma.flightSupplier.findMany.mockResolvedValue([]);
+
+      await service.listAll({}, 'company-a');
+
+      expect(prisma.flightSupplier.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ companyId: 'company-a' }),
+        }),
+      );
+    });
+
+    it('applies no companyId filter for SUPER_ADMIN', async () => {
+      prisma.flightSupplier.findMany.mockResolvedValue([]);
+
+      await service.listAll({});
+
+      const call = prisma.flightSupplier.findMany.mock.calls[0][0];
+      expect(call.where).not.toHaveProperty('companyId');
+    });
+  });
+
+  describe('create', () => {
+    it('attributes the new supplier to the given company', async () => {
+      prisma.flightSupplier.create.mockResolvedValue({ id: 'sup-1' });
+
+      await service.create(
+        { name: 'New Supplier', type: 'AIRLINE' },
+        'company-a',
+      );
+
+      expect(prisma.flightSupplier.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ companyId: 'company-a' }),
+      });
+    });
   });
 
   describe('getBalance', () => {
@@ -93,6 +170,18 @@ describe('FlightSuppliersService', () => {
       const balance = await service.getBalance('sup-1');
 
       expect(balance.alert).toBeNull();
+    });
+
+    it('throws NotFound (via get) for a cross-tenant supplier before touching any payables', async () => {
+      prisma.flightSupplier.findUnique.mockResolvedValue({
+        id: 'sup-1',
+        companyId: 'company-b',
+      });
+
+      await expect(service.getBalance('sup-1', 'company-a')).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(prisma.supplierPayable.findMany).not.toHaveBeenCalled();
     });
   });
 });

@@ -8,22 +8,46 @@ import { UpdateFlightSupplierContractDto } from './dto/update-flight-supplier-co
  * so an admin dashboard can surface "expiring soon" ahead of the deadline. */
 const EXPIRY_ALERT_WINDOW_DAYS = 30;
 
+/**
+ * Phase 11 spec #2/#65 fix — a contract has no companyId of its own; every
+ * method verifies tenant ownership by joining through the parent
+ * FlightSupplier, same pattern as every other module fixed in the
+ * cross-tenant sweep.
+ */
 @Injectable()
 export class FlightSupplierContractsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async listForSupplier(supplierId: string) {
+  private async assertSupplierInTenant(
+    supplierId: string,
+    tenantCompanyId?: string,
+  ): Promise<void> {
+    const supplier = await this.prisma.flightSupplier.findUnique({
+      where: { id: supplierId },
+      select: { companyId: true },
+    });
+    if (
+      !supplier ||
+      (tenantCompanyId !== undefined && supplier.companyId !== tenantCompanyId)
+    ) {
+      throw new NotFoundException('Flight supplier not found');
+    }
+  }
+
+  async listForSupplier(supplierId: string, tenantCompanyId?: string) {
+    await this.assertSupplierInTenant(supplierId, tenantCompanyId);
     return this.prisma.flightSupplierContract.findMany({
       where: { supplierId },
       orderBy: { startDate: 'desc' },
     });
   }
 
-  async create(supplierId: string, dto: CreateFlightSupplierContractDto) {
-    const supplier = await this.prisma.flightSupplier.findUnique({
-      where: { id: supplierId },
-    });
-    if (!supplier) throw new NotFoundException('Flight supplier not found');
+  async create(
+    supplierId: string,
+    dto: CreateFlightSupplierContractDto,
+    tenantCompanyId?: string,
+  ) {
+    await this.assertSupplierInTenant(supplierId, tenantCompanyId);
 
     return this.prisma.flightSupplierContract.create({
       data: {
@@ -43,16 +67,27 @@ export class FlightSupplierContractsService {
     });
   }
 
-  private async get(id: string) {
+  private async get(id: string, tenantCompanyId?: string) {
     const contract = await this.prisma.flightSupplierContract.findUnique({
       where: { id },
+      include: { supplier: { select: { companyId: true } } },
     });
-    if (!contract) throw new NotFoundException('Supplier contract not found');
+    if (
+      !contract ||
+      (tenantCompanyId !== undefined &&
+        contract.supplier.companyId !== tenantCompanyId)
+    ) {
+      throw new NotFoundException('Supplier contract not found');
+    }
     return contract;
   }
 
-  async update(id: string, dto: UpdateFlightSupplierContractDto) {
-    await this.get(id);
+  async update(
+    id: string,
+    dto: UpdateFlightSupplierContractDto,
+    tenantCompanyId?: string,
+  ) {
+    await this.get(id, tenantCompanyId);
     return this.prisma.flightSupplierContract.update({
       where: { id },
       data: {
@@ -64,7 +99,7 @@ export class FlightSupplierContractsService {
   }
 
   /** Contracts ending within the alert window and not already marked EXPIRED/TERMINATED. */
-  async listExpiringSoon() {
+  async listExpiringSoon(tenantCompanyId?: string) {
     const cutoff = new Date(
       Date.now() + EXPIRY_ALERT_WINDOW_DAYS * 24 * 60 * 60 * 1000,
     );
@@ -77,6 +112,9 @@ export class FlightSupplierContractsService {
             FlightSupplierContractStatus.TERMINATED,
           ],
         },
+        ...(tenantCompanyId !== undefined && {
+          supplier: { companyId: tenantCompanyId },
+        }),
       },
       include: { supplier: { select: { name: true } } },
       orderBy: { endDate: 'asc' },

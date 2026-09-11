@@ -3620,6 +3620,7 @@ async function seedPhase10FlightGds() {
   // --- Spec #22/#23/#24: supplier master records + a contract nearing expiry ---
   const gdsSupplier = await prisma.flightSupplier.create({
     data: {
+      companyId: agentIdentity.staff!.companyId,
       name: 'Duffel Settlement Account',
       type: 'GDS',
       apiProvider: 'duffel',
@@ -3650,6 +3651,7 @@ async function seedPhase10FlightGds() {
   });
   const airlineSupplier = await prisma.flightSupplier.create({
     data: {
+      companyId: agentIdentity.staff!.companyId,
       name: 'Air Peace Direct',
       type: 'AIRLINE',
       currency: 'NGN',
@@ -3662,6 +3664,7 @@ async function seedPhase10FlightGds() {
   });
   await prisma.flightSupplier.create({
     data: {
+      companyId: agentIdentity.staff!.companyId,
       name: 'Al Rajhi Travel Consolidator',
       type: 'CONSOLIDATOR',
       currency: 'NGN',
@@ -3681,6 +3684,7 @@ async function seedPhase10FlightGds() {
   // existing generic SupplierPayable ledger, linked to the new master record.
   await prisma.supplierPayable.create({
     data: {
+      companyId: agentIdentity.staff!.companyId,
       supplierName: gdsSupplier.name,
       flightSupplierId: gdsSupplier.id,
       sourceModule: 'FLIGHT_BOOKING',
@@ -3944,6 +3948,7 @@ async function seedPhase10FlightGds() {
   });
   await prisma.supplierPayable.create({
     data: {
+      companyId: agentIdentity.staff!.companyId,
       supplierName: airlineSupplier.name,
       flightSupplierId: airlineSupplier.id,
       sourceModule: 'FLIGHT_BOOKING',
@@ -4068,130 +4073,135 @@ async function seedPhase11EnterpriseGovernance() {
     where: { name: 'Zamzam Horizon Travels' },
   });
   if (existingSecondTenant) {
-    console.log('Phase 11 second demo tenant already present — skipping that step');
+    console.log(
+      'Phase 11 second demo tenant already present — skipping that step',
+    );
   } else {
-  await prisma.company.update({
-    where: { id: primaryCompany.id },
-    data: {
-      tradingName: 'Alnajoum Travel',
-      country: 'Nigeria',
-      currency: 'NGN',
-      timezone: 'Africa/Lagos',
-      taxId: 'TIN-10293847',
-      subscriptionPlan: 'Enterprise',
-      subscriptionStatus: 'ACTIVE',
-    },
-  });
+    await prisma.company.update({
+      where: { id: primaryCompany.id },
+      data: {
+        tradingName: 'Alnajoum Travel',
+        country: 'Nigeria',
+        currency: 'NGN',
+        timezone: 'Africa/Lagos',
+        taxId: 'TIN-10293847',
+        subscriptionPlan: 'Enterprise',
+        subscriptionStatus: 'ACTIVE',
+      },
+    });
 
-  // --- A wholly separate second tenant, never touched by any Phase 1-10
-  // seed data, purely to prove tenant isolation against a real second
-  // company rather than a hypothetical one. ---
-  const tenantB = await prisma.company.create({
-    data: {
-      name: 'Zamzam Horizon Travels',
-      legalName: 'Zamzam Horizon Travels Limited',
-      tradingName: 'Zamzam Horizon',
-      registrationNumber: 'RC-7719042',
-      email: 'contact@zamzamhorizon.demo',
-      phone: '+2348199990000',
-      address: '5 Marina Road, Lagos Island',
-      country: 'Nigeria',
-      currency: 'NGN',
-      timezone: 'Africa/Lagos',
-      taxId: 'TIN-88771122',
-      subscriptionPlan: 'Standard',
-      subscriptionStatus: 'ACTIVE',
-      isActive: true,
-    },
-  });
-  const tenantBBranch = await prisma.branch.create({
-    data: {
-      companyId: tenantB.id,
-      name: 'Lagos Island Branch',
-      code: 'HQ',
-      city: 'Lagos',
-      country: 'Nigeria',
-      isHeadOffice: true,
-    },
-  });
+    // --- A wholly separate second tenant, never touched by any Phase 1-10
+    // seed data, purely to prove tenant isolation against a real second
+    // company rather than a hypothetical one. ---
+    const tenantB = await prisma.company.create({
+      data: {
+        name: 'Zamzam Horizon Travels',
+        legalName: 'Zamzam Horizon Travels Limited',
+        tradingName: 'Zamzam Horizon',
+        registrationNumber: 'RC-7719042',
+        email: 'contact@zamzamhorizon.demo',
+        phone: '+2348199990000',
+        address: '5 Marina Road, Lagos Island',
+        country: 'Nigeria',
+        currency: 'NGN',
+        timezone: 'Africa/Lagos',
+        taxId: 'TIN-88771122',
+        subscriptionPlan: 'Standard',
+        subscriptionStatus: 'ACTIVE',
+        isActive: true,
+      },
+    });
+    const tenantBBranch = await prisma.branch.create({
+      data: {
+        companyId: tenantB.id,
+        name: 'Lagos Island Branch',
+        code: 'HQ',
+        city: 'Lagos',
+        country: 'Nigeria',
+        isHeadOffice: true,
+      },
+    });
 
-  const companyAdminRole = await prisma.role.findUniqueOrThrow({
-    where: { name: SYSTEM_ROLES.COMPANY_ADMIN },
-  });
-  const customerRole = await prisma.role.findUniqueOrThrow({
-    where: { name: SYSTEM_ROLES.CUSTOMER },
-  });
-  const tenantBPasswordHash = await argon2.hash(DEMO_PASSWORD);
+    const companyAdminRole = await prisma.role.findUniqueOrThrow({
+      where: { name: SYSTEM_ROLES.COMPANY_ADMIN },
+    });
+    const customerRole = await prisma.role.findUniqueOrThrow({
+      where: { name: SYSTEM_ROLES.CUSTOMER },
+    });
+    const tenantBPasswordHash = await argon2.hash(DEMO_PASSWORD);
 
-  const tenantBAdminIdentity = await prisma.identity.create({
-    data: {
-      email: 'admin@zamzamhorizon.demo.alnajoum.travel',
-      passwordHash: tenantBPasswordHash,
-      type: 'STAFF',
-      status: 'ACTIVE',
-      emailVerifiedAt: new Date(),
-      staff: {
-        create: {
-          companyId: tenantB.id,
-          branchId: tenantBBranch.id,
-          employeeCode: 'ZH-AD01',
-          firstName: 'Yusuf',
-          lastName: 'Balogun',
-          jobTitle: 'Managing Director',
-          department: 'Management',
+    const tenantBAdminIdentity = await prisma.identity.create({
+      data: {
+        email: 'admin@zamzamhorizon.demo.alnajoum.travel',
+        passwordHash: tenantBPasswordHash,
+        type: 'STAFF',
+        status: 'ACTIVE',
+        emailVerifiedAt: new Date(),
+        staff: {
+          create: {
+            companyId: tenantB.id,
+            branchId: tenantBBranch.id,
+            employeeCode: 'ZH-AD01',
+            firstName: 'Yusuf',
+            lastName: 'Balogun',
+            jobTitle: 'Managing Director',
+            department: 'Management',
+          },
+        },
+        roles: { create: [{ roleId: companyAdminRole.id }] },
+      },
+      include: { staff: true },
+    });
+
+    const tenantBCustomerIdentity = await prisma.identity.create({
+      data: {
+        email: 'khadija.bello@demo.zamzamhorizon.travel',
+        phone: '+2348177776543',
+        passwordHash: tenantBPasswordHash,
+        type: 'CUSTOMER',
+        status: 'ACTIVE',
+        emailVerifiedAt: new Date(),
+        roles: { create: [{ roleId: customerRole.id }] },
+        customer: {
+          create: {
+            companyId: tenantB.id,
+            firstName: 'Khadija',
+            lastName: 'Bello',
+            nationality: 'Nigerian',
+            gender: 'FEMALE',
+            country: 'Nigeria',
+            customerType: 'INDIVIDUAL',
+            assignedStaffId: tenantBAdminIdentity.staff!.id,
+            assignedBranchId: tenantBBranch.id,
+          },
         },
       },
-      roles: { create: [{ roleId: companyAdminRole.id }] },
-    },
-    include: { staff: true },
-  });
+      include: { customer: true },
+    });
 
-  const tenantBCustomerIdentity = await prisma.identity.create({
-    data: {
-      email: 'khadija.bello@demo.zamzamhorizon.travel',
-      phone: '+2348177776543',
-      passwordHash: tenantBPasswordHash,
-      type: 'CUSTOMER',
-      status: 'ACTIVE',
-      emailVerifiedAt: new Date(),
-      roles: { create: [{ roleId: customerRole.id }] },
-      customer: {
-        create: {
-          companyId: tenantB.id,
-          firstName: 'Khadija',
-          lastName: 'Bello',
-          nationality: 'Nigerian',
-          gender: 'FEMALE',
-          country: 'Nigeria',
-          customerType: 'INDIVIDUAL',
-          assignedStaffId: tenantBAdminIdentity.staff!.id,
-          assignedBranchId: tenantBBranch.id,
+    await prisma.auditLog.create({
+      data: {
+        companyId: tenantB.id,
+        action: 'company.created',
+        entityType: 'Company',
+        entityId: tenantB.id,
+        metadata: {
+          seeded: true,
+          purpose: 'Phase 11 cross-tenant isolation proof',
         },
       },
-    },
-    include: { customer: true },
-  });
+    });
 
-  await prisma.auditLog.create({
-    data: {
-      companyId: tenantB.id,
-      action: 'company.created',
-      entityType: 'Company',
-      entityId: tenantB.id,
-      metadata: { seeded: true, purpose: 'Phase 11 cross-tenant isolation proof' },
-    },
-  });
-
-  console.log(
-    `Created second demo tenant "${tenantB.name}" (id ${tenantB.id}) — ` +
-      `admin ${tenantBAdminIdentity.email}, customer ${tenantBCustomerIdentity.customer!.id} ` +
-      `(password for both: ${DEMO_PASSWORD})`,
-  );
-  console.log(
-    'This tenant exists ONLY to prove cross-tenant isolation — Tenant A ' +
-      '(Alnajoum Travel Agency) staff must never be able to read, list, or ' +
-      'modify anything belonging to it, and vice versa.',
-  );
+    console.log(
+      `Created second demo tenant "${tenantB.name}" (id ${tenantB.id}) — ` +
+        `admin ${tenantBAdminIdentity.email}, customer ${tenantBCustomerIdentity.customer!.id} ` +
+        `(password for both: ${DEMO_PASSWORD})`,
+    );
+    console.log(
+      'This tenant exists ONLY to prove cross-tenant isolation — Tenant A ' +
+        '(Alnajoum Travel Agency) staff must never be able to read, list, or ' +
+        'modify anything belonging to it, and vice versa.',
+    );
   }
 
   // --- Spec #39: feature flags, seeded exactly as the spec enumerates them.
@@ -4203,16 +4213,59 @@ async function seedPhase11EnterpriseGovernance() {
     description: string;
     isEnabledByDefault: boolean;
   }> = [
-    { key: 'ENABLE_DUFFEL', description: 'Real Duffel flight provider integration', isEnabledByDefault: false },
-    { key: 'ENABLE_TRAVELPORT', description: 'Travelport GDS integration (mock-only until real credentials exist)', isEnabledByDefault: false },
-    { key: 'ENABLE_SABRE', description: 'Sabre GDS integration (mock-only until real credentials exist)', isEnabledByDefault: false },
-    { key: 'ENABLE_HOTELS', description: 'Hotel booking module', isEnabledByDefault: true },
-    { key: 'ENABLE_VISA', description: 'Visa & immigration operations module', isEnabledByDefault: true },
-    { key: 'ENABLE_HAJJ', description: 'Hajj packages & operations module', isEnabledByDefault: true },
-    { key: 'ENABLE_UMRAH', description: 'Umrah packages & operations module', isEnabledByDefault: true },
-    { key: 'ENABLE_CORPORATE_TRAVEL', description: 'Corporate travel accounts & policy enforcement', isEnabledByDefault: true },
-    { key: 'ENABLE_GROUP_BOOKINGS', description: 'Flight group booking workflow', isEnabledByDefault: true },
-    { key: 'ENABLE_AUTOMATIC_PAYOUT', description: 'Automatic staff incentive payout processing (vs. manual finance review)', isEnabledByDefault: false },
+    {
+      key: 'ENABLE_DUFFEL',
+      description: 'Real Duffel flight provider integration',
+      isEnabledByDefault: false,
+    },
+    {
+      key: 'ENABLE_TRAVELPORT',
+      description:
+        'Travelport GDS integration (mock-only until real credentials exist)',
+      isEnabledByDefault: false,
+    },
+    {
+      key: 'ENABLE_SABRE',
+      description:
+        'Sabre GDS integration (mock-only until real credentials exist)',
+      isEnabledByDefault: false,
+    },
+    {
+      key: 'ENABLE_HOTELS',
+      description: 'Hotel booking module',
+      isEnabledByDefault: true,
+    },
+    {
+      key: 'ENABLE_VISA',
+      description: 'Visa & immigration operations module',
+      isEnabledByDefault: true,
+    },
+    {
+      key: 'ENABLE_HAJJ',
+      description: 'Hajj packages & operations module',
+      isEnabledByDefault: true,
+    },
+    {
+      key: 'ENABLE_UMRAH',
+      description: 'Umrah packages & operations module',
+      isEnabledByDefault: true,
+    },
+    {
+      key: 'ENABLE_CORPORATE_TRAVEL',
+      description: 'Corporate travel accounts & policy enforcement',
+      isEnabledByDefault: true,
+    },
+    {
+      key: 'ENABLE_GROUP_BOOKINGS',
+      description: 'Flight group booking workflow',
+      isEnabledByDefault: true,
+    },
+    {
+      key: 'ENABLE_AUTOMATIC_PAYOUT',
+      description:
+        'Automatic staff incentive payout processing (vs. manual finance review)',
+      isEnabledByDefault: false,
+    },
   ];
   for (const flag of featureFlags) {
     await prisma.featureFlag.upsert({
@@ -4228,7 +4281,9 @@ async function seedPhase11EnterpriseGovernance() {
     where: { type: 'FLIGHT_REFUND' },
   });
   if (existingThresholdRule) {
-    console.log('Phase 11 approval threshold rules already present — skipping that step');
+    console.log(
+      'Phase 11 approval threshold rules already present — skipping that step',
+    );
   } else {
     await prisma.approvalThresholdRule.create({
       data: {
@@ -4256,7 +4311,7 @@ async function seedPhase11EnterpriseGovernance() {
     });
     console.log(
       'Seeded 3 FLIGHT_REFUND approval threshold rules (₦0-100k: 1 approval, ' +
-        '₦100,001-1,000,000: 2 approvals, above: 3 approvals) — the spec\'s own worked example',
+        "₦100,001-1,000,000: 2 approvals, above: 3 approvals) — the spec's own worked example",
     );
   }
 
@@ -4269,8 +4324,18 @@ async function seedPhase11EnterpriseGovernance() {
   }> = [
     { code: 'NGN', name: 'Nigerian Naira', symbol: '₦', exchangeRateToBase: 1 },
     { code: 'USD', name: 'US Dollar', symbol: '$', exchangeRateToBase: 1650 },
-    { code: 'SAR', name: 'Saudi Riyal', symbol: 'ر.س', exchangeRateToBase: 440 },
-    { code: 'GBP', name: 'British Pound', symbol: '£', exchangeRateToBase: 2100 },
+    {
+      code: 'SAR',
+      name: 'Saudi Riyal',
+      symbol: 'ر.س',
+      exchangeRateToBase: 440,
+    },
+    {
+      code: 'GBP',
+      name: 'British Pound',
+      symbol: '£',
+      exchangeRateToBase: 2100,
+    },
     { code: 'AED', name: 'UAE Dirham', symbol: 'د.إ', exchangeRateToBase: 449 },
   ];
   for (const currency of currencies) {
@@ -4288,7 +4353,9 @@ async function seedPhase11EnterpriseGovernance() {
     where: { companyId: primaryCompany.id, type: 'FLIGHT_REFUND' },
   });
   if (existingApprovalRequest) {
-    console.log('Phase 11 demo approval requests already present — skipping that step');
+    console.log(
+      'Phase 11 demo approval requests already present — skipping that step',
+    );
     return;
   }
   const pendingApproval = await prisma.approvalRequest.create({
@@ -4334,7 +4401,8 @@ async function seedPhase11EnterpriseGovernance() {
       approvalRequestId: rejectedApproval.id,
       decidedByIdentityId: financeIdentity.id,
       decision: 'REJECTED',
-      reason: 'Amount exceeds the fare rules\' refundable portion — see manual refund record instead',
+      reason:
+        "Amount exceeds the fare rules' refundable portion — see manual refund record instead",
     },
   });
   console.log(

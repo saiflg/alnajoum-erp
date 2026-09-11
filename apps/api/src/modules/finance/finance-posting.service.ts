@@ -83,6 +83,41 @@ export class FinancePostingService {
    * (e.g. a retry) is a silent no-op, since a SupplierPayable already
    * exists for it.
    */
+  /** Phase 11 spec #2/#65 fix — resolves which tenant owes this cost by
+   * following the polymorphic sourceModule/sourceId pointer back to the
+   * booking and reading its customer's companyId. Prisma can't express a
+   * relation-based filter across three different target tables, so this
+   * is the one place that ever needs to know how to do that walk. */
+  private async resolveCompanyIdForBooking(
+    sourceModule: 'FLIGHT_BOOKING' | 'HOTEL_BOOKING' | 'VISA_APPLICATION',
+    sourceId: string,
+  ): Promise<string | undefined> {
+    const select = { customer: { select: { companyId: true } } } as const;
+    switch (sourceModule) {
+      case 'FLIGHT_BOOKING': {
+        const booking = await this.prisma.flightBooking.findUnique({
+          where: { id: sourceId },
+          select,
+        });
+        return booking?.customer.companyId;
+      }
+      case 'HOTEL_BOOKING': {
+        const booking = await this.prisma.hotelBooking.findUnique({
+          where: { id: sourceId },
+          select,
+        });
+        return booking?.customer.companyId;
+      }
+      case 'VISA_APPLICATION': {
+        const application = await this.prisma.visaApplication.findUnique({
+          where: { id: sourceId },
+          select,
+        });
+        return application?.customer.companyId;
+      }
+    }
+  }
+
   async postCostOfServiceForBooking(params: {
     sourceModule: 'FLIGHT_BOOKING' | 'HOTEL_BOOKING' | 'VISA_APPLICATION';
     sourceId: string;
@@ -98,8 +133,39 @@ export class FinancePostingService {
     });
     if (existing) return;
 
+    const companyId = await this.resolveCompanyIdForBooking(
+      params.sourceModule,
+      params.sourceId,
+    );
+    if (!companyId) {
+      // The booking this cost belongs to no longer resolves — this would
+      // otherwise create an unattributable payable no tenant-scoped view
+      // could ever show. Should never happen in practice (the booking was
+      // just ticketed/completed by the caller), but fail loudly rather
+      // than silently write bad data.
+      throw new Error(
+        `Cannot resolve a tenant for ${params.sourceModule} ${params.sourceId} — refusing to create an unattributable supplier payable`,
+      );
+    }
+
+    // Best-effort link to this tenant's own FlightSupplier master record,
+    // matched case-insensitively by name — spec #22/#23's whole point
+    // (FlightSuppliersService.getBalance) only works once this is
+    // actually populated, which nothing did before this fix. Scoped to
+    // the same company so a name collision can never link a payable to a
+    // different tenant's supplier.
+    const linkedSupplier = await this.prisma.flightSupplier.findFirst({
+      where: {
+        companyId,
+        name: { equals: params.supplierName, mode: 'insensitive' },
+      },
+      select: { id: true },
+    });
+
     await this.prisma.supplierPayable.create({
       data: {
+        companyId,
+        flightSupplierId: linkedSupplier?.id,
         supplierName: params.supplierName,
         sourceModule: params.sourceModule,
         sourceId: params.sourceId,

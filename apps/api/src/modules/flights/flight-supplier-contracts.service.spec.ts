@@ -46,6 +46,24 @@ describe('FlightSupplierContractsService', () => {
       ).rejects.toThrow(NotFoundException);
     });
 
+    /** Phase 11 spec #2/#65 fix — a contract has no companyId of its own;
+     * ownership is checked by joining through the parent supplier. */
+    it('throws NotFound when the supplier belongs to a different tenant', async () => {
+      prisma.flightSupplier.findUnique.mockResolvedValue({
+        id: 'sup-1',
+        companyId: 'company-b',
+      });
+
+      await expect(
+        service.create(
+          'sup-1',
+          { name: 'Deal', startDate: '2026-01-01' },
+          'company-a',
+        ),
+      ).rejects.toThrow(NotFoundException);
+      expect(prisma.flightSupplierContract.create).not.toHaveBeenCalled();
+    });
+
     it('creates the contract with dates parsed from ISO strings', async () => {
       prisma.flightSupplier.findUnique.mockResolvedValue({ id: 'sup-1' });
       prisma.flightSupplierContract.create.mockResolvedValue({
@@ -76,6 +94,18 @@ describe('FlightSupplierContractsService', () => {
         NotFoundException,
       );
     });
+
+    it("throws NotFound when the contract's supplier belongs to a different tenant", async () => {
+      prisma.flightSupplierContract.findUnique.mockResolvedValue({
+        id: 'contract-1',
+        supplier: { companyId: 'company-b' },
+      });
+
+      await expect(
+        service.update('contract-1', {}, 'company-a'),
+      ).rejects.toThrow(NotFoundException);
+      expect(prisma.flightSupplierContract.update).not.toHaveBeenCalled();
+    });
   });
 
   describe('listExpiringSoon', () => {
@@ -93,6 +123,20 @@ describe('FlightSupplierContractsService', () => {
                 FlightSupplierContractStatus.TERMINATED,
               ],
             }),
+          }),
+        }),
+      );
+    });
+
+    it('scopes by the supplier relation when a tenant filter is given', async () => {
+      prisma.flightSupplierContract.findMany.mockResolvedValue([]);
+
+      await service.listExpiringSoon('company-a');
+
+      expect(prisma.flightSupplierContract.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            supplier: { companyId: 'company-a' },
           }),
         }),
       );
