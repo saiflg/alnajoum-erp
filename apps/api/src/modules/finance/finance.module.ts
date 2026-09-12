@@ -6,6 +6,8 @@ import { BankReconciliationService } from './bank-reconciliation.service';
 import { ChartOfAccountsController } from './chart-of-accounts.controller';
 import { CompanyInvestmentsController } from './company-investments.controller';
 import { CompanyInvestmentsService } from './company-investments.service';
+import { CurrencyController } from './currency.controller';
+import { CurrencyService } from './currency.service';
 import { DailyClosingController } from './daily-closing.controller';
 import { DailyClosingService } from './daily-closing.service';
 import { ExpensesController } from './expenses.controller';
@@ -20,6 +22,8 @@ import { StaffBankAccountsController } from './staff-bank-accounts.controller';
 import { StaffBankAccountsService } from './staff-bank-accounts.service';
 import { SupplierPayablesController } from './supplier-payables.controller';
 import { SupplierPayablesService } from './supplier-payables.service';
+import { TaxRulesController } from './tax-rules.controller';
+import { TaxRulesService } from './tax-rules.service';
 
 /**
  * The finance engine (Phase 6). A leaf module — depends only on
@@ -39,6 +43,8 @@ import { SupplierPayablesService } from './supplier-payables.service';
     FinanceReportsController,
     StaffBankAccountsController,
     FinanceSettingsController,
+    CurrencyController,
+    TaxRulesController,
   ],
   providers: [
     LedgerService,
@@ -51,6 +57,8 @@ import { SupplierPayablesService } from './supplier-payables.service';
     BankReconciliationService,
     FinanceReportsService,
     StaffBankAccountsService,
+    CurrencyService,
+    TaxRulesService,
   ],
   exports: [
     LedgerService,
@@ -59,6 +67,8 @@ import { SupplierPayablesService } from './supplier-payables.service';
     ExpensesService,
     CompanyInvestmentsService,
     SupplierPayablesService,
+    CurrencyService,
+    TaxRulesService,
   ],
 })
 export class FinanceModule implements OnModuleInit {
