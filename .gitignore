@@ -18,6 +18,7 @@ Thumbs.db
 generated/
 uploads/
 uploads-test/
+backups/
 .vscode/*
 !.vscode/extensions.json
 .oracle-key.pem

@@ -9,8 +9,12 @@
 # module support there than Alpine.
 
 FROM node:22-bookworm-slim AS base
+# postgresql-client provides pg_dump/pg_restore, used by BackupService
+# (Phase 11 "backup management") to shell out to a real, restorable
+# dump rather than a JS reimplementation — see that service's own doc
+# comment.
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends openssl ca-certificates \
+  && apt-get install -y --no-install-recommends openssl ca-certificates postgresql-client \
   && rm -rf /var/lib/apt/lists/* \
   && corepack enable
 

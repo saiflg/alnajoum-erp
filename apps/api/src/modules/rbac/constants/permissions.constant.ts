@@ -274,6 +274,13 @@ export const PERMISSIONS = {
     EXPORT: 'data:export', // bulk CSV export of this tenant's own records — never cross-tenant, resolveTenantFilter applies the same as everywhere else
     IMPORT: 'data:import', // bulk create (customers today) from an uploaded CSV
   },
+  BACKUP: {
+    // Deliberately not granted to COMPANY_ADMIN anywhere in
+    // default-roles.constant.ts — a full pg_dump contains every
+    // tenant's data, not just the caller's own, so this is Super Admin
+    // only (via ALL_PERMISSION_KEYS), never resolveTenantFilter-scoped.
+    MANAGE: 'backup:manage',
+  },
 } as const;
 
 export const ALL_PERMISSION_KEYS: string[] = Object.values(PERMISSIONS).flatMap(

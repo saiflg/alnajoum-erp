@@ -66,6 +66,7 @@ services:
       JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
       CORS_ORIGIN: ${PUBLIC_ORIGIN}
       UPLOADS_DIR: /repo/apps/api/uploads
+      BACKUPS_DIR: /repo/apps/api/backups
       NOTIFICATION_PROVIDER: ${NOTIFICATION_PROVIDER:-mock}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-}
@@ -84,6 +85,7 @@ services:
       PUBLIC_WEB_ORIGIN: ${PUBLIC_ORIGIN}
     volumes:
       - uploads_data:/repo/apps/api/uploads
+      - backups_data:/repo/apps/api/backups
     networks: [internal]
 
   web:
@@ -127,5 +129,6 @@ volumes:
   postgres_data:
   redis_data:
   uploads_data:
+  backups_data:
   caddy_data:
   caddy_config:
