@@ -115,6 +115,7 @@ export class FlightBookingsAdminController {
     const staffId = await this.usersService.getStaffIdForIdentity(user.sub);
     return this.refundsService.requestRefund(id, {
       requestedByStaffId: staffId ?? undefined,
+      requestedByIdentityId: user.sub,
       reason: dto.reason,
     });
   }

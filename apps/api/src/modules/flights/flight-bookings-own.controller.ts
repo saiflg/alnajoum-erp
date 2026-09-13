@@ -111,6 +111,7 @@ export class FlightBookingsOwnController {
     await this.refundsService.previewRefund(id, customerId);
     return this.refundsService.requestRefund(id, {
       requestedByCustomer: true,
+      requestedByIdentityId: user.sub,
       reason: dto.reason,
     });
   }

@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { AuditModule } from '../audit/audit.module';
 import { CustomersModule } from '../customers/customers.module';
 import { FinanceModule } from '../finance/finance.module';
+import { GovernanceModule } from '../governance/governance.module';
 import { IntegrationsModule } from '../integrations/integrations.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { PaymentsModule } from '../payments/payments.module';
@@ -53,6 +54,7 @@ import { TravelportFlightProviderService } from './providers/travelport-flight-p
     IntegrationsModule,
     AuditModule,
     FinanceModule,
+    GovernanceModule,
   ],
   // Order matters: the static "flights/bookings/me" routes must be
   // registered before the dynamic "flights/bookings/:id" ones, otherwise
