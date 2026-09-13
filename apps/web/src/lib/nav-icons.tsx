@@ -29,7 +29,8 @@ export type NavIconName =
   | 'flag'
   | 'gear'
   | 'key'
-  | 'audit';
+  | 'audit'
+  | 'transfer';
 
 const ICON_PATHS: Record<NavIconName, React.ReactNode> = {
   dashboard: (
@@ -215,6 +216,12 @@ const ICON_PATHS: Record<NavIconName, React.ReactNode> = {
       <path d="M8.5 9h7M8.5 12.5h4.5" strokeLinecap="round" />
       <circle cx="9.5" cy="17" r="2" />
       <path d="M11 18.5 12.5 20" strokeLinecap="round" />
+    </>
+  ),
+  transfer: (
+    <>
+      <path d="M7 3.5v13M7 16.5 3.5 13M7 16.5 10.5 13" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M17 20.5v-13M17 7.5 20.5 11M17 7.5 13.5 11" strokeLinecap="round" strokeLinejoin="round" />
     </>
   ),
 };
