@@ -270,6 +270,10 @@ export const PERMISSIONS = {
   SEARCH: {
     GLOBAL: 'search:global', // the cross-module admin search endpoint — each result type is still filtered by that type's own read permission underneath
   },
+  DATA: {
+    EXPORT: 'data:export', // bulk CSV export of this tenant's own records — never cross-tenant, resolveTenantFilter applies the same as everywhere else
+    IMPORT: 'data:import', // bulk create (customers today) from an uploaded CSV
+  },
 } as const;
 
 export const ALL_PERMISSION_KEYS: string[] = Object.values(PERMISSIONS).flatMap(

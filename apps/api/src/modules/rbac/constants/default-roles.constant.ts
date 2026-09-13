@@ -211,6 +211,8 @@ export const DEFAULT_ROLE_DEFINITIONS: Array<{
       PERMISSIONS.CURRENCY.MANAGE,
       PERMISSIONS.TAX.MANAGE,
       PERMISSIONS.SEARCH.GLOBAL,
+      PERMISSIONS.DATA.EXPORT,
+      PERMISSIONS.DATA.IMPORT,
     ],
   },
   {
@@ -445,7 +447,7 @@ export const DEFAULT_ROLE_DEFINITIONS: Array<{
   {
     name: SYSTEM_ROLES.AUDITOR,
     description:
-      'Read-only oversight: audit trail, security events, and every module\'s reports — no create/update/approve access anywhere.',
+      "Read-only oversight: audit trail, security events, and every module's reports — no create/update/approve access anywhere.",
     isSystem: true,
     permissions: [
       PERMISSIONS.AUDIT.READ,
