@@ -63,6 +63,20 @@ export class BackupService {
     return path.join(this.backupsDir(), filename);
   }
 
+  /** Prisma's own connection string carries a `?schema=` query param it
+   * interprets itself — that's a Prisma convention, not a libpq one, and
+   * pg_dump's URI parser rejects it outright ("invalid URI query
+   * parameter"). pg_dump has no equivalent connection-string option for
+   * "default schema" anyway (schema selection there is -n/--schema on
+   * the dump itself, not the connection), so the fix is just to strip
+   * it — the whole database still dumps correctly, public schema
+   * included, since that's the only schema this platform uses. */
+  private pgDumpConnectionString(databaseUrl: string): string {
+    const url = new URL(databaseUrl);
+    url.searchParams.delete('schema');
+    return url.toString();
+  }
+
   async create(triggeredByIdentityId: string): Promise<BackupInfo> {
     const databaseUrl = process.env.DATABASE_URL;
     if (!databaseUrl) {
@@ -79,7 +93,13 @@ export class BackupService {
     const filePath = path.join(dir, filename);
 
     try {
-      await execFileAsync('pg_dump', [databaseUrl, '-F', 'c', '-f', filePath]);
+      await execFileAsync('pg_dump', [
+        this.pgDumpConnectionString(databaseUrl),
+        '-F',
+        'c',
+        '-f',
+        filePath,
+      ]);
     } catch (error) {
       // Never leave a partial/corrupt file behind for listCustomers to
       // pick up as if it were a real, restorable backup.

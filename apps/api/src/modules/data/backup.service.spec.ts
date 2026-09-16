@@ -56,6 +56,31 @@ describe('BackupService', () => {
       expect(result.filename).toMatch(/^backup-.*\.dump$/);
     });
 
+    /**
+     * Regression: pg_dump's URI parser rejects Prisma's own `?schema=`
+     * query param outright ("invalid URI query parameter") since it's a
+     * Prisma convention, not a libpq one — caught live in production on
+     * this feature's first real deploy, not by a unit test, because the
+     * local dev environment has no pg_dump on PATH to exercise this
+     * against at all.
+     */
+    it('strips the Prisma-only ?schema= query param before invoking pg_dump', async () => {
+      process.env.DATABASE_URL =
+        'postgresql://user:pass@postgres:5432/alnajoum_erp?schema=public';
+      execFileMock.mockImplementation((_file, _args, callback) => {
+        callback(null, '', '');
+      });
+      fsMock.statSync.mockReturnValue({
+        size: 1,
+        birthtime: new Date(),
+      } as fs.Stats);
+
+      await service.create('identity-1');
+
+      const [, args] = execFileMock.mock.calls[0] as [string, string[]];
+      expect(args[0]).toBe('postgresql://user:pass@postgres:5432/alnajoum_erp');
+    });
+
     it('records an audit entry with the actor and the backup size', async () => {
       execFileMock.mockImplementation((_file, _args, callback) => {
         callback(null, '', '');
