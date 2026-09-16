@@ -9,12 +9,24 @@
 # module support there than Alpine.
 
 FROM node:22-bookworm-slim AS base
-# postgresql-client provides pg_dump/pg_restore, used by BackupService
+# postgresql-client-16 provides pg_dump/pg_restore, used by BackupService
 # (Phase 11 "backup management") to shell out to a real, restorable
 # dump rather than a JS reimplementation — see that service's own doc
-# comment.
+# comment. Debian bookworm's own default "postgresql-client" package is
+# v15 (caught live: pg_dump refuses to dump a newer server by default —
+# "aborting because of server version mismatch"), so this pulls the
+# versioned package from the official PGDG apt repo to match
+# postgres:16-alpine in docker-compose.prod.yml exactly, rather than
+# whatever version Debian's own repos happen to default to.
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends openssl ca-certificates postgresql-client \
+  && apt-get install -y --no-install-recommends openssl ca-certificates gnupg wget \
+  && wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+       | gpg --dearmor -o /usr/share/keyrings/postgresql.gpg \
+  && echo "deb [signed-by=/usr/share/keyrings/postgresql.gpg] http://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" \
+       > /etc/apt/sources.list.d/pgdg.list \
+  && apt-get update \
+  && apt-get install -y --no-install-recommends postgresql-client-16 \
+  && apt-get purge -y --auto-remove gnupg wget \
   && rm -rf /var/lib/apt/lists/* \
   && corepack enable
 
