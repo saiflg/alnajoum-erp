@@ -17,6 +17,7 @@ import {
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { CurrencyService } from '../finance/currency.service';
 import { FinancePostingService } from '../finance/finance-posting.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { InvoicesService } from '../payments/invoices.service';
@@ -24,7 +25,7 @@ import { CreateManualFlightBookingDto } from './dto/create-manual-flight-booking
 import { CreatePassengerDto } from './dto/create-passenger.dto';
 import { SearchFlightsDto } from './dto/search-flights.dto';
 import { FlightIncentivesService } from './flight-incentives.service';
-import { FlightPricingService } from './flight-pricing.service';
+import { FlightPricingService, PricingResult } from './flight-pricing.service';
 import { FlightProviderRoutingService } from './flight-provider-routing.service';
 import { ProviderTransactionLogService } from './provider-transaction-log.service';
 import { FLIGHT_PROVIDER } from './providers/flight-provider.port';
@@ -61,7 +62,50 @@ export class FlightsService {
     private readonly auditService: AuditService,
     private readonly flightIncentivesService: FlightIncentivesService,
     private readonly financePostingService: FinancePostingService,
+    private readonly currencyService: CurrencyService,
   ) {}
+
+  /**
+   * Every customer-facing price (search results, a single offer, price
+   * revalidation) must show what createBooking will actually charge —
+   * before this, search/getOffer/revalidate returned the bare provider
+   * quote while createBooking silently added the agency markup (spec #18)
+   * only at booking time, so the price a customer saw and the price they
+   * were charged could differ. This converts the provider's own quote to
+   * NGN (the platform base currency — CurrencyService.convertToBase is a
+   * no-op when the provider already quoted NGN, which is all the current
+   * MOCK provider ever does) and applies the same configurable markup
+   * engine createBooking uses, with no staff/branch context — that
+   * context only exists once a specific staff member is doing the
+   * booking, so this is the anonymous/customer preview price; a
+   * staff/branch-specific rule can still yield a different final price at
+   * booking time, exactly as it could before this change.
+   */
+  private async previewCustomerPrice(offer: FlightOffer): Promise<{
+    offer: FlightOffer;
+    providerCostNgn: number;
+    pricing: PricingResult;
+  }> {
+    const firstLeg = offer.legs[0];
+    const lastLeg = offer.legs[offer.legs.length - 1];
+    const firstSegment = firstLeg?.segments[0];
+    const { amount: providerCostNgn } =
+      await this.currencyService.convertToBase(
+        offer.totalAmount,
+        offer.currency,
+      );
+    const pricing = await this.pricingService.priceOffer(providerCostNgn, {
+      airlineCode: firstSegment?.airlineCode,
+      origin: firstLeg?.origin ?? '',
+      destination: lastLeg?.destination ?? '',
+      cabinClass: offer.cabinClass,
+    });
+    return {
+      offer: { ...offer, totalAmount: pricing.customerPrice, currency: 'NGN' },
+      providerCostNgn,
+      pricing,
+    };
+  }
 
   /**
    * Spec #30/#31 — when an administrator has configured a provider
@@ -94,17 +138,36 @@ export class FlightsService {
       firstLeg?.destination,
     );
 
-    if (providerOrder.length === 0) {
-      return this.searchViaProvider(this.provider, criteria, dto.directOnly);
-    }
+    const offers =
+      providerOrder.length === 0
+        ? await this.searchViaProvider(this.provider, criteria, dto.directOnly)
+        : await this.searchViaProviderOrder(
+            providerOrder,
+            criteria,
+            dto.directOnly,
+          );
 
+    return Promise.all(
+      offers.map(
+        async (offer) => (await this.previewCustomerPrice(offer)).offer,
+      ),
+    );
+  }
+
+  private async searchViaProviderOrder(
+    providerOrder: Awaited<
+      ReturnType<FlightProviderRoutingService['resolveOrder']>
+    >,
+    criteria: SearchFlightsCriteria,
+    directOnly?: boolean,
+  ): Promise<FlightOffer[]> {
     let lastError: unknown;
     for (const providerName of providerOrder) {
       try {
         return await this.searchViaProvider(
           this.providerRouter.resolveByName(providerName),
           criteria,
-          dto.directOnly,
+          directOnly,
         );
       } catch (error) {
         lastError = error;
@@ -157,7 +220,8 @@ export class FlightsService {
     offerId: string,
     previousAmount: number,
   ): Promise<RevalidationResult> {
-    const offer = await this.getOffer(offerId);
+    const raw = await this.getOffer(offerId);
+    const { offer } = await this.previewCustomerPrice(raw);
     return {
       offer,
       priceChanged: offer.totalAmount !== previousAmount,
@@ -190,6 +254,15 @@ export class FlightsService {
       );
     }
     return offer;
+  }
+
+  /** Customer-facing counterpart to getOffer — same offer, priced the same
+   * way search() already priced it. getOffer itself stays raw because
+   * createBooking below reuses it internally and must pass the provider's
+   * own untouched offer to provider.createOrder(). */
+  async getOfferPreview(offerId: string): Promise<FlightOffer> {
+    const raw = await this.getOffer(offerId);
+    return (await this.previewCustomerPrice(raw)).offer;
   }
 
   /**
@@ -270,9 +343,14 @@ export class FlightsService {
     // moved between revalidation and this call; require an explicit
     // resubmission with the new price rather than silently charging more.
     const offer = await this.getOffer(offerId);
-    if (expectedPrice !== undefined && offer.totalAmount !== expectedPrice) {
+    const { offer: previewOffer, providerCostNgn } =
+      await this.previewCustomerPrice(offer);
+    if (
+      expectedPrice !== undefined &&
+      previewOffer.totalAmount !== expectedPrice
+    ) {
       throw new ConflictException(
-        `The price for this flight has changed from ${expectedPrice} to ${offer.totalAmount} ${offer.currency}. Please review and confirm the new price before booking.`,
+        `The price for this flight has changed from ${expectedPrice} to ${previewOffer.totalAmount} ${previewOffer.currency}. Please review and confirm the new price before booking.`,
       );
     }
 
@@ -320,10 +398,15 @@ export class FlightsService {
       : null;
 
     // Configurable agency markup (spec #18) — never hard-coded. The
-    // provider's own price becomes providerCost; totalAmount below is what
-    // the customer actually pays, both snapshotted so a later pricing-rule
-    // edit never retroactively changes an already-booked price.
-    const pricing = await this.pricingService.priceOffer(offer.totalAmount, {
+    // provider's own price, converted to NGN (the platform base currency —
+    // see CurrencyService.convertToBase; a no-op for the current MOCK
+    // provider, which already quotes NGN), becomes providerCost; totalAmount
+    // below is what the customer actually pays, both snapshotted so a later
+    // pricing-rule/exchange-rate edit never retroactively changes an
+    // already-booked price. Re-resolved here (rather than reusing the
+    // preview above) because a staff/branch-specific rule can only apply
+    // once bookedByStaff is known.
+    const pricing = await this.pricingService.priceOffer(providerCostNgn, {
       airlineCode: firstSegment?.airlineCode,
       origin: firstLeg.origin,
       destination: lastLeg.destination,
@@ -348,9 +431,9 @@ export class FlightsService {
           holdExpiresAt: result.holdExpiresAt
             ? new Date(result.holdExpiresAt)
             : undefined,
-          currency: offer.currency,
+          currency: 'NGN',
           totalAmount: pricing.customerPrice,
-          providerCost: offer.totalAmount,
+          providerCost: providerCostNgn,
           markupAmount: pricing.markupAmount,
           pricingRuleId: pricing.rule?.id,
           idempotencyKey,

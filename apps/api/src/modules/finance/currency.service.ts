@@ -81,4 +81,26 @@ export class CurrencyService {
 
     return updated;
   }
+
+  /**
+   * Converts an amount already denominated in `fromCurrencyCode` into the
+   * platform base currency (NGN — see Company.currency/exchangeRateToBase's
+   * own "relative to the platform base currency" comment), using this
+   * reference table's rate rather than a hard-coded one. NGN-to-NGN is the
+   * identity conversion and never requires a Currency row for NGN to exist.
+   */
+  async convertToBase(
+    amount: number,
+    fromCurrencyCode: string,
+  ): Promise<{ amount: number; currency: string }> {
+    const code = fromCurrencyCode.toUpperCase();
+    if (code === 'NGN') {
+      return { amount, currency: 'NGN' };
+    }
+    const currency = await this.get(code);
+    return {
+      amount: Math.round(amount * currency.exchangeRateToBase),
+      currency: 'NGN',
+    };
+  }
 }

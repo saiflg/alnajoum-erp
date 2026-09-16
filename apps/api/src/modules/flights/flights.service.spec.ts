@@ -12,6 +12,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { CurrencyService } from '../finance/currency.service';
 import { FinancePostingService } from '../finance/finance-posting.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { InvoicesService } from '../payments/invoices.service';
@@ -78,6 +79,7 @@ describe('FlightsService', () => {
   let auditService: { record: jest.Mock };
   let flightIncentivesService: { createForTicketedBooking: jest.Mock };
   let financePostingService: { postCostOfServiceForBooking: jest.Mock };
+  let currencyService: { convertToBase: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
@@ -109,11 +111,16 @@ describe('FlightsService', () => {
     };
     notificationsService = { sendBookingConfirmation: jest.fn() };
     pricingService = {
-      priceOffer: jest.fn().mockResolvedValue({
-        customerPrice: 50_000,
-        markupAmount: 0,
-        rule: null,
-      }),
+      // Identity passthrough by default (no markup rule matched) — matches
+      // FlightPricingService.applyMarkup's own no-rule behavior. Tests
+      // that care about markup override this per-test.
+      priceOffer: jest.fn().mockImplementation((providerCost: number) =>
+        Promise.resolve({
+          customerPrice: providerCost,
+          markupAmount: 0,
+          rule: null,
+        }),
+      ),
     };
     providerLog = { record: jest.fn() };
     providerRoutingService = { resolveOrder: jest.fn().mockResolvedValue([]) };
@@ -121,6 +128,13 @@ describe('FlightsService', () => {
     auditService = { record: jest.fn() };
     flightIncentivesService = { createForTicketedBooking: jest.fn() };
     financePostingService = { postCostOfServiceForBooking: jest.fn() };
+    currencyService = {
+      convertToBase: jest
+        .fn()
+        .mockImplementation((amount: number) =>
+          Promise.resolve({ amount, currency: 'NGN' }),
+        ),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -139,6 +153,7 @@ describe('FlightsService', () => {
         { provide: AuditService, useValue: auditService },
         { provide: FlightIncentivesService, useValue: flightIncentivesService },
         { provide: FinancePostingService, useValue: financePostingService },
+        { provide: CurrencyService, useValue: currencyService },
       ],
     }).compile();
 
@@ -842,6 +857,185 @@ describe('FlightsService', () => {
           flightIncentivesService.createForTicketedBooking,
         ).toHaveBeenCalled();
       });
+    });
+  });
+
+  /**
+   * Before this, search/getOffer/revalidate returned the bare provider
+   * price while createBooking silently added the agency markup only at
+   * booking time — a customer could see one price during search and be
+   * charged a different (higher) one at confirmation. These lock in that
+   * every customer-facing read now shows what createBooking will actually
+   * charge: the provider's quote converted to NGN, with the same
+   * configurable markup rule applied everywhere.
+   */
+  describe('customer-facing pricing — NGN conversion + configurable markup', () => {
+    const markedUpPricing = {
+      customerPrice: 150_000,
+      markupAmount: 100_000,
+      rule: { id: 'rule-1' } as never,
+    };
+
+    it('search results carry the configured markup, not the bare provider cost', async () => {
+      provider.searchOffers.mockResolvedValue([baseOffer]);
+      pricingService.priceOffer.mockResolvedValue(markedUpPricing);
+
+      const [offer] = await service.search({
+        tripType: TripType.ONE_WAY,
+        legs: [
+          { origin: 'LOS', destination: 'ABV', departureDate: '2027-01-10' },
+        ],
+        adults: 1,
+      });
+
+      expect(currencyService.convertToBase).toHaveBeenCalledWith(50_000, 'NGN');
+      expect(offer.totalAmount).toBe(150_000);
+      expect(offer.currency).toBe('NGN');
+    });
+
+    it('converts a non-NGN provider quote to NGN before applying markup', async () => {
+      const usdOffer = { ...baseOffer, currency: 'USD', totalAmount: 100 };
+      provider.searchOffers.mockResolvedValue([usdOffer]);
+      currencyService.convertToBase.mockResolvedValue({
+        amount: 150_000,
+        currency: 'NGN',
+      });
+      pricingService.priceOffer.mockResolvedValue({
+        customerPrice: 250_000,
+        markupAmount: 100_000,
+        rule: { id: 'rule-1' } as never,
+      });
+
+      const [offer] = await service.search({
+        tripType: TripType.ONE_WAY,
+        legs: [
+          { origin: 'LOS', destination: 'ABV', departureDate: '2027-01-10' },
+        ],
+        adults: 1,
+      });
+
+      expect(currencyService.convertToBase).toHaveBeenCalledWith(100, 'USD');
+      expect(pricingService.priceOffer).toHaveBeenCalledWith(
+        150_000,
+        expect.any(Object),
+      );
+      expect(offer.totalAmount).toBe(250_000);
+      expect(offer.currency).toBe('NGN');
+    });
+
+    it('getOfferPreview shows the same marked-up price search does', async () => {
+      provider.getOffer.mockResolvedValue(baseOffer);
+      pricingService.priceOffer.mockResolvedValue(markedUpPricing);
+
+      const offer = await service.getOfferPreview('offer-1');
+
+      expect(offer.totalAmount).toBe(150_000);
+      expect(offer.currency).toBe('NGN');
+    });
+
+    it('revalidate compares against the marked-up price, not the bare provider cost', async () => {
+      provider.getOffer.mockResolvedValue(baseOffer);
+      pricingService.priceOffer.mockResolvedValue(markedUpPricing);
+
+      const result = await service.revalidate('offer-1', 150_000);
+
+      expect(result.priceChanged).toBe(false);
+      expect(result.currentAmount).toBe(150_000);
+    });
+
+    it("createBooking's price-changed guard rejects the stale bare provider price and accepts the previewed one", async () => {
+      provider.getOffer.mockResolvedValue(baseOffer);
+      pricingService.priceOffer.mockResolvedValue(markedUpPricing);
+
+      // A client still holding the old (pre-fix) raw provider price must
+      // now be told the price has changed, since 150,000 — not 50,000 —
+      // is what search/getOfferPreview actually showed.
+      await expect(
+        service.createBooking(
+          'customer-1',
+          'offer-1',
+          [{ type: 'ADULT' as const }],
+          undefined,
+          undefined,
+          50_000,
+        ),
+      ).rejects.toThrow(ConflictException);
+      expect(provider.createOrder).not.toHaveBeenCalled();
+
+      prisma.customer.findUnique.mockResolvedValue({
+        firstName: 'Amina',
+        lastName: 'Bello',
+        dateOfBirth: null,
+        passportNumber: 'A1234567',
+        identity: { email: 'amina@example.com' },
+      });
+      provider.createOrder.mockResolvedValue({
+        providerOrderId: 'MOCK-1',
+        status: 'CONFIRMED',
+      });
+      prisma.flightBooking.create.mockResolvedValue({ id: 'booking-1' });
+
+      await service.createBooking(
+        'customer-1',
+        'offer-1',
+        [{ type: 'ADULT' as const }],
+        undefined,
+        undefined,
+        150_000,
+      );
+
+      expect(provider.createOrder).toHaveBeenCalledWith(
+        baseOffer,
+        expect.any(Array),
+      );
+    });
+
+    it('stores the booking currency/providerCost in NGN, converted from the provider quote', async () => {
+      const usdOffer = { ...baseOffer, currency: 'USD', totalAmount: 100 };
+      provider.getOffer.mockResolvedValue(usdOffer);
+      currencyService.convertToBase.mockResolvedValue({
+        amount: 150_000,
+        currency: 'NGN',
+      });
+      pricingService.priceOffer.mockResolvedValue({
+        customerPrice: 250_000,
+        markupAmount: 100_000,
+        rule: { id: 'rule-1' } as never,
+      });
+      prisma.customer.findUnique.mockResolvedValue({
+        firstName: 'Amina',
+        lastName: 'Bello',
+        dateOfBirth: null,
+        passportNumber: 'A1234567',
+        identity: { email: 'amina@example.com' },
+      });
+      provider.createOrder.mockResolvedValue({
+        providerOrderId: 'MOCK-1',
+        status: 'CONFIRMED',
+      });
+      prisma.flightBooking.create.mockResolvedValue({ id: 'booking-1' });
+
+      await service.createBooking('customer-1', 'offer-1', [
+        { type: 'ADULT' as const },
+      ]);
+
+      expect(prisma.flightBooking.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            currency: 'NGN',
+            totalAmount: 250_000,
+            providerCost: 150_000,
+            markupAmount: 100_000,
+          }),
+        }),
+      );
+      // provider.createOrder must still receive the untouched, raw
+      // provider offer (its own currency/amount) — never the priced one —
+      // since that's what actually places the order with the provider.
+      expect(provider.createOrder).toHaveBeenCalledWith(
+        usdOffer,
+        expect.any(Array),
+      );
     });
   });
 });

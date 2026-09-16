@@ -16,7 +16,7 @@ export class FlightsController {
   @Public()
   @Get('offers/:offerId')
   getOffer(@Param('offerId') offerId: string) {
-    return this.flightsService.getOffer(offerId);
+    return this.flightsService.getOfferPreview(offerId);
   }
 
   /** Price revalidation (spec #6) — call right before booking to confirm

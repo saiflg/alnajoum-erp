@@ -125,4 +125,52 @@ describe('CurrencyService', () => {
       expect(result.exchangeRateToBase).toBe(1600);
     });
   });
+
+  describe('convertToBase', () => {
+    it('is a no-op for an amount already in NGN, with no lookup at all', async () => {
+      const result = await service.convertToBase(50_000, 'NGN');
+
+      expect(result).toEqual({ amount: 50_000, currency: 'NGN' });
+      expect(prisma.currency.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('is a no-op regardless of the input code casing', async () => {
+      const result = await service.convertToBase(50_000, 'ngn');
+
+      expect(result).toEqual({ amount: 50_000, currency: 'NGN' });
+    });
+
+    it('converts a non-NGN amount using the currency’s own exchange rate', async () => {
+      prisma.currency.findUnique.mockResolvedValue({
+        code: 'USD',
+        exchangeRateToBase: 1600,
+      });
+
+      const result = await service.convertToBase(100, 'usd');
+
+      expect(prisma.currency.findUnique).toHaveBeenCalledWith({
+        where: { code: 'USD' },
+      });
+      expect(result).toEqual({ amount: 160_000, currency: 'NGN' });
+    });
+
+    it('rounds to the nearest whole unit', async () => {
+      prisma.currency.findUnique.mockResolvedValue({
+        code: 'USD',
+        exchangeRateToBase: 1599.999,
+      });
+
+      const result = await service.convertToBase(1, 'USD');
+
+      expect(result.amount).toBe(1600);
+    });
+
+    it('throws NotFound for an unregistered currency code', async () => {
+      prisma.currency.findUnique.mockResolvedValue(null);
+
+      await expect(service.convertToBase(100, 'ZZZ')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
 });
