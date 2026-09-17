@@ -16,9 +16,9 @@ coverage/
 .DS_Store
 Thumbs.db
 generated/
-uploads/
-uploads-test/
-backups/
+/apps/api/uploads/
+/apps/api/uploads-test/
+/apps/api/backups/
 .vscode/*
 !.vscode/extensions.json
 .oracle-key.pem

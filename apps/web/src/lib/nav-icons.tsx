@@ -30,7 +30,8 @@ export type NavIconName =
   | 'gear'
   | 'key'
   | 'audit'
-  | 'transfer';
+  | 'transfer'
+  | 'backup';
 
 const ICON_PATHS: Record<NavIconName, React.ReactNode> = {
   dashboard: (
@@ -222,6 +223,13 @@ const ICON_PATHS: Record<NavIconName, React.ReactNode> = {
     <>
       <path d="M7 3.5v13M7 16.5 3.5 13M7 16.5 10.5 13" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M17 20.5v-13M17 7.5 20.5 11M17 7.5 13.5 11" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  ),
+  backup: (
+    <>
+      <ellipse cx="12" cy="5" rx="7.5" ry="2.5" />
+      <path d="M4.5 5v6.5c0 1.38 3.36 2.5 7.5 2.5s7.5-1.12 7.5-2.5V5" strokeLinejoin="round" />
+      <path d="M4.5 11.5V18c0 1.38 3.36 2.5 7.5 2.5s7.5-1.12 7.5-2.5v-6.5" strokeLinejoin="round" />
     </>
   ),
 };

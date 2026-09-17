@@ -53,6 +53,7 @@ export const ADMIN_NAV: NavLink[] = [
   { href: '/admin/system-settings', label: 'System Settings', icon: 'gear' },
   { href: '/admin/api-keys', label: 'API Keys', icon: 'key' },
   { href: '/admin/data-export-import', label: 'Data Export & Import', icon: 'transfer' },
+  { href: '/admin/backups', label: 'Backup Management', icon: 'backup' },
   { href: '/admin/integrations', label: 'Integrations', icon: 'plug' },
   { href: '/admin/account', label: 'My Account', icon: 'account' },
 ];
