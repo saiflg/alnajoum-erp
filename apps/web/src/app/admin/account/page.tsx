@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import { AppShell } from '@/components/AppShell';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { ADMIN_NAV, FINANCE_NAV } from '@/lib/admin-nav';
-import { apiRequest, ApiError } from '@/lib/api';
+import { apiFileUrl, apiRequest, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { formatDateTime } from '@/lib/format';
 
@@ -131,6 +131,22 @@ export default function StaffAccountPage() {
               {submitting ? 'Changing…' : 'Change Password'}
             </button>
           </form>
+        </div>
+
+        <div className="mt-6 max-w-md rounded-lg border border-slate-200 bg-white p-6">
+          <h3 className="text-sm font-semibold text-slate-900">My ID Card</h3>
+          <p className="mt-1 text-xs text-slate-500">
+            A printable staff badge with a QR code anyone can scan to confirm
+            you&apos;re a current Alnajoum Travel Agency employee.
+          </p>
+          <a
+            href={apiFileUrl('/staff/me/id-card')}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-4 inline-block rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800"
+          >
+            View / Print ID Card
+          </a>
         </div>
 
         <div className="mt-6 grid gap-6 lg:grid-cols-2">

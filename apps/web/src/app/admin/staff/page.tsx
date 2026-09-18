@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { AppShell } from '@/components/AppShell';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { ADMIN_NAV } from '@/lib/admin-nav';
-import { apiRequest } from '@/lib/api';
+import { apiFileUrl, apiRequest } from '@/lib/api';
 import { StaffMember } from '@/lib/types';
 
 export default function StaffPage() {
@@ -41,6 +41,7 @@ export default function StaffPage() {
                 <th className="px-4 py-2 text-left font-medium text-slate-600">Employee Code</th>
                 <th className="px-4 py-2 text-left font-medium text-slate-600">Email</th>
                 <th className="px-4 py-2 text-left font-medium text-slate-600">Status</th>
+                <th className="px-4 py-2" />
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -62,11 +63,21 @@ export default function StaffPage() {
                       {member.isActive ? 'Active' : 'Inactive'}
                     </span>
                   </td>
+                  <td className="px-4 py-2 text-right">
+                    <a
+                      href={apiFileUrl(`/staff/${member.id}/id-card`)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-xs font-medium text-amber-700 hover:underline"
+                    >
+                      ID Card
+                    </a>
+                  </td>
                 </tr>
               ))}
               {staff?.length === 0 && (
                 <tr>
-                  <td className="px-4 py-6 text-center text-slate-500" colSpan={4}>
+                  <td className="px-4 py-6 text-center text-slate-500" colSpan={5}>
                     No staff members yet.
                   </td>
                 </tr>
