@@ -281,6 +281,16 @@ export const PERMISSIONS = {
     // only (via ALL_PERMISSION_KEYS), never resolveTenantFilter-scoped.
     MANAGE: 'backup:manage',
   },
+  AI: {
+    // The natural-language analytics assistant — every query it can run
+    // is still resolveTenantFilter-scoped like any other admin report, so
+    // this is safe to grant alongside FINANCE.REPORTS rather than being
+    // Super-Admin-only.
+    ANALYTICS_QUERY: 'ai:analytics_query',
+    // Reviewing the usage log (who asked what, which provider answered) —
+    // a narrower, more sensitive capability than running queries oneself.
+    USAGE_VIEW: 'ai:usage_view',
+  },
 } as const;
 
 export const ALL_PERMISSION_KEYS: string[] = Object.values(PERMISSIONS).flatMap(

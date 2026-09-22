@@ -771,7 +771,7 @@ export interface StaffPayout {
 // Integrations — provider credentials configurable at /admin/integrations
 // ---------------------------------------------------------------------------
 
-export type IntegrationCategory = 'FLIGHT' | 'PAYMENT' | 'NOTIFICATION';
+export type IntegrationCategory = 'FLIGHT' | 'PAYMENT' | 'NOTIFICATION' | 'AI';
 
 export interface IntegrationFieldSpec {
   key: string;

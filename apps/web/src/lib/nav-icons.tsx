@@ -31,7 +31,8 @@ export type NavIconName =
   | 'key'
   | 'audit'
   | 'transfer'
-  | 'backup';
+  | 'backup'
+  | 'sparkle';
 
 const ICON_PATHS: Record<NavIconName, React.ReactNode> = {
   dashboard: (
@@ -230,6 +231,20 @@ const ICON_PATHS: Record<NavIconName, React.ReactNode> = {
       <ellipse cx="12" cy="5" rx="7.5" ry="2.5" />
       <path d="M4.5 5v6.5c0 1.38 3.36 2.5 7.5 2.5s7.5-1.12 7.5-2.5V5" strokeLinejoin="round" />
       <path d="M4.5 11.5V18c0 1.38 3.36 2.5 7.5 2.5s7.5-1.12 7.5-2.5v-6.5" strokeLinejoin="round" />
+    </>
+  ),
+  sparkle: (
+    <>
+      <path
+        fill="currentColor"
+        stroke="none"
+        d="M12 2.5l1.8 5.7 5.7 1.8-5.7 1.8L12 17.5l-1.8-5.7L4.5 10l5.7-1.8Z"
+      />
+      <path
+        fill="currentColor"
+        stroke="none"
+        d="M18.5 15.5l.9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9Z"
+      />
     </>
   ),
 };

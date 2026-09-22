@@ -23,6 +23,12 @@ const CATEGORIES: { key: IntegrationCategory; label: string; blurb: string }[] =
     label: 'Email & SMS',
     blurb: 'Outbound email delivery for receipts, reminders, and confirmations.',
   },
+  {
+    key: 'AI',
+    label: 'AI Assistant',
+    blurb:
+      'Powers the natural-language analytics assistant. Mock needs no credentials; switch to OpenAI-compatible for a real model.',
+  },
 ];
 
 function ProviderCard({

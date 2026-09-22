@@ -250,6 +250,59 @@ export const INTEGRATION_CATALOG: Record<
       implemented: true,
     },
   ],
+  AI: [
+    {
+      provider: 'mock',
+      label: 'Mock (built-in, no credentials needed — keyword-matched demo)',
+      fields: [
+        {
+          key: 'dailyRequestLimit',
+          label: 'Daily Request Limit (per company)',
+          secret: false,
+          placeholder: '200',
+        },
+      ],
+      implemented: true,
+    },
+    {
+      provider: 'openai-compatible',
+      label: 'OpenAI-compatible (OpenAI, Groq, OpenRouter, self-hosted, etc.)',
+      implemented: true,
+      docsUrl: 'https://platform.openai.com/docs/api-reference/chat',
+      fields: [
+        {
+          key: 'apiKey',
+          label: 'API Key',
+          secret: true,
+          placeholder: 'sk-...',
+        },
+        {
+          key: 'baseUrl',
+          label: 'API Base URL (default: https://api.openai.com/v1)',
+          secret: false,
+          placeholder: 'https://api.openai.com/v1',
+        },
+        {
+          key: 'model',
+          label: 'Model (default: gpt-4o-mini)',
+          secret: false,
+          placeholder: 'gpt-4o-mini',
+        },
+        {
+          key: 'temperature',
+          label: 'Temperature (0-2, default 0.2)',
+          secret: false,
+          placeholder: '0.2',
+        },
+        {
+          key: 'dailyRequestLimit',
+          label: 'Daily Request Limit (per company)',
+          secret: false,
+          placeholder: '200',
+        },
+      ],
+    },
+  ],
   NOTIFICATION: [
     {
       provider: 'mock',

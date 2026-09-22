@@ -54,6 +54,7 @@ model Identity {
   refreshTokens RefreshToken[]
   auditLogs     AuditLog[]
   notifications Notification[]
+  aiUsageLogs   AiUsageLog[]
 
   // Phase 6 — finance: who posted a journal entry / recorded a company
   // investment, when it wasn't a Staff-attributed action (e.g. a system
@@ -418,6 +419,7 @@ model Company {
   auditLogs  AuditLog[]
   featureFlagOverrides FeatureFlagOverride[]
   systemSettings SystemSetting[]
+  aiUsageLogs AiUsageLog[]
   approvalRequests ApprovalRequest[]
   approvalThresholdRules ApprovalThresholdRule[]
   flightSuppliers FlightSupplier[]
@@ -2202,6 +2204,10 @@ enum IntegrationCategory {
   NOTIFICATION
   HOTEL
   VISA
+  // Phase 13 — reuses this same credential store/admin UI for the AI
+  // provider's API key/model/limits rather than a parallel settings
+  // mechanism (see AiProviderRouter).
+  AI
 }
 
 model IntegrationCredential {
@@ -2216,6 +2222,53 @@ model IntegrationCredential {
   @@unique([category, provider])
   @@index([category])
   @@map("integration_credentials")
+}
+
+enum AiUsageStatus {
+  // The AI provider picked a query from AnalyticsQueryRegistry's allowlist
+  // and it ran successfully.
+  MATCHED
+  // The AI provider didn't recognize the question as any known query — a
+  // real, expected outcome (spec #37's "never fabricate certainty"), not
+  // an error.
+  UNMATCHED
+  // The provider call itself failed (timeout, auth, malformed response).
+  ERROR
+}
+
+/**
+ * Phase 13 spec #40 — an audit trail of AI usage, deliberately separate
+ * from AuditLog: this logs *requests to the AI layer itself* (a question,
+ * which provider/model answered it, whether it matched a known query),
+ * never the actual business data an answer surfaced — that's already
+ * covered by whatever service executed the matched query. `question` is
+ * the caller's own free-text input, kept short server-side (never a full
+ * prompt/system-message dump) so this stays a usage log, not a transcript
+ * store.
+ */
+model AiUsageLog {
+  id String @id @default(cuid())
+
+  identityId String?
+  identity   Identity? @relation(fields: [identityId], references: [id], onDelete: SetNull)
+  companyId  String?
+  company    Company?  @relation(fields: [companyId], references: [id], onDelete: SetNull)
+
+  requestType String // "analytics_query" — more assistant types append here later, never rename existing values
+  provider    String // "mock" | "openai-compatible"
+  model       String?
+
+  question     String
+  matchedQuery String?
+  status       AiUsageStatus
+  errorMessage String?
+
+  createdAt DateTime @default(now())
+
+  @@index([companyId])
+  @@index([identityId])
+  @@index([createdAt])
+  @@map("ai_usage_logs")
 }
 
 // ---------------------------------------------------------------------------

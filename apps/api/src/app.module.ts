@@ -39,6 +39,7 @@ import { HajjOpsModule } from './modules/hajj-ops/hajj-ops.module';
 import { GovernanceModule } from './modules/governance/governance.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { DataModule } from './modules/data/data.module';
+import { AiModule } from './modules/ai/ai.module';
 
 @Module({
   imports: [
@@ -77,6 +78,7 @@ import { DataModule } from './modules/data/data.module';
     GovernanceModule,
     DashboardModule,
     DataModule,
+    AiModule,
   ],
   controllers: [AppController],
   providers: [

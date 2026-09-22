@@ -115,6 +115,14 @@ class EnvironmentVariables {
   @IsOptional()
   @IsString()
   PUBLIC_WEB_ORIGIN?: string;
+
+  @IsOptional()
+  @IsString()
+  AI_PROVIDER?: string; // 'mock' (default) | 'openai-compatible'
+
+  @IsOptional()
+  @IsString()
+  AI_API_KEY?: string;
 }
 
 export function validateEnv(config: Record<string, unknown>) {
