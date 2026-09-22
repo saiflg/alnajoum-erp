@@ -11,7 +11,11 @@ import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 export class ReceiptsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async renderPaymentReceipt(paymentId: string, ownerCustomerId?: string) {
+  async renderPaymentReceipt(
+    paymentId: string,
+    ownerCustomerId?: string,
+    tenantCompanyId?: string,
+  ) {
     const payment = await this.prisma.payment.findUnique({
       where: { id: paymentId },
       include: {
@@ -32,6 +36,23 @@ export class ReceiptsService {
       throw new NotFoundException('Payment not found');
     }
     if (ownerCustomerId && payment.invoice.customerId !== ownerCustomerId) {
+      throw new NotFoundException('Payment not found');
+    }
+    // Same NotFound-not-Forbidden tenant reasoning used throughout this
+    // codebase — before this, any staff member holding INVOICE.READ from
+    // ANY company could download another tenant's payment receipt PDF by
+    // guessing a paymentId. Scoped only for a customer-billed invoice
+    // (the common case, invoice.customerId set) — a corporate-billed
+    // invoice (invoice.corporateBooking, no customerId) has no tenant
+    // isolation anywhere else in this codebase yet either
+    // (CorporateAccount has no companyId of its own, only an optional
+    // managedBranchId), so this deliberately doesn't invent a new policy
+    // for that path here.
+    if (
+      tenantCompanyId !== undefined &&
+      payment.invoice.customerId !== null &&
+      payment.invoice.customer?.companyId !== tenantCompanyId
+    ) {
       throw new NotFoundException('Payment not found');
     }
 
@@ -97,11 +118,17 @@ export class ReceiptsService {
     doc
       .fontSize(12)
       .fillColor('#0f172a')
-      .text(`Amount paid: ${invoice.currency} ${payment.amount.toLocaleString()}`)
+      .text(
+        `Amount paid: ${invoice.currency} ${payment.amount.toLocaleString()}`,
+      )
       .fontSize(10)
       .fillColor('#475569')
-      .text(`Invoice total: ${invoice.currency} ${invoice.totalAmount.toLocaleString()}`)
-      .text(`Remaining balance: ${invoice.currency} ${balance.toLocaleString()}`)
+      .text(
+        `Invoice total: ${invoice.currency} ${invoice.totalAmount.toLocaleString()}`,
+      )
+      .text(
+        `Remaining balance: ${invoice.currency} ${balance.toLocaleString()}`,
+      )
       .moveDown(2);
 
     doc

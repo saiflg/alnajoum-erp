@@ -22,6 +22,8 @@ describe('ManifestService (spec #17/#18/#20 — group manifest export)', () => {
         lastName: 'Yusuf',
         passportNumber: 'A001',
         pilgrimCode: 'PLG-1',
+        customer: { companyId: 'company-a' },
+        familyMember: null,
       },
       {
         id: 'p2',
@@ -31,6 +33,8 @@ describe('ManifestService (spec #17/#18/#20 — group manifest export)', () => {
         lastName: 'Yusuf',
         passportNumber: null,
         pilgrimCode: null,
+        customer: null,
+        familyMember: { customer: { companyId: 'company-a' } },
       },
     ],
     roomAllocations: [
@@ -71,6 +75,35 @@ describe('ManifestService (spec #17/#18/#20 — group manifest export)', () => {
     await expect(
       service.renderCsv(PilgrimType.HAJJ, 'missing'),
     ).rejects.toThrow(NotFoundException);
+  });
+
+  /** Regression: a manifest carries every pilgrim's passport number, so a
+   * group belonging to a different company must 404, not leak — same
+   * NotFound-not-Forbidden reasoning as every other tenant-scoped
+   * findOne in this codebase. */
+  describe('tenant isolation', () => {
+    it('404s a group belonging to a different company', async () => {
+      await expect(
+        service.renderCsv(PilgrimType.HAJJ, 'group-1', 'company-b'),
+      ).rejects.toThrow(NotFoundException);
+      await expect(
+        service.renderPdf(PilgrimType.HAJJ, 'group-1', 'company-b'),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('serves the manifest when the caller belongs to the same company', async () => {
+      const { content } = await service.renderCsv(
+        PilgrimType.HAJJ,
+        'group-1',
+        'company-a',
+      );
+      expect(content).toContain('Amina Yusuf');
+    });
+
+    it('applies no tenant filter when none is given (SUPER_ADMIN)', async () => {
+      const { content } = await service.renderCsv(PilgrimType.HAJJ, 'group-1');
+      expect(content).toContain('Amina Yusuf');
+    });
   });
 
   it('includes every pilgrim, their room (or "Unassigned"), and their live readiness in the CSV', async () => {

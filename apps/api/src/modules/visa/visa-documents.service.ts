@@ -98,27 +98,88 @@ export class VisaDocumentsService {
     return document;
   }
 
-  listForApplication(applicationId: string) {
+  async listForApplication(applicationId: string, tenantCompanyId?: string) {
+    if (tenantCompanyId !== undefined) {
+      const application = await this.prisma.visaApplication.findUnique({
+        where: { id: applicationId },
+        select: { customer: { select: { companyId: true } } },
+      });
+      if (!application || application.customer.companyId !== tenantCompanyId) {
+        throw new NotFoundException('Visa application not found');
+      }
+    }
     return this.prisma.visaDocument.findMany({
       where: { applicationId },
       orderBy: { createdAt: 'desc' },
     });
   }
 
-  listForGuarantor(guarantorId: string) {
+  async listForGuarantor(guarantorId: string, tenantCompanyId?: string) {
+    if (tenantCompanyId !== undefined) {
+      const guarantor = await this.prisma.guarantor.findUnique({
+        where: { id: guarantorId },
+        select: {
+          application: {
+            select: { customer: { select: { companyId: true } } },
+          },
+        },
+      });
+      if (
+        !guarantor ||
+        guarantor.application?.customer.companyId !== tenantCompanyId
+      ) {
+        throw new NotFoundException('Guarantor not found');
+      }
+    }
     return this.prisma.visaDocument.findMany({
       where: { guarantorId },
       orderBy: { createdAt: 'desc' },
     });
   }
 
-  async getDocument(id: string, ownerCustomerId?: string) {
+  /**
+   * `tenantCompanyId` is resolveTenantFilter(user) from the admin
+   * controllers — undefined only for SUPER_ADMIN. A visa document hangs
+   * off either an application or a guarantor (never both), so both paths
+   * to the owning Customer's companyId are checked. Same NotFound-not-
+   * Forbidden reasoning as every other tenant-scoped lookup in this
+   * codebase: before this, any staff member holding VISA.VIEW — from ANY
+   * company — could download, review, or delete another tenant's
+   * passport/visa documents just by guessing/incrementing a documentId.
+   */
+  async getDocument(
+    id: string,
+    ownerCustomerId?: string,
+    tenantCompanyId?: string,
+  ) {
     const document = await this.prisma.visaDocument.findUnique({
       where: { id },
-      include: { application: { select: { customerId: true } } },
+      include: {
+        application: {
+          select: {
+            customerId: true,
+            customer: { select: { companyId: true } },
+          },
+        },
+        guarantor: {
+          include: {
+            application: {
+              select: { customer: { select: { companyId: true } } },
+            },
+          },
+        },
+      },
     });
     if (!document) {
       throw new NotFoundException('Document not found');
+    }
+    if (tenantCompanyId !== undefined) {
+      const companyId =
+        document.application?.customer.companyId ??
+        document.guarantor?.application?.customer.companyId;
+      if (companyId !== tenantCompanyId) {
+        throw new NotFoundException('Document not found');
+      }
     }
     if (
       ownerCustomerId &&
@@ -136,8 +197,9 @@ export class VisaDocumentsService {
     status: VisaDocumentStatus,
     reviewNote: string | undefined,
     reviewedByStaffId: string,
+    tenantCompanyId?: string,
   ) {
-    const document = await this.getDocument(id);
+    const document = await this.getDocument(id, undefined, tenantCompanyId);
     const updated = await this.prisma.visaDocument.update({
       where: { id },
       data: {
@@ -232,8 +294,12 @@ export class VisaDocumentsService {
     return { expired, expiringSoon };
   }
 
-  async deleteDocument(id: string, actorIdentityId?: string) {
-    const document = await this.getDocument(id);
+  async deleteDocument(
+    id: string,
+    actorIdentityId?: string,
+    tenantCompanyId?: string,
+  ) {
+    const document = await this.getDocument(id, undefined, tenantCompanyId);
     await this.prisma.visaDocument.delete({ where: { id } });
     await fs.promises
       .unlink(

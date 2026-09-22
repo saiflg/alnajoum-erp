@@ -4,7 +4,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createHmac } from 'crypto';
+import { createHmac, timingSafeEqual } from 'crypto';
 import { IntegrationsService } from '../../integrations/integrations.service';
 import {
   InitiateCheckoutInput,
@@ -66,7 +66,8 @@ export class PaystackPaymentProviderService implements PaymentProviderPort {
       'paystack',
     );
     const key =
-      dbConfig?.secretKey || this.configService.get<string>('PAYSTACK_SECRET_KEY');
+      dbConfig?.secretKey ||
+      this.configService.get<string>('PAYSTACK_SECRET_KEY');
     if (!key) {
       throw new ServiceUnavailableException(
         'PAYMENT_PROVIDER=paystack but no secret key is configured. Add one at /admin/integrations, or set PAYSTACK_SECRET_KEY.',
@@ -152,6 +153,16 @@ export class PaystackPaymentProviderService implements PaymentProviderPort {
     const expected = createHmac('sha512', await this.getSecretKey())
       .update(rawBody)
       .digest('hex');
-    return expected === signature;
+    // Constant-time comparison — a plain === leaks how many leading hex
+    // characters matched via response-time differences, a real (if narrow)
+    // timing side-channel for a signature check. Length must match first:
+    // timingSafeEqual throws on differently-sized buffers rather than
+    // returning false.
+    const expectedBuf = Buffer.from(expected, 'hex');
+    const signatureBuf = Buffer.from(signature, 'hex');
+    return (
+      expectedBuf.length === signatureBuf.length &&
+      timingSafeEqual(expectedBuf, signatureBuf)
+    );
   }
 }

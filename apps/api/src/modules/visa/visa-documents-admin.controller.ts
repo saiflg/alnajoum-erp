@@ -22,6 +22,7 @@ import {
   documentFilePath,
 } from '../../common/documents/document-storage.util';
 import type { AuthContext } from '../../common/interfaces/auth-context.interface';
+import { resolveTenantFilter } from '../../common/utils/tenant.util';
 import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { UsersService } from '../users/users.service';
 import { ReviewVisaDocumentDto } from './dto/review-visa-document.dto';
@@ -88,23 +89,40 @@ export class VisaDocumentsAdminController {
 
   @Get('application/:applicationId')
   @RequirePermissions(PERMISSIONS.VISA.VIEW)
-  listForApplication(@Param('applicationId') applicationId: string) {
-    return this.visaDocumentsService.listForApplication(applicationId);
+  listForApplication(
+    @CurrentUser() user: AuthContext,
+    @Param('applicationId') applicationId: string,
+  ) {
+    return this.visaDocumentsService.listForApplication(
+      applicationId,
+      resolveTenantFilter(user),
+    );
   }
 
   @Get('guarantor/:guarantorId')
   @RequirePermissions(PERMISSIONS.VISA.VIEW)
-  listForGuarantor(@Param('guarantorId') guarantorId: string) {
-    return this.visaDocumentsService.listForGuarantor(guarantorId);
+  listForGuarantor(
+    @CurrentUser() user: AuthContext,
+    @Param('guarantorId') guarantorId: string,
+  ) {
+    return this.visaDocumentsService.listForGuarantor(
+      guarantorId,
+      resolveTenantFilter(user),
+    );
   }
 
   @Get(':documentId/file')
   @RequirePermissions(PERMISSIONS.VISA.VIEW)
   async download(
+    @CurrentUser() user: AuthContext,
     @Param('documentId') documentId: string,
     @Res({ passthrough: true }) res: Response,
   ): Promise<StreamableFile> {
-    const document = await this.visaDocumentsService.getDocument(documentId);
+    const document = await this.visaDocumentsService.getDocument(
+      documentId,
+      undefined,
+      resolveTenantFilter(user),
+    );
     res.set({
       'Content-Type': document.mimeType,
       'Content-Disposition': `inline; filename="${document.originalFileName}"`,
@@ -132,6 +150,7 @@ export class VisaDocumentsAdminController {
       dto.status,
       dto.reviewNote,
       staffId,
+      resolveTenantFilter(user),
     );
   }
 
@@ -141,7 +160,11 @@ export class VisaDocumentsAdminController {
     @CurrentUser() user: AuthContext,
     @Param('documentId') documentId: string,
   ) {
-    await this.visaDocumentsService.deleteDocument(documentId, user.sub);
+    await this.visaDocumentsService.deleteDocument(
+      documentId,
+      user.sub,
+      resolveTenantFilter(user),
+    );
     return { deleted: true };
   }
 }

@@ -11,6 +11,7 @@ import { TaskRelatedType, TaskStatus } from '@prisma/client';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import type { AuthContext } from '../../common/interfaces/auth-context.interface';
+import { resolveTenantFilter } from '../../common/utils/tenant.util';
 import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { UsersService } from '../users/users.service';
 import { CreateTaskDto } from './dto/create-task.dto';
@@ -55,19 +56,23 @@ export class TasksController {
   @Get()
   @RequirePermissions(PERMISSIONS.CRM.TASK_MANAGE)
   listAll(
+    @CurrentUser() user: AuthContext,
     @Query('assignedStaffId') assignedStaffId?: string,
     @Query('status') status?: TaskStatus,
     @Query('customerId') customerId?: string,
     @Query('leadId') leadId?: string,
     @Query('relatedType') relatedType?: TaskRelatedType,
   ) {
-    return this.tasksService.listAll({
-      assignedStaffId,
-      status,
-      customerId,
-      leadId,
-      relatedType,
-    });
+    return this.tasksService.listAll(
+      {
+        assignedStaffId,
+        status,
+        customerId,
+        leadId,
+        relatedType,
+      },
+      resolveTenantFilter(user),
+    );
   }
 
   @Post(':id/status')
@@ -77,7 +82,7 @@ export class TasksController {
     @Body() body: { status: TaskStatus },
   ) {
     const staffId = await this.requireStaffId(user);
-    const task = await this.tasksService.get(id);
+    const task = await this.tasksService.get(id, resolveTenantFilter(user));
     if (
       task.assignedStaffId !== staffId &&
       !user.permissions.includes(PERMISSIONS.CRM.TASK_MANAGE)
@@ -86,6 +91,10 @@ export class TasksController {
         'You can only update your own tasks without CRM.TASK_MANAGE',
       );
     }
-    return this.tasksService.updateStatus(id, body.status);
+    return this.tasksService.updateStatus(
+      id,
+      body.status,
+      resolveTenantFilter(user),
+    );
   }
 }

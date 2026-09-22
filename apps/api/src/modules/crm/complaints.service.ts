@@ -37,9 +37,17 @@ export class ComplaintsService {
     return complaint;
   }
 
-  listAll(filters: { status?: ComplaintStatus; assignedStaffId?: string }) {
+  listAll(
+    filters: { status?: ComplaintStatus; assignedStaffId?: string },
+    tenantCompanyId?: string,
+  ) {
     return this.prisma.complaint.findMany({
-      where: filters,
+      where: {
+        ...filters,
+        ...(tenantCompanyId !== undefined && {
+          customer: { companyId: tenantCompanyId },
+        }),
+      },
       include: {
         customer: { select: { firstName: true, lastName: true } },
         assignedStaff: { select: { firstName: true, lastName: true } },
@@ -55,11 +63,23 @@ export class ComplaintsService {
     });
   }
 
-  async get(id: string) {
+  /** Same NotFound-not-Forbidden tenant reasoning used throughout this
+   * codebase — before this, any staff member holding CRM.COMPLAINT_MANAGE
+   * from ANY company could read, assign, note, resolve, or escalate
+   * another tenant's complaint by id. Complaint.customerId is required,
+   * so customer.companyId is always a reliable tenant anchor here. */
+  async get(id: string, tenantCompanyId?: string) {
     const complaint = await this.prisma.complaint.findUnique({
       where: { id },
       include: {
-        customer: { select: { id: true, firstName: true, lastName: true } },
+        customer: {
+          select: {
+            id: true,
+            companyId: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
         assignedStaff: { select: { firstName: true, lastName: true } },
         notes: {
           orderBy: { createdAt: 'desc' },
@@ -69,22 +89,32 @@ export class ComplaintsService {
         },
       },
     });
-    if (!complaint) {
+    if (
+      !complaint ||
+      (tenantCompanyId !== undefined &&
+        complaint.customer.companyId !== tenantCompanyId)
+    ) {
       throw new NotFoundException('Complaint not found');
     }
     return complaint;
   }
 
-  async assign(id: string, staffId: string) {
-    await this.get(id);
+  async assign(id: string, staffId: string, tenantCompanyId?: string) {
+    await this.get(id, tenantCompanyId);
     return this.prisma.complaint.update({
       where: { id },
       data: { assignedStaffId: staffId, status: ComplaintStatus.ASSIGNED },
     });
   }
 
-  async addNote(id: string, note: string, staffId: string, isInternal = true) {
-    await this.get(id);
+  async addNote(
+    id: string,
+    note: string,
+    staffId: string,
+    isInternal = true,
+    tenantCompanyId?: string,
+  ) {
+    await this.get(id, tenantCompanyId);
     if (isInternal) {
       await this.prisma.complaint.update({
         where: { id },
@@ -96,8 +126,8 @@ export class ComplaintsService {
     });
   }
 
-  async resolve(id: string, resolution: string) {
-    const complaint = await this.get(id);
+  async resolve(id: string, resolution: string, tenantCompanyId?: string) {
+    const complaint = await this.get(id, tenantCompanyId);
     const updated = await this.prisma.complaint.update({
       where: { id },
       data: {
@@ -124,8 +154,8 @@ export class ComplaintsService {
   }
 
   /** Spec #25 — a role name (SYSTEM_ROLES value), not a specific staff member, so it applies regardless of who's on duty. */
-  async escalate(id: string, toRole: string) {
-    await this.get(id);
+  async escalate(id: string, toRole: string, tenantCompanyId?: string) {
+    await this.get(id, tenantCompanyId);
     return this.prisma.complaint.update({
       where: { id },
       data: { status: ComplaintStatus.ESCALATED, escalatedTo: toRole },

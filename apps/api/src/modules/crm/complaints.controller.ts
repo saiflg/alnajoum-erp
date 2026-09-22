@@ -11,6 +11,7 @@ import { ComplaintStatus } from '@prisma/client';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import type { AuthContext } from '../../common/interfaces/auth-context.interface';
+import { resolveTenantFilter } from '../../common/utils/tenant.util';
 import { CustomersService } from '../customers/customers.service';
 import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { UsersService } from '../users/users.service';
@@ -58,22 +59,34 @@ export class ComplaintsController {
   @Get()
   @RequirePermissions(PERMISSIONS.CRM.COMPLAINT_MANAGE)
   listAll(
+    @CurrentUser() user: AuthContext,
     @Query('status') status?: ComplaintStatus,
     @Query('assignedStaffId') assignedStaffId?: string,
   ) {
-    return this.complaintsService.listAll({ status, assignedStaffId });
+    return this.complaintsService.listAll(
+      { status, assignedStaffId },
+      resolveTenantFilter(user),
+    );
   }
 
   @Get(':id')
   @RequirePermissions(PERMISSIONS.CRM.COMPLAINT_MANAGE)
-  get(@Param('id') id: string) {
-    return this.complaintsService.get(id);
+  get(@CurrentUser() user: AuthContext, @Param('id') id: string) {
+    return this.complaintsService.get(id, resolveTenantFilter(user));
   }
 
   @Post(':id/assign')
   @RequirePermissions(PERMISSIONS.CRM.COMPLAINT_MANAGE)
-  assign(@Param('id') id: string, @Body() body: { staffId: string }) {
-    return this.complaintsService.assign(id, body.staffId);
+  assign(
+    @CurrentUser() user: AuthContext,
+    @Param('id') id: string,
+    @Body() body: { staffId: string },
+  ) {
+    return this.complaintsService.assign(
+      id,
+      body.staffId,
+      resolveTenantFilter(user),
+    );
   }
 
   @Post(':id/notes')
@@ -89,18 +102,35 @@ export class ComplaintsController {
       body.note,
       staffId,
       body.isInternal ?? true,
+      resolveTenantFilter(user),
     );
   }
 
   @Post(':id/resolve')
   @RequirePermissions(PERMISSIONS.CRM.COMPLAINT_MANAGE)
-  resolve(@Param('id') id: string, @Body() body: { resolution: string }) {
-    return this.complaintsService.resolve(id, body.resolution);
+  resolve(
+    @CurrentUser() user: AuthContext,
+    @Param('id') id: string,
+    @Body() body: { resolution: string },
+  ) {
+    return this.complaintsService.resolve(
+      id,
+      body.resolution,
+      resolveTenantFilter(user),
+    );
   }
 
   @Post(':id/escalate')
   @RequirePermissions(PERMISSIONS.CRM.COMPLAINT_MANAGE)
-  escalate(@Param('id') id: string, @Body() body: { toRole: string }) {
-    return this.complaintsService.escalate(id, body.toRole);
+  escalate(
+    @CurrentUser() user: AuthContext,
+    @Param('id') id: string,
+    @Body() body: { toRole: string },
+  ) {
+    return this.complaintsService.escalate(
+      id,
+      body.toRole,
+      resolveTenantFilter(user),
+    );
   }
 }

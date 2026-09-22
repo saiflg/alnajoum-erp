@@ -138,6 +138,60 @@ describe('TasksService', () => {
     });
   });
 
+  /**
+   * Regression — before this fix, get()/updateStatus()/listAll() took no
+   * tenant argument at all, so any staff member holding CRM.TASK_MANAGE
+   * from ANY company could read or update another tenant's task by id.
+   */
+  describe('tenant isolation', () => {
+    it('get() 404s a task assigned to staff at a different company', async () => {
+      prisma.task.findUnique.mockResolvedValue({
+        id: 'task-1',
+        assignedStaffId: 'staff-1',
+        assignedStaff: { companyId: 'company-a' },
+      });
+
+      await expect(service.get('task-1', 'company-b')).rejects.toThrow(
+        'Task not found',
+      );
+    });
+
+    it('get() returns the task when the caller belongs to the same company', async () => {
+      prisma.task.findUnique.mockResolvedValue({
+        id: 'task-1',
+        assignedStaffId: 'staff-1',
+        assignedStaff: { companyId: 'company-a' },
+      });
+
+      await expect(service.get('task-1', 'company-a')).resolves.toEqual(
+        expect.objectContaining({ id: 'task-1' }),
+      );
+    });
+
+    it('listAll() scopes through assignedStaff.companyId when a tenant filter is given', async () => {
+      prisma.task.findMany.mockResolvedValue([]);
+
+      await service.listAll({}, 'company-a');
+
+      expect(prisma.task.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            assignedStaff: { companyId: 'company-a' },
+          }),
+        }),
+      );
+    });
+
+    it('listAll() applies no tenant filter when none is given (SUPER_ADMIN)', async () => {
+      prisma.task.findMany.mockResolvedValue([]);
+
+      await service.listAll({});
+
+      const call = prisma.task.findMany.mock.calls[0][0];
+      expect(call.where).not.toHaveProperty('assignedStaff');
+    });
+  });
+
   describe('myTasks', () => {
     it('buckets into today/upcoming/overdue/completed', async () => {
       prisma.task.findMany

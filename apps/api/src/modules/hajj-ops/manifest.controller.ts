@@ -8,7 +8,10 @@ import {
 } from '@nestjs/common';
 import { PilgrimType } from '@prisma/client';
 import type { Response } from 'express';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
+import type { AuthContext } from '../../common/interfaces/auth-context.interface';
+import { resolveTenantFilter } from '../../common/utils/tenant.util';
 import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { ManifestService } from './manifest.service';
 
@@ -20,11 +23,16 @@ export class ManifestController {
   @Get(':type/:groupId/pdf')
   @RequirePermissions(PERMISSIONS.HAJJ_OPS.MANIFEST_VIEW)
   async pdf(
+    @CurrentUser() user: AuthContext,
     @Param('type', new ParseEnumPipe(PilgrimType)) type: PilgrimType,
     @Param('groupId') groupId: string,
     @Res({ passthrough: true }) res: Response,
   ): Promise<StreamableFile> {
-    const { stream, filename } = await this.service.renderPdf(type, groupId);
+    const { stream, filename } = await this.service.renderPdf(
+      type,
+      groupId,
+      resolveTenantFilter(user),
+    );
     res.set({
       'Content-Type': 'application/pdf',
       'Content-Disposition': `attachment; filename="${filename}"`,
@@ -35,11 +43,16 @@ export class ManifestController {
   @Get(':type/:groupId/csv')
   @RequirePermissions(PERMISSIONS.HAJJ_OPS.MANIFEST_VIEW)
   async csv(
+    @CurrentUser() user: AuthContext,
     @Param('type', new ParseEnumPipe(PilgrimType)) type: PilgrimType,
     @Param('groupId') groupId: string,
     @Res({ passthrough: true }) res: Response,
   ): Promise<StreamableFile> {
-    const { content, filename } = await this.service.renderCsv(type, groupId);
+    const { content, filename } = await this.service.renderCsv(
+      type,
+      groupId,
+      resolveTenantFilter(user),
+    );
     res.set({
       'Content-Type': 'text/csv',
       'Content-Disposition': `attachment; filename="${filename}"`,

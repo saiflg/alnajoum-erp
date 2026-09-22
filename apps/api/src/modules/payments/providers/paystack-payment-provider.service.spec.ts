@@ -174,9 +174,9 @@ describe('PaystackPaymentProviderService', () => {
         .update(rawBody)
         .digest('hex');
 
-      await expect(service.verifyWebhookSignature(rawBody, signature)).resolves.toBe(
-        true,
-      );
+      await expect(
+        service.verifyWebhookSignature(rawBody, signature),
+      ).resolves.toBe(true);
     });
 
     it('rejects a body signed with the wrong key', async () => {
@@ -185,9 +185,9 @@ describe('PaystackPaymentProviderService', () => {
         .update(rawBody)
         .digest('hex');
 
-      await expect(service.verifyWebhookSignature(rawBody, signature)).resolves.toBe(
-        false,
-      );
+      await expect(
+        service.verifyWebhookSignature(rawBody, signature),
+      ).resolves.toBe(false);
     });
 
     it('rejects a missing signature header', async () => {
@@ -195,6 +195,17 @@ describe('PaystackPaymentProviderService', () => {
 
       await expect(
         service.verifyWebhookSignature(rawBody, undefined),
+      ).resolves.toBe(false);
+    });
+
+    /** Regression: timingSafeEqual throws on mismatched buffer lengths —
+     * a malformed/truncated header must resolve false, not crash the
+     * webhook endpoint into a 500. */
+    it('rejects a malformed signature header without throwing', async () => {
+      const rawBody = Buffer.from(JSON.stringify({ event: 'charge.success' }));
+
+      await expect(
+        service.verifyWebhookSignature(rawBody, 'not-a-real-signature'),
       ).resolves.toBe(false);
     });
   });

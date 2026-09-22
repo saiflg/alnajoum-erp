@@ -85,15 +85,26 @@ export class TasksService {
     });
   }
 
-  listAll(filters: {
-    assignedStaffId?: string;
-    status?: TaskStatus;
-    customerId?: string;
-    leadId?: string;
-    relatedType?: TaskRelatedType;
-  }) {
+  listAll(
+    filters: {
+      assignedStaffId?: string;
+      status?: TaskStatus;
+      customerId?: string;
+      leadId?: string;
+      relatedType?: TaskRelatedType;
+    },
+    tenantCompanyId?: string,
+  ) {
     return this.prisma.task.findMany({
-      where: filters,
+      where: {
+        ...filters,
+        // assignedStaffId is required on every Task, so this is always a
+        // reliable tenant anchor — unlike customerId/leadId, which are
+        // optional.
+        ...(tenantCompanyId !== undefined && {
+          assignedStaff: { companyId: tenantCompanyId },
+        }),
+      },
       include: {
         assignedStaff: { select: { firstName: true, lastName: true } },
         customer: { select: { firstName: true, lastName: true } },
@@ -152,16 +163,28 @@ export class TasksService {
     return { today, upcoming, overdue, completed };
   }
 
-  async get(id: string) {
-    const task = await this.prisma.task.findUnique({ where: { id } });
-    if (!task) {
+  /** Same NotFound-not-Forbidden tenant reasoning used throughout this
+   * codebase — before this, any staff member holding CRM.TASK_MANAGE from
+   * ANY company could read or update another tenant's task by id, since
+   * only a same-company-or-not "is this my own task" check existed, not
+   * a tenant check at all. */
+  async get(id: string, tenantCompanyId?: string) {
+    const task = await this.prisma.task.findUnique({
+      where: { id },
+      include: { assignedStaff: { select: { companyId: true } } },
+    });
+    if (
+      !task ||
+      (tenantCompanyId !== undefined &&
+        task.assignedStaff.companyId !== tenantCompanyId)
+    ) {
       throw new NotFoundException('Task not found');
     }
     return task;
   }
 
-  async updateStatus(id: string, status: TaskStatus) {
-    const task = await this.get(id);
+  async updateStatus(id: string, status: TaskStatus, tenantCompanyId?: string) {
+    const task = await this.get(id, tenantCompanyId);
     if (
       task.status === TaskStatus.COMPLETED ||
       task.status === TaskStatus.CANCELLED

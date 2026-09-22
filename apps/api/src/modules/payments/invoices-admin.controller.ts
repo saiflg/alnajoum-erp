@@ -68,11 +68,16 @@ export class InvoicesAdminController {
   @Get('payments/:paymentId/receipt.pdf')
   @RequirePermissions(PERMISSIONS.INVOICE.READ)
   async downloadReceipt(
+    @CurrentUser() user: AuthContext,
     @Param('paymentId') paymentId: string,
     @Res({ passthrough: true }) res: Response,
   ): Promise<StreamableFile> {
     const { stream, filename } =
-      await this.receiptsService.renderPaymentReceipt(paymentId);
+      await this.receiptsService.renderPaymentReceipt(
+        paymentId,
+        undefined,
+        resolveTenantFilter(user),
+      );
     res.set({
       'Content-Type': 'application/pdf',
       'Content-Disposition': `attachment; filename="${filename}"`,

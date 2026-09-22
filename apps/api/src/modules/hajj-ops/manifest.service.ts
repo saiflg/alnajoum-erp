@@ -38,16 +38,45 @@ export class ManifestService {
     private readonly readinessService: ReadinessService,
   ) {}
 
+  /** Every pilgrim carries either customerId or familyMemberId (never
+   * both) — this resolves either path to the owning Customer's companyId,
+   * same join HajjRegistration.customer/FamilyMember.customer already use
+   * elsewhere for tenant scoping. */
+  private tenantMatches(
+    pilgrim: {
+      customer: { companyId: string } | null;
+      familyMember: { customer: { companyId: string } } | null;
+    },
+    tenantCompanyId: string,
+  ): boolean {
+    const companyId =
+      pilgrim.customer?.companyId ?? pilgrim.familyMember?.customer.companyId;
+    return companyId === tenantCompanyId;
+  }
+
+  /** Same NotFound-not-Forbidden tenant reasoning used throughout this
+   * codebase (e.g. FlightsService.getBooking) — a group belonging to a
+   * different company must come back indistinguishable from a missing
+   * one, never a value or a Forbidden that would confirm the id exists.
+   * A manifest holds every pilgrim's passport number, so this is the one
+   * check standing between HAJJ_OPS.MANIFEST_VIEW and cross-tenant
+   * passport data. */
   private async buildRows(
     groupType: PilgrimType,
     groupId: string,
+    tenantCompanyId?: string,
   ): Promise<{ groupNumber: string; groupName: string; rows: ManifestRow[] }> {
+    const pilgrimInclude = {
+      customer: { select: { companyId: true } },
+      familyMember: { include: { customer: { select: { companyId: true } } } },
+    } as const;
+
     const group =
       groupType === PilgrimType.HAJJ
         ? await this.prisma.hajjGroup.findUnique({
             where: { id: groupId },
             include: {
-              pilgrims: true,
+              pilgrims: { include: pilgrimInclude },
               roomAllocations: {
                 include: { occupants: true, hotelBooking: true },
               },
@@ -56,13 +85,17 @@ export class ManifestService {
         : await this.prisma.umrahGroup.findUnique({
             where: { id: groupId },
             include: {
-              pilgrims: true,
+              pilgrims: { include: pilgrimInclude },
               roomAllocations: {
                 include: { occupants: true, hotelBooking: true },
               },
             },
           });
-    if (!group) {
+    if (
+      !group ||
+      (tenantCompanyId !== undefined &&
+        !group.pilgrims.some((p) => this.tenantMatches(p, tenantCompanyId)))
+    ) {
       throw new NotFoundException('Group not found');
     }
 
@@ -123,10 +156,15 @@ export class ManifestService {
     return { groupNumber: group.groupNumber, groupName: group.name, rows };
   }
 
-  async renderPdf(groupType: PilgrimType, groupId: string) {
+  async renderPdf(
+    groupType: PilgrimType,
+    groupId: string,
+    tenantCompanyId?: string,
+  ) {
     const { groupNumber, groupName, rows } = await this.buildRows(
       groupType,
       groupId,
+      tenantCompanyId,
     );
 
     const doc = new PDFDocument({
@@ -186,8 +224,16 @@ export class ManifestService {
     return { stream: doc, filename: `manifest-${groupNumber}.pdf` };
   }
 
-  async renderCsv(groupType: PilgrimType, groupId: string) {
-    const { groupNumber, rows } = await this.buildRows(groupType, groupId);
+  async renderCsv(
+    groupType: PilgrimType,
+    groupId: string,
+    tenantCompanyId?: string,
+  ) {
+    const { groupNumber, rows } = await this.buildRows(
+      groupType,
+      groupId,
+      tenantCompanyId,
+    );
 
     const escape = (value: string) =>
       /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;

@@ -11,7 +11,13 @@ describe('VisaDocumentsService', () => {
   let prisma: {
     visaApplication: { findUnique: jest.Mock };
     guarantor: { findUnique: jest.Mock };
-    visaDocument: { create: jest.Mock; findMany: jest.Mock; findUnique: jest.Mock; update: jest.Mock; delete: jest.Mock };
+    visaDocument: {
+      create: jest.Mock;
+      findMany: jest.Mock;
+      findUnique: jest.Mock;
+      update: jest.Mock;
+      delete: jest.Mock;
+    };
   };
   let notificationsService: { sendDocumentExpiryNotice: jest.Mock };
 
@@ -50,7 +56,10 @@ describe('VisaDocumentsService', () => {
 
   describe('uploadForApplication', () => {
     it('records the document against the application', async () => {
-      prisma.visaApplication.findUnique.mockResolvedValue({ id: 'app-1', customerId: 'customer-1' });
+      prisma.visaApplication.findUnique.mockResolvedValue({
+        id: 'app-1',
+        customerId: 'customer-1',
+      });
       prisma.visaDocument.create.mockResolvedValue({ id: 'doc-1' });
 
       await service.uploadForApplication(
@@ -74,10 +83,20 @@ describe('VisaDocumentsService', () => {
     });
 
     it('rejects uploading to an application owned by a different customer', async () => {
-      prisma.visaApplication.findUnique.mockResolvedValue({ id: 'app-1', customerId: 'customer-1' });
+      prisma.visaApplication.findUnique.mockResolvedValue({
+        id: 'app-1',
+        customerId: 'customer-1',
+      });
 
       await expect(
-        service.uploadForApplication('app-1', file, DocumentType.PASSPORT, undefined, 'identity-1', 'someone-else'),
+        service.uploadForApplication(
+          'app-1',
+          file,
+          DocumentType.PASSPORT,
+          undefined,
+          'identity-1',
+          'someone-else',
+        ),
       ).rejects.toThrow(ForbiddenException);
     });
 
@@ -85,17 +104,34 @@ describe('VisaDocumentsService', () => {
       prisma.visaApplication.findUnique.mockResolvedValue(null);
 
       await expect(
-        service.uploadForApplication('missing', file, DocumentType.PASSPORT, undefined, 'identity-1'),
+        service.uploadForApplication(
+          'missing',
+          file,
+          DocumentType.PASSPORT,
+          undefined,
+          'identity-1',
+        ),
       ).rejects.toThrow(NotFoundException);
     });
   });
 
   describe('review', () => {
     it('marks a document VERIFIED with a review note and reviewer', async () => {
-      prisma.visaDocument.findUnique.mockResolvedValue({ id: 'doc-1', status: VisaDocumentStatus.PENDING_REVIEW });
-      prisma.visaDocument.update.mockResolvedValue({ id: 'doc-1', status: VisaDocumentStatus.VERIFIED });
+      prisma.visaDocument.findUnique.mockResolvedValue({
+        id: 'doc-1',
+        status: VisaDocumentStatus.PENDING_REVIEW,
+      });
+      prisma.visaDocument.update.mockResolvedValue({
+        id: 'doc-1',
+        status: VisaDocumentStatus.VERIFIED,
+      });
 
-      await service.review('doc-1', VisaDocumentStatus.VERIFIED, 'Clear and valid', 'staff-1');
+      await service.review(
+        'doc-1',
+        VisaDocumentStatus.VERIFIED,
+        'Clear and valid',
+        'staff-1',
+      );
 
       expect(prisma.visaDocument.update).toHaveBeenCalledWith({
         where: { id: 'doc-1' },
@@ -105,6 +141,117 @@ describe('VisaDocumentsService', () => {
           reviewedByStaffId: 'staff-1',
         }),
       });
+    });
+  });
+
+  /**
+   * Regression — before this fix, getDocument (and everything built on
+   * it: download, review, delete, listForApplication, listForGuarantor)
+   * took no tenant argument at all, so any staff member holding a visa
+   * permission from ANY company could read/review/delete another
+   * tenant's passport documents just by guessing a documentId. Same
+   * NotFound-not-Forbidden reasoning as every other tenant-scoped lookup
+   * in this codebase.
+   */
+  describe('tenant isolation', () => {
+    const docViaApplication = {
+      id: 'doc-1',
+      status: VisaDocumentStatus.PENDING_REVIEW,
+      storedFileName: 'uuid-1.jpg',
+      application: {
+        customerId: 'customer-1',
+        customer: { companyId: 'company-a' },
+      },
+      guarantor: null,
+    };
+    const docViaGuarantor = {
+      id: 'doc-2',
+      status: VisaDocumentStatus.PENDING_REVIEW,
+      storedFileName: 'uuid-2.jpg',
+      application: null,
+      guarantor: {
+        application: { customer: { companyId: 'company-a' } },
+      },
+    };
+
+    describe('getDocument', () => {
+      it('404s a document (via application) belonging to a different company', async () => {
+        prisma.visaDocument.findUnique.mockResolvedValue(docViaApplication);
+
+        await expect(
+          service.getDocument('doc-1', undefined, 'company-b'),
+        ).rejects.toThrow(NotFoundException);
+      });
+
+      it('404s a document (via guarantor) belonging to a different company', async () => {
+        prisma.visaDocument.findUnique.mockResolvedValue(docViaGuarantor);
+
+        await expect(
+          service.getDocument('doc-2', undefined, 'company-b'),
+        ).rejects.toThrow(NotFoundException);
+      });
+
+      it('returns the document when the caller belongs to the same company', async () => {
+        prisma.visaDocument.findUnique.mockResolvedValue(docViaApplication);
+
+        await expect(
+          service.getDocument('doc-1', undefined, 'company-a'),
+        ).resolves.toEqual(docViaApplication);
+      });
+
+      it('applies no tenant filter when none is given (SUPER_ADMIN)', async () => {
+        prisma.visaDocument.findUnique.mockResolvedValue(docViaApplication);
+
+        await expect(service.getDocument('doc-1')).resolves.toEqual(
+          docViaApplication,
+        );
+      });
+    });
+
+    it('review 404s a cross-tenant document instead of updating it', async () => {
+      prisma.visaDocument.findUnique.mockResolvedValue(docViaApplication);
+
+      await expect(
+        service.review(
+          'doc-1',
+          VisaDocumentStatus.VERIFIED,
+          undefined,
+          'staff-1',
+          'company-b',
+        ),
+      ).rejects.toThrow(NotFoundException);
+      expect(prisma.visaDocument.update).not.toHaveBeenCalled();
+    });
+
+    it('deleteDocument 404s a cross-tenant document instead of deleting it', async () => {
+      prisma.visaDocument.findUnique.mockResolvedValue(docViaApplication);
+
+      await expect(
+        service.deleteDocument('doc-1', 'identity-1', 'company-b'),
+      ).rejects.toThrow(NotFoundException);
+      expect(prisma.visaDocument.delete).not.toHaveBeenCalled();
+    });
+
+    it('listForApplication 404s an application belonging to a different company', async () => {
+      prisma.visaApplication.findUnique.mockResolvedValue({
+        customer: { companyId: 'company-a' },
+      });
+
+      await expect(
+        service.listForApplication('app-1', 'company-b'),
+      ).rejects.toThrow(NotFoundException);
+      expect(prisma.visaDocument.findMany).not.toHaveBeenCalled();
+    });
+
+    it('listForGuarantor 404s a guarantor belonging to a different company', async () => {
+      prisma.guarantor.findUnique.mockResolvedValue({
+        application: { customer: { companyId: 'company-a' } },
+      });
+
+      await expect(
+        service.listForGuarantor('guarantor-1', 'company-b'),
+      ).rejects.toThrow(NotFoundException);
+      expect(prisma.visaDocument.findMany).not.toHaveBeenCalled();
     });
   });
 
@@ -118,8 +265,12 @@ describe('VisaDocumentsService', () => {
           expiryDate: pastDate,
           application: {
             applicationReference: 'VISA-2026-000001',
-            customer: { identity: { id: 'cust-identity', email: 'amina@example.com' } },
-            assignedStaff: { identity: { id: 'staff-identity', email: 'staff@example.com' } },
+            customer: {
+              identity: { id: 'cust-identity', email: 'amina@example.com' },
+            },
+            assignedStaff: {
+              identity: { id: 'staff-identity', email: 'staff@example.com' },
+            },
           },
         },
       ]);
@@ -130,8 +281,12 @@ describe('VisaDocumentsService', () => {
         where: { id: 'doc-1' },
         data: { status: VisaDocumentStatus.EXPIRED },
       });
-      expect(notificationsService.sendDocumentExpiryNotice).toHaveBeenCalledTimes(2);
-      expect(notificationsService.sendDocumentExpiryNotice).toHaveBeenCalledWith(
+      expect(
+        notificationsService.sendDocumentExpiryNotice,
+      ).toHaveBeenCalledTimes(2);
+      expect(
+        notificationsService.sendDocumentExpiryNotice,
+      ).toHaveBeenCalledWith(
         'amina@example.com',
         'cust-identity',
         expect.objectContaining({ isExpired: true }),
@@ -148,7 +303,9 @@ describe('VisaDocumentsService', () => {
           expiryDate: soonDate,
           application: {
             applicationReference: 'VISA-2026-000002',
-            customer: { identity: { id: 'cust-identity', email: 'amina@example.com' } },
+            customer: {
+              identity: { id: 'cust-identity', email: 'amina@example.com' },
+            },
             assignedStaff: null,
           },
         },
@@ -157,7 +314,9 @@ describe('VisaDocumentsService', () => {
       const result = await service.checkExpiring();
 
       expect(prisma.visaDocument.update).not.toHaveBeenCalled();
-      expect(notificationsService.sendDocumentExpiryNotice).toHaveBeenCalledTimes(1);
+      expect(
+        notificationsService.sendDocumentExpiryNotice,
+      ).toHaveBeenCalledTimes(1);
       expect(result).toEqual({ expired: 0, expiringSoon: 1 });
     });
 
@@ -167,7 +326,9 @@ describe('VisaDocumentsService', () => {
       const result = await service.checkExpiring();
 
       expect(result).toEqual({ expired: 0, expiringSoon: 0 });
-      expect(notificationsService.sendDocumentExpiryNotice).not.toHaveBeenCalled();
+      expect(
+        notificationsService.sendDocumentExpiryNotice,
+      ).not.toHaveBeenCalled();
     });
   });
 });
