@@ -21,6 +21,6 @@ import { OpenAiCompatibleAiProviderService } from './providers/openai-compatible
     MockAiProviderService,
     OpenAiCompatibleAiProviderService,
   ],
-  exports: [AiAnalyticsService, AiUsageService],
+  exports: [AiAnalyticsService, AiUsageService, AiProviderRouter],
 })
 export class AiModule {}

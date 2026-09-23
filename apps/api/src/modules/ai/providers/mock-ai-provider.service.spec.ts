@@ -85,4 +85,13 @@ describe('MockAiProviderService', () => {
     const result = await service.complete({ system: '', prompt: 'Hello' });
     expect(result.text.toLowerCase()).toContain('mock');
   });
+
+  it('echoes the tail of a non-jsonMode prompt into a templated draft reply', async () => {
+    const result = await service.complete({
+      system: '',
+      prompt:
+        'You are replying to Amina Bello.\n\nCustomer\'s most recent message: "Can I move my flight to next week?"',
+    });
+    expect(result.text).toContain('Can I move my flight to next week?');
+  });
 });

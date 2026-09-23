@@ -51,6 +51,7 @@ export default function WhatsAppInboxPage() {
   const [reply, setReply] = useState('');
   const [isNote, setIsNote] = useState(false);
   const [sending, setSending] = useState(false);
+  const [suggesting, setSuggesting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState('');
 
@@ -92,6 +93,24 @@ export default function WhatsAppInboxPage() {
       setError(err instanceof ApiError ? err.message : 'Failed to send');
     } finally {
       setSending(false);
+    }
+  }
+
+  async function handleSuggestReply() {
+    if (!selectedId) return;
+    setSuggesting(true);
+    setError(null);
+    try {
+      const result = await apiRequest<{ suggestion: string; provider: string }>(
+        `/whatsapp/conversations/${selectedId}/suggest-reply`,
+        { method: 'POST' },
+      );
+      setIsNote(false);
+      setReply(result.suggestion);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to draft a suggestion');
+    } finally {
+      setSuggesting(false);
     }
   }
 
@@ -251,7 +270,7 @@ export default function WhatsAppInboxPage() {
                 </div>
 
                 <form onSubmit={handleSend} className="border-t border-slate-100 p-3">
-                  <div className="mb-2 flex items-center gap-2 text-xs">
+                  <div className="mb-2 flex items-center justify-between text-xs">
                     <label className="flex items-center gap-1 text-slate-500">
                       <input
                         type="checkbox"
@@ -260,6 +279,15 @@ export default function WhatsAppInboxPage() {
                       />
                       Internal note (never sent to the customer)
                     </label>
+                    <button
+                      type="button"
+                      onClick={handleSuggestReply}
+                      disabled={suggesting}
+                      title="AI drafts a reply for you to review and edit — it's never sent automatically"
+                      className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800 hover:bg-amber-100 disabled:opacity-50"
+                    >
+                      {suggesting ? 'Drafting…' : '✨ Suggest reply'}
+                    </button>
                   </div>
                   <div className="flex gap-2">
                     <input

@@ -18,6 +18,7 @@ import { UsersService } from '../users/users.service';
 import { AssignConversationDto } from './dto/assign-conversation.dto';
 import { SendReplyDto } from './dto/send-reply.dto';
 import { SetConversationStatusDto } from './dto/set-conversation-status.dto';
+import { WhatsAppAiReplySuggestionService } from './whatsapp-ai-reply-suggestion.service';
 import { WhatsAppConversationsService } from './whatsapp-conversations.service';
 
 /** Phase 14 spec #32/#64 — the staff WhatsApp inbox API. Every method is
@@ -28,6 +29,7 @@ export class WhatsAppAdminController {
   constructor(
     private readonly conversationsService: WhatsAppConversationsService,
     private readonly usersService: UsersService,
+    private readonly aiReplySuggestionService: WhatsAppAiReplySuggestionService,
   ) {}
 
   @Get()
@@ -82,6 +84,15 @@ export class WhatsAppAdminController {
       staffId ?? user.sub,
       resolveTenantFilter(user),
     );
+  }
+
+  /** Drafts a reply for staff to review/edit/send — never sends anything
+   * itself. Same permission as replying, since anyone who can send a
+   * reply can ask for a draft of one. */
+  @Post(':id/suggest-reply')
+  @RequirePermissions(PERMISSIONS.WHATSAPP.SEND)
+  suggestReply(@CurrentUser() user: AuthContext, @Param('id') id: string) {
+    return this.aiReplySuggestionService.suggestReply(id, user);
   }
 
   @Post(':id/notes')

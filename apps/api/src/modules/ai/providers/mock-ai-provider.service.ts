@@ -9,29 +9,55 @@ import {
  * Phase 13 spec #2/#43 — works with zero external credentials, so
  * localhost (and any deployment that hasn't configured a real AI
  * provider yet) can still exercise the whole AI layer end to end. Not a
- * real language model: for a jsonMode request (the only kind
- * AiAnalyticsService currently sends) it does keyword matching against
- * AnalyticsQueryRegistry's own query names rather than free-form
- * generation — deliberately rule-based rather than a canned-response
- * stub, so it genuinely demonstrates the intent-classification flow spec
- * #8 asks for ("convert natural-language requests into safe queries"),
- * just with pattern matching standing in for a real model. A non-jsonMode
- * request (future chat-style assistants) gets a plain, honest "no real
- * model configured" reply rather than an invented answer — never
- * fabricates business data, per spec #37.
+ * real language model: for a jsonMode request (AiAnalyticsService's
+ * kind) it does keyword matching against AnalyticsQueryRegistry's own
+ * query names rather than free-form generation — deliberately rule-based
+ * rather than a canned-response stub, so it genuinely demonstrates the
+ * intent-classification flow spec #8 asks for ("convert natural-language
+ * requests into safe queries"), just with pattern matching standing in
+ * for a real model. A non-jsonMode request (e.g.
+ * WhatsAppAiReplySuggestionService's drafting prompts) echoes the tail of
+ * whatever prompt it's given back as a generic, professional-sounding
+ * template — still clearly rule-based and never inventing business data,
+ * but genuinely useful enough on localhost to exercise the whole feature
+ * end to end, per spec #37/spec #43's "must work without a paid AI API".
  */
 @Injectable()
 export class MockAiProviderService implements AiProviderPort {
   async complete(request: AiCompletionRequest): Promise<AiCompletionResult> {
     const text = request.jsonMode
       ? this.classifyAnalyticsQuestion(request.prompt)
-      : "I'm running in mock mode (no real AI provider configured) — I can only help with the structured reports listed in the Analytics assistant, not open-ended conversation yet.";
+      : this.draftReply(request.prompt);
 
     return Promise.resolve({
       text,
       provider: 'mock',
       model: 'mock-keyword-matcher-v1',
     });
+  }
+
+  /** Deliberately format-agnostic: takes the last non-empty line of
+   * whatever prompt it's given (for WhatsAppAiReplySuggestionService,
+   * that's the "Customer's most recent message: ..." line it always ends
+   * its prompt with) rather than parsing any caller-specific structure,
+   * so this stays reusable by any future non-jsonMode caller too. If that
+   * line itself ends in a quoted value ('Some label: "the actual text"'
+   * — the shape every prompt in this codebase uses to hand over a quoted
+   * message), unwraps just the quoted part so the draft doesn't end up
+   * quoting the label along with it. */
+  private draftReply(prompt: string): string {
+    const lines = prompt
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean);
+    const lastLine = lines[lines.length - 1];
+    if (!lastLine) {
+      return 'Hi! Thanks for reaching out — how can we help you today? (mock AI draft: no real provider configured)';
+    }
+    const quoted = /"([^"]*)"\s*$/.exec(lastLine);
+    const text = quoted ? quoted[1] : lastLine;
+    const snippet = text.length > 140 ? `${text.slice(0, 140)}…` : text;
+    return `Thanks for your message! Regarding "${snippet}" — let me check that for you and follow up shortly. Is there anything else I can help with in the meantime? (mock AI draft: no real provider configured)`;
   }
 
   /** Very deliberately simple: substring/regex matching against the same

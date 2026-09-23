@@ -1,9 +1,11 @@
 import { Module } from '@nestjs/common';
+import { AiModule } from '../ai/ai.module';
 import { AuditModule } from '../audit/audit.module';
 import { FlightsModule } from '../flights/flights.module';
 import { IntegrationsModule } from '../integrations/integrations.module';
 import { UsersModule } from '../users/users.module';
 import { WhatsAppAdminController } from './whatsapp-admin.controller';
+import { WhatsAppAiReplySuggestionService } from './whatsapp-ai-reply-suggestion.service';
 import { WhatsAppConsentService } from './whatsapp-consent.service';
 import { WhatsAppConversationsService } from './whatsapp-conversations.service';
 import { WhatsAppDevController } from './whatsapp-dev.controller';
@@ -26,13 +28,17 @@ import { WhatsAppProviderRouter } from './providers/whatsapp-provider.router';
  * booking lookup self-service flow, human handoff/takeover, a staff
  * inbox API, and a dev simulator.
  *
- * DEFERRED (not attempted this pass — each is a real, separately-sized
+ * BUILT (later increment): AI-assisted staff reply drafting —
+ * WhatsAppAiReplySuggestionService, reusing Phase 13's AiProviderRouter/
+ * AiUsageService (exported from AiModule) — never sends a message
+ * itself, only drafts text for a human to review/edit/send.
+ *
+ * DEFERRED (not attempted yet — each is a real, separately-sized
  * subsystem): WhatsAppTemplate/approval workflow, the automation rule
- * engine, campaigns, AI-assisted staff replies (AiProviderPort from
- * Phase 13 already exists and is the natural place to wire this in
- * later), flight search/booking THROUGH WhatsApp (only read-only lookup
- * is built — actually booking still requires the customer portal/staff),
- * payment links through WhatsApp, visa/Hajj/Umrah self-service beyond
+ * engine, campaigns, flight search/booking THROUGH WhatsApp (only
+ * read-only lookup is built — actually booking still requires the
+ * customer portal/staff), payment links through WhatsApp,
+ * visa/Hajj/Umrah self-service beyond
  * booking lookup, SLA tracking/escalation, business-hours/away-message
  * automation, a real-time staff inbox (no WebSocket/SSE infrastructure
  * exists anywhere in this codebase yet to hook into — spec #126
@@ -49,7 +55,13 @@ import { WhatsAppProviderRouter } from './providers/whatsapp-provider.router';
  * settings) — not a single new parallel mechanism for any of these.
  */
 @Module({
-  imports: [AuditModule, IntegrationsModule, UsersModule, FlightsModule],
+  imports: [
+    AiModule,
+    AuditModule,
+    IntegrationsModule,
+    UsersModule,
+    FlightsModule,
+  ],
   controllers: [
     WhatsAppWebhookController,
     WhatsAppAdminController,
@@ -61,6 +73,7 @@ import { WhatsAppProviderRouter } from './providers/whatsapp-provider.router';
     WhatsAppConversationsService,
     WhatsAppSelfServiceService,
     WhatsAppWebhookService,
+    WhatsAppAiReplySuggestionService,
     WhatsAppProviderRouter,
     MockWhatsAppProviderService,
     MetaWhatsAppProviderService,
