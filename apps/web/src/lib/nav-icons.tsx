@@ -32,7 +32,8 @@ export type NavIconName =
   | 'audit'
   | 'transfer'
   | 'backup'
-  | 'sparkle';
+  | 'sparkle'
+  | 'chat';
 
 const ICON_PATHS: Record<NavIconName, React.ReactNode> = {
   dashboard: (
@@ -245,6 +246,15 @@ const ICON_PATHS: Record<NavIconName, React.ReactNode> = {
         stroke="none"
         d="M18.5 15.5l.9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9Z"
       />
+    </>
+  ),
+  chat: (
+    <>
+      <path
+        d="M4 5.5h16v10.5a1 1 0 0 1-1 1H9l-4 3.5v-3.5H4.5a.5.5 0 0 1-.5-.5V5.5Z"
+        strokeLinejoin="round"
+      />
+      <path d="M8 9.5h8M8 13h5" strokeLinecap="round" />
     </>
   ),
 };

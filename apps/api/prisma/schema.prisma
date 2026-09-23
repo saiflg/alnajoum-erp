@@ -106,6 +106,20 @@ model Customer {
 
   whatsapp String?
 
+  // Phase 14 — the `whatsapp` field above stays the number itself
+  // (unchanged); these track the Meta-policy consent/verification state
+  // for it. `whatsapp` can be set (e.g. copied from `phone` at signup)
+  // with no consent yet — opt-in is a distinct, explicit event, never
+  // inferred from the number simply being on file.
+  whatsappOptIn      Boolean   @default(false)
+  whatsappOptInAt    DateTime?
+  whatsappOptOutAt   DateTime?
+  // Set once this phone number has completed the OTP link flow (spec
+  // #7/#8) — required before a conversation on this number may see
+  // anything beyond public self-service content.
+  whatsappVerifiedAt DateTime?
+  preferredLanguage  String?   @default("en")
+
   address String?
   city    String?
   state   String?
@@ -160,6 +174,10 @@ model Customer {
   supportTickets     SupportTicket[]
   referralCode       ReferralCode?           @relation("ReferralCodeOwner")
   referredBy         Referral?               @relation("ReferredCustomer")
+
+  // Phase 14 — WhatsApp.
+  whatsappConversations WhatsAppConversation[]
+  whatsappConsent       WhatsAppConsent?
 
   @@index([assignedStaffId])
   @@index([assignedBranchId])
@@ -378,6 +396,10 @@ model Staff {
   flightAncillaries         FlightAncillary[]
   flightScheduleChanges     FlightScheduleChange[]
 
+  // Phase 14 — WhatsApp.
+  assignedWhatsappConversations WhatsAppConversation[]
+  whatsappMessagesSent          WhatsAppMessage[]
+
   @@index([companyId])
   @@index([branchId])
   @@map("staff")
@@ -422,6 +444,7 @@ model Company {
   aiUsageLogs AiUsageLog[]
   approvalRequests ApprovalRequest[]
   approvalThresholdRules ApprovalThresholdRule[]
+  whatsappConversations WhatsAppConversation[]
   flightSuppliers FlightSupplier[]
   supplierPayables SupplierPayable[]
 
@@ -465,6 +488,9 @@ model Branch {
   // Phase 7 — CRM, support.
   assignedLeads  Lead[]
   supportTickets SupportTicket[]
+
+  // Phase 14 — WhatsApp.
+  whatsappConversations WhatsAppConversation[]
 
   @@unique([companyId, code])
   @@index([companyId])
@@ -2208,6 +2234,8 @@ enum IntegrationCategory {
   // provider's API key/model/limits rather than a parallel settings
   // mechanism (see AiProviderRouter).
   AI
+  // Phase 14 — same reasoning, for WhatsAppProviderRouter.
+  WHATSAPP
 }
 
 model IntegrationCredential {
@@ -2269,6 +2297,219 @@ model AiUsageLog {
   @@index([identityId])
   @@index([createdAt])
   @@map("ai_usage_logs")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 14 — WhatsApp conversation engine. Deliberately scoped: this is the
+// foundation (provider abstraction, conversations/messages, consent, OTP
+// linking, webhook idempotency) plus one real capability (booking lookup),
+// not the full 136-item spec (no separate Template/Automation/Campaign/
+// Media models yet — those are real, larger subsystems layered on top of
+// this once it's proven). WhatsApp is a CHANNEL on top of the existing
+// ERP, never a second source of truth: it reuses Customer (including the
+// existing `whatsapp` field for the number itself — only opt-in/verification
+// state is new here), NotificationPreferencesService's existing
+// `whatsappEnabled` toggle (a DIFFERENT concern — see WhatsAppConsent's own
+// comment), CustomerTimelineEvent for CRM history, and FlightsService for
+// booking data.
+// ---------------------------------------------------------------------------
+
+enum WhatsAppConversationStatus {
+  OPEN
+  PENDING
+  ASSIGNED
+  WAITING_CUSTOMER
+  WAITING_STAFF
+  RESOLVED
+  CLOSED
+}
+
+enum WhatsAppMessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum WhatsAppMessageType {
+  TEXT
+  TEMPLATE
+  IMAGE
+  DOCUMENT
+  VIDEO
+  LOCATION
+  INTERACTIVE_BUTTONS
+  INTERACTIVE_LIST
+  SYSTEM
+}
+
+enum WhatsAppMessageStatus {
+  QUEUED
+  SENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+enum WhatsAppConsentStatus {
+  OPTED_IN
+  OPTED_OUT
+  UNKNOWN
+}
+
+/** One thread per customer phone number per company — the unit staff work
+ * from in the inbox. `customerId` is nullable because a message can arrive
+ * from a number with no matching Customer yet (identification happens
+ * server-side by phone lookup, never trusted from the message itself). */
+model WhatsAppConversation {
+  id String @id @default(cuid())
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  branchId  String?
+  branch    Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
+
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  // E.164 (the WhatsApp wa_id) — the raw join key before/without a matched
+  // Customer, and still authoritative even after one is matched.
+  phoneNumber String
+
+  status           WhatsAppConversationStatus @default(OPEN)
+  assignedStaffId  String?
+  assignedStaff    Staff?                     @relation(fields: [assignedStaffId], references: [id], onDelete: SetNull)
+  language         String?
+
+  // Spec #85 — staff takeover suppresses the self-service menu/automation
+  // for this conversation until released, without touching `status`
+  // (which staff also drive for triage/SLA, a separate concern).
+  automationPaused Boolean @default(false)
+
+  lastMessageAt  DateTime?
+  lastInboundAt  DateTime?
+  lastOutboundAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messages WhatsAppMessage[]
+
+  @@index([companyId])
+  @@index([branchId])
+  @@index([customerId])
+  @@index([phoneNumber])
+  @@index([status])
+  @@index([assignedStaffId])
+  @@map("whatsapp_conversations")
+}
+
+model WhatsAppMessage {
+  id             String               @id @default(cuid())
+  conversationId String
+  conversation   WhatsAppConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  // The provider's own message id — null until an outbound send actually
+  // returns one, or absent on some inbound event shapes. Used for
+  // reconciling delivery/read status webhooks back to the right row.
+  providerMessageId String? @unique
+
+  direction WhatsAppMessageDirection
+  type      WhatsAppMessageType       @default(TEXT)
+  content   String?
+  mediaUrl      String?
+  mediaMimeType String?
+
+  // Spec #87 — an internal note is stored as a message so it appears
+  // in-thread for staff, but is never included in anything sent to the
+  // provider/customer; every read path serving customer-visible content
+  // must filter it out explicitly.
+  isInternalNote Boolean @default(false)
+  sentByStaffId  String?
+  sentByStaff    Staff?  @relation(fields: [sentByStaffId], references: [id], onDelete: SetNull)
+
+  status        WhatsAppMessageStatus @default(QUEUED)
+  sentAt        DateTime?
+  deliveredAt   DateTime?
+  readAt        DateTime?
+  failedAt      DateTime?
+  failureReason String?
+
+  // Spec #43 — deterministic key (e.g. "booking-ticketed:{bookingId}") for
+  // automated/triggered sends, so a restarted job can't double-send.
+  // Null for ordinary staff replies, which have no natural dedupe key.
+  idempotencyKey String? @unique
+
+  createdAt DateTime @default(now())
+
+  @@index([conversationId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("whatsapp_messages")
+}
+
+/** Meta-policy-level "may we message this number at all", distinct from
+ * NotificationPreference.whatsappEnabled (which assumes consent already
+ * exists and only toggles which message CATEGORIES a customer wants once
+ * a conversation is already permitted). Keyed by phone, not customerId,
+ * since consent can be recorded before any Customer match exists (e.g. an
+ * inbound message from an unrecognized number that later gets linked). */
+model WhatsAppConsent {
+  id          String  @id @default(cuid())
+  phoneNumber String  @unique
+  customerId  String? @unique
+  customer    Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  status String @default("UNKNOWN") // WhatsAppConsentStatus's values, stored as a string so a webhook-recorded consent for an unmatched phone number never needs a customerId
+
+  // e.g. "customer_portal" | "whatsapp_stop_command" | "whatsapp_start_command" | "staff_recorded" | "first_inbound_message"
+  source String
+
+  consentedAt DateTime?
+  optedOutAt  DateTime?
+  updatedAt   DateTime  @updatedAt
+
+  @@map("whatsapp_consents")
+}
+
+/** Spec #13/#43 — every provider webhook call lands here first, keyed by
+ * the provider's own event id (or a payload hash when the provider gives
+ * none), before any business processing runs. The unique constraint IS
+ * the idempotency guarantee: a redelivered webhook fails the insert and
+ * is dropped, never reprocessed. */
+model WhatsAppWebhookEvent {
+  id          String  @id @default(cuid())
+  provider    String // "meta" | "mock"
+  eventId     String
+  payloadHash String
+
+  receivedAt   DateTime  @default(now())
+  processedAt  DateTime?
+  status       String    @default("PENDING") // PENDING | PROCESSED | FAILED
+  error        String?
+  retryCount   Int       @default(0)
+
+  @@unique([provider, eventId])
+  @@index([status])
+  @@map("whatsapp_webhook_events")
+}
+
+/** Phase 14 spec #7/#8 — short-lived OTP for linking a WhatsApp
+ * conversation to an existing customer account before any sensitive data
+ * (booking details, documents, payment info) is shown over the channel.
+ * `codeHash` never stores the plaintext code — same discipline as
+ * password/refresh-token hashing elsewhere in this codebase — and the
+ * code itself is never written to logs or audit metadata. */
+model WhatsAppOtpChallenge {
+  id          String    @id @default(cuid())
+  phoneNumber String
+  customerId  String?
+  codeHash    String
+  expiresAt   DateTime
+  attempts    Int       @default(0)
+  consumedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([phoneNumber])
+  @@map("whatsapp_otp_challenges")
 }
 
 // ---------------------------------------------------------------------------
@@ -4201,6 +4442,10 @@ enum TimelineEventType {
   FEEDBACK_SUBMITTED
   COMPLAINT_SUBMITTED
   STAFF_NOTE
+  // Phase 14 — a WhatsApp conversation starting is what lands on the
+  // timeline (not every individual message, which would flood it); see
+  // WhatsAppConversationsService.
+  WHATSAPP_CONVERSATION_STARTED
   OTHER
 }
 

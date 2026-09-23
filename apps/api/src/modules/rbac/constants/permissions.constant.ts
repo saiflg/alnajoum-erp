@@ -291,6 +291,13 @@ export const PERMISSIONS = {
     // a narrower, more sensitive capability than running queries oneself.
     USAGE_VIEW: 'ai:usage_view',
   },
+  WHATSAPP: {
+    READ: 'whatsapp:read',
+    SEND: 'whatsapp:send',
+    MANAGE: 'whatsapp:manage', // status changes, internal notes, automation pause/resume, consent overrides
+    CONVERSATIONS_ASSIGN: 'whatsapp:conversations:assign',
+    CONFIGURATION_MANAGE: 'whatsapp:configuration:manage', // provider credentials — layered on top of the existing INTEGRATIONS.MANAGE gate at the shared /admin/integrations endpoints, checked here for anything WhatsApp-specific that lives outside them
+  },
 } as const;
 
 export const ALL_PERMISSION_KEYS: string[] = Object.values(PERMISSIONS).flatMap(

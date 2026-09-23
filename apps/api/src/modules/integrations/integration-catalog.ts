@@ -303,6 +303,55 @@ export const INTEGRATION_CATALOG: Record<
       ],
     },
   ],
+  WHATSAPP: [
+    {
+      provider: 'mock',
+      label: 'Mock (built-in, no credentials needed — dev simulator)',
+      fields: [],
+      implemented: true,
+    },
+    {
+      provider: 'meta',
+      label: 'Meta WhatsApp Cloud API',
+      implemented: true,
+      docsUrl: 'https://developers.facebook.com/docs/whatsapp/cloud-api',
+      fields: [
+        {
+          key: 'accessToken',
+          label: 'Access Token',
+          secret: true,
+          placeholder: 'EAAG...',
+        },
+        {
+          key: 'phoneNumberId',
+          label: 'Phone Number ID',
+          secret: false,
+        },
+        {
+          key: 'businessAccountId',
+          label: 'WhatsApp Business Account ID',
+          secret: false,
+        },
+        {
+          key: 'appSecret',
+          label: 'App Secret (for webhook signature verification)',
+          secret: true,
+        },
+        {
+          key: 'webhookVerifyToken',
+          label:
+            "Webhook Verify Token (you choose this — enter the same value in Meta's webhook setup)",
+          secret: true,
+        },
+        {
+          key: 'apiVersion',
+          label: 'API Version (default: v21.0)',
+          secret: false,
+          placeholder: 'v21.0',
+        },
+      ],
+    },
+  ],
   NOTIFICATION: [
     {
       provider: 'mock',

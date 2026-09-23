@@ -55,6 +55,7 @@ export const ADMIN_NAV: NavLink[] = [
   { href: '/admin/data-export-import', label: 'Data Export & Import', icon: 'transfer' },
   { href: '/admin/backups', label: 'Backup Management', icon: 'backup' },
   { href: '/admin/ai-analytics', label: 'AI Analytics', icon: 'sparkle' },
+  { href: '/admin/whatsapp', label: 'WhatsApp Inbox', icon: 'chat' },
   { href: '/admin/integrations', label: 'Integrations', icon: 'plug' },
   { href: '/admin/account', label: 'My Account', icon: 'account' },
 ];

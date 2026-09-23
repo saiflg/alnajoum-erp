@@ -123,6 +123,34 @@ class EnvironmentVariables {
   @IsOptional()
   @IsString()
   AI_API_KEY?: string;
+
+  @IsOptional()
+  @IsString()
+  WHATSAPP_PROVIDER?: string; // 'mock' (default) | 'meta'
+
+  @IsOptional()
+  @IsString()
+  WHATSAPP_API_VERSION?: string;
+
+  @IsOptional()
+  @IsString()
+  WHATSAPP_ACCESS_TOKEN?: string;
+
+  @IsOptional()
+  @IsString()
+  WHATSAPP_PHONE_NUMBER_ID?: string;
+
+  @IsOptional()
+  @IsString()
+  WHATSAPP_BUSINESS_ACCOUNT_ID?: string;
+
+  @IsOptional()
+  @IsString()
+  WHATSAPP_APP_SECRET?: string;
+
+  @IsOptional()
+  @IsString()
+  WHATSAPP_WEBHOOK_VERIFY_TOKEN?: string;
 }
 
 export function validateEnv(config: Record<string, unknown>) {

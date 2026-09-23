@@ -29,6 +29,12 @@ const CATEGORIES: { key: IntegrationCategory; label: string; blurb: string }[] =
     blurb:
       'Powers the natural-language analytics assistant. Mock needs no credentials; switch to OpenAI-compatible for a real model.',
   },
+  {
+    key: 'WHATSAPP',
+    label: 'WhatsApp',
+    blurb:
+      'Powers the WhatsApp inbox and customer self-service. Mock needs no credentials and works with the dev simulator; switch to Meta WhatsApp Cloud API for real conversations.',
+  },
 ];
 
 function ProviderCard({

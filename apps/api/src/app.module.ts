@@ -40,6 +40,7 @@ import { GovernanceModule } from './modules/governance/governance.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { DataModule } from './modules/data/data.module';
 import { AiModule } from './modules/ai/ai.module';
+import { WhatsAppModule } from './modules/whatsapp/whatsapp.module';
 
 @Module({
   imports: [
@@ -79,6 +80,7 @@ import { AiModule } from './modules/ai/ai.module';
     DashboardModule,
     DataModule,
     AiModule,
+    WhatsAppModule,
   ],
   controllers: [AppController],
   providers: [
