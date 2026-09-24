@@ -400,6 +400,10 @@ model Staff {
   assignedWhatsappConversations WhatsAppConversation[]
   whatsappMessagesSent          WhatsAppMessage[]
 
+  // Phase 16 — supplier management.
+  suppliersManaged         Supplier[]         @relation("SupplierAccountManager")
+  supplierDocumentsUploaded SupplierDocument[]
+
   @@index([companyId])
   @@index([branchId])
   @@map("staff")
@@ -447,6 +451,7 @@ model Company {
   whatsappConversations WhatsAppConversation[]
   flightSuppliers FlightSupplier[]
   supplierPayables SupplierPayable[]
+  suppliers Supplier[]
 
   @@map("companies")
 }
@@ -3839,6 +3844,18 @@ model SupplierPayable {
   flightSupplierId String?
   flightSupplier   FlightSupplier? @relation(fields: [flightSupplierId], references: [id], onDelete: SetNull)
 
+  // Phase 16 — same best-effort-link-by-name pattern as flightSupplierId
+  // above, against the new domain-agnostic Supplier model instead (for
+  // Hotel/Visa/Hajj/Umrah payables, which have never had a master record
+  // to link to until now — see Supplier's own doc comment). A payable can
+  // have at most one of flightSupplierId/supplierId populated in
+  // practice (FinancePostingService only searches FlightSupplier for a
+  // FLIGHT_BOOKING payable), but both stay independently nullable rather
+  // than one excluding the other at the schema level, since nothing
+  // requires that today.
+  supplierId String?
+  supplier   Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+
   amount     Int
   currency   String
   amountPaid Int    @default(0)
@@ -3855,6 +3872,7 @@ model SupplierPayable {
   @@index([companyId])
   @@index([sourceModule, sourceId])
   @@index([flightSupplierId])
+  @@index([supplierId])
   @@map("supplier_payables")
 }
 
@@ -3877,6 +3895,227 @@ model SupplierPayment {
 
   @@index([payableId])
   @@map("supplier_payments")
+}
+
+// ============================================================================
+// Phase 16 — Enterprise Supplier Marketplace foundation.
+//
+// FlightSupplier/FlightSupplierContract (above) already fully cover flight
+// commercial-supplier management (Phase 10/11) — this is NOT a replacement
+// or migration of that model, and flights keep using it exactly as before.
+// This is the domain-agnostic supplier master record that Hotel/Visa/Hajj/
+// Umrah have never had (SupplierPayable.supplierName has been free-text-only
+// for those domains since Phase 11 — see that model's own comment). Every
+// design choice here (tenant-scoped, contract versioned separately from the
+// supplier row, balance computed live from SupplierPayable rather than
+// stored) deliberately mirrors FlightSupplier's already-proven shape.
+// ============================================================================
+
+enum SupplierType {
+  AIRLINE
+  GDS
+  FLIGHT_CONSOLIDATOR
+  HOTEL
+  HOTEL_WHOLESALER
+  VISA_PROVIDER
+  HAJJ_SUPPLIER
+  UMRAH_SUPPLIER
+  TRANSPORT_COMPANY
+  BUS_OPERATOR
+  CAR_RENTAL
+  ACTIVITY_PROVIDER
+  TOUR_OPERATOR
+  INSURANCE_PROVIDER
+  TICKET_CONSOLIDATOR
+  GROUND_HANDLER
+  LOCAL_PARTNER
+  OTHER
+}
+
+// Spec #3's onboarding workflow, modeled as a single status column rather
+// than a separate "application" table — SuppliersService enforces the
+// forward-only transition order (with SUSPENDED/TERMINATED reachable from
+// ACTIVE, and REACTIVATED going back to ACTIVE from SUSPENDED), same
+// "status column + a service method that validates the transition" pattern
+// as FlightSupplierContractStatus/InvoiceStatus elsewhere in this schema.
+enum SupplierOnboardingStatus {
+  DRAFT
+  INVITED
+  INFORMATION_SUBMITTED
+  KYC_REVIEW
+  DOCUMENT_REVIEW
+  COMMERCIAL_REVIEW
+  FINANCE_REVIEW
+  ADMIN_APPROVAL
+  ACTIVE
+  SUSPENDED
+  TERMINATED
+}
+
+enum SupplierKycStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  VERIFIED
+  REJECTED
+}
+
+enum SupplierRiskStatus {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+model Supplier {
+  id String @id @default(cuid())
+
+  // Same tenant-isolation reasoning as FlightSupplier — a supplier's
+  // negotiated terms are commercially sensitive per-tenant data.
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  legalName   String
+  tradingName String?
+  type        SupplierType
+
+  registrationNumber String?
+  country            String?
+  address            String?
+  website            String?
+
+  email String?
+  phone String?
+
+  currency           String  @default("NGN")
+  settlementCurrency String?
+  paymentTerms       String? // free text, e.g. "Net 30" — same convention as FlightSupplier.paymentTerms
+  settlementCycle    String?
+  creditLimit        Int?
+  depositRequired    Int?
+
+  bankName          String?
+  bankAccountName   String?
+  bankAccountNumber String?
+
+  taxIdentificationNumber String?
+
+  onboardingStatus SupplierOnboardingStatus @default(DRAFT)
+  kycStatus        SupplierKycStatus        @default(NOT_STARTED)
+  riskStatus       SupplierRiskStatus       @default(LOW)
+
+  accountManagerStaffId String?
+  accountManagerStaff   Staff?  @relation("SupplierAccountManager", fields: [accountManagerStaffId], references: [id], onDelete: SetNull)
+
+  notes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  contacts  SupplierContact[]
+  documents SupplierDocument[]
+  contracts SupplierContract[]
+  payables  SupplierPayable[]
+
+  // Phase 16 spec #6/#11/#12 — deliberately does NOT link directly to
+  // Hotel/VisaService/HajjPackage/UmrahPackage. Those are platform-wide
+  // catalogs with no companyId of their own (see Hotel's own doc comment:
+  // "Admin-managed hotel catalog... same reasoning as VisaService" — the
+  // same is true of HajjPackage/UmrahPackage), while a Supplier is
+  // correctly tenant-scoped exactly like FlightSupplier. Linking a
+  // shared, cross-tenant catalog row to one specific company's supplier
+  // would misattribute that supplier's negotiated cost to every other
+  // company selling the same catalog item. The safe, already-tenant-
+  // correct linkage point is SupplierPayable.supplierId above, since a
+  // payable is always created against a specific tenant-scoped booking.
+  @@index([companyId])
+  @@index([type])
+  @@index([onboardingStatus])
+  @@map("suppliers")
+}
+
+model SupplierContact {
+  id         String   @id @default(cuid())
+  supplierId String
+  supplier   Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  name      String
+  role      String?
+  email     String?
+  phone     String?
+  isPrimary Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@index([supplierId])
+  @@map("supplier_contacts")
+}
+
+model SupplierDocument {
+  id         String   @id @default(cuid())
+  supplierId String
+  supplier   Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  label    String // e.g. "Certificate of Incorporation", "Bank Verification Letter"
+  fileUrl  String // path under the existing document-storage abstraction (see document-storage.util.ts) — not a raw filesystem path
+  mimeType String
+
+  expiresAt DateTime? // spec #34's contract-expiry-alert follow-up reads this; not itself alerted on in this increment
+
+  uploadedByStaffId String?
+  uploadedByStaff   Staff?  @relation(fields: [uploadedByStaffId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([supplierId])
+  @@map("supplier_documents")
+}
+
+enum SupplierContractStatus {
+  DRAFT
+  NEGOTIATION
+  PENDING_APPROVAL
+  ACTIVE
+  EXPIRING
+  EXPIRED
+  TERMINATED
+}
+
+/**
+ * Versioned separately from Supplier's own fields, same reasoning as
+ * FlightSupplierContract's doc comment: a supplier can have several
+ * contracts over time, and renegotiating one must never overwrite the
+ * historical commercial terms of the last one.
+ */
+model SupplierContract {
+  id         String   @id @default(cuid())
+  supplierId String
+  supplier   Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  contractNumber String @unique
+  name           String
+  startDate      DateTime
+  endDate        DateTime?
+  currency       String    @default("NGN")
+
+  paymentTerms      String?
+  creditTerms       String?
+  commissionPercent Float?
+  rebatePercent     Float?
+  markupPercent     Float?
+
+  settlementCycle        String?
+  cancellationConditions String?
+  amendmentConditions    String?
+
+  documentUrl String? // path under the existing document-storage abstraction
+
+  status SupplierContractStatus @default(DRAFT)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([supplierId])
+  @@index([status])
+  @@map("supplier_contracts")
 }
 
 enum DailyClosingStatus {

@@ -298,6 +298,21 @@ export const PERMISSIONS = {
     CONVERSATIONS_ASSIGN: 'whatsapp:conversations:assign',
     CONFIGURATION_MANAGE: 'whatsapp:configuration:manage', // provider credentials — layered on top of the existing INTEGRATIONS.MANAGE gate at the shared /admin/integrations endpoints, checked here for anything WhatsApp-specific that lives outside them
   },
+  // Phase 16 — domain-agnostic supplier management (Hotel/Visa/Hajj/Umrah/
+  // Transport suppliers — flights keep using FLIGHT.SUPPLIER_MANAGE
+  // unchanged). Financial actions (contract terms, credit limit) stay
+  // separate from operational ones (viewing/onboarding), same split spec
+  // #47 asks for.
+  SUPPLIER: {
+    VIEW: 'supplier:view',
+    CREATE: 'supplier:create',
+    EDIT: 'supplier:edit',
+    APPROVE: 'supplier:approve', // decide a pending SUPPLIER_ACTIVATION approval request
+    SUSPEND: 'supplier:suspend', // suspend/reactivate/terminate an already-onboarded supplier
+    CONTRACT_VIEW: 'supplier:contract:view',
+    CONTRACT_MANAGE: 'supplier:contract:manage', // create/edit/activate a SupplierContract
+    DOCUMENT_MANAGE: 'supplier:document:manage', // upload/delete a SupplierDocument
+  },
 } as const;
 
 export const ALL_PERMISSION_KEYS: string[] = Object.values(PERMISSIONS).flatMap(

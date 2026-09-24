@@ -42,6 +42,7 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { DataModule } from './modules/data/data.module';
 import { AiModule } from './modules/ai/ai.module';
 import { WhatsAppModule } from './modules/whatsapp/whatsapp.module';
+import { SuppliersModule } from './modules/suppliers/suppliers.module';
 
 @Module({
   imports: [
@@ -88,6 +89,7 @@ import { WhatsAppModule } from './modules/whatsapp/whatsapp.module';
     DataModule,
     AiModule,
     WhatsAppModule,
+    SuppliersModule,
   ],
   controllers: [AppController],
   providers: [

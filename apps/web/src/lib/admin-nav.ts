@@ -14,6 +14,7 @@ export const ADMIN_NAV: NavLink[] = [
   { href: '/admin/flight-pricing-rules', label: 'Flight Pricing Rules', icon: 'flight' },
   { href: '/admin/flight-suppliers', label: 'Flight Suppliers', icon: 'flight' },
   { href: '/admin/flight-provider-routing', label: 'Flight Provider Routing', icon: 'flight' },
+  { href: '/admin/suppliers', label: 'Suppliers', icon: 'company' },
   { href: '/admin/flight-service-fees', label: 'Flight Service Fees', icon: 'flight' },
   { href: '/admin/flight-reports', label: 'Flight Reports', icon: 'invoice' },
   { href: '/admin/hotels', label: 'Hotel Bookings', icon: 'hotel' },

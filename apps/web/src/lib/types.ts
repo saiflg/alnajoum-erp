@@ -291,6 +291,141 @@ export interface FlightSupplierContract {
   supplier?: { name: string };
 }
 
+// Phase 16 — the domain-agnostic Supplier model (Hotel/Visa/Hajj/Umrah/
+// Transport suppliers). Flights keep using FlightSupplier above, unchanged.
+export type SupplierType =
+  | 'AIRLINE'
+  | 'GDS'
+  | 'FLIGHT_CONSOLIDATOR'
+  | 'HOTEL'
+  | 'HOTEL_WHOLESALER'
+  | 'VISA_PROVIDER'
+  | 'HAJJ_SUPPLIER'
+  | 'UMRAH_SUPPLIER'
+  | 'TRANSPORT_COMPANY'
+  | 'BUS_OPERATOR'
+  | 'CAR_RENTAL'
+  | 'ACTIVITY_PROVIDER'
+  | 'TOUR_OPERATOR'
+  | 'INSURANCE_PROVIDER'
+  | 'TICKET_CONSOLIDATOR'
+  | 'GROUND_HANDLER'
+  | 'LOCAL_PARTNER'
+  | 'OTHER';
+
+export type SupplierOnboardingStatus =
+  | 'DRAFT'
+  | 'INVITED'
+  | 'INFORMATION_SUBMITTED'
+  | 'KYC_REVIEW'
+  | 'DOCUMENT_REVIEW'
+  | 'COMMERCIAL_REVIEW'
+  | 'FINANCE_REVIEW'
+  | 'ADMIN_APPROVAL'
+  | 'ACTIVE'
+  | 'SUSPENDED'
+  | 'TERMINATED';
+
+export type SupplierKycStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'VERIFIED' | 'REJECTED';
+export type SupplierRiskStatus = 'LOW' | 'MEDIUM' | 'HIGH';
+export type SupplierContractStatus2 =
+  | 'DRAFT'
+  | 'NEGOTIATION'
+  | 'PENDING_APPROVAL'
+  | 'ACTIVE'
+  | 'EXPIRING'
+  | 'EXPIRED'
+  | 'TERMINATED';
+
+export interface SupplierContact {
+  id: string;
+  supplierId: string;
+  name: string;
+  role: string | null;
+  email: string | null;
+  phone: string | null;
+  isPrimary: boolean;
+  createdAt: string;
+}
+
+export interface SupplierDocument {
+  id: string;
+  supplierId: string;
+  label: string;
+  fileUrl: string;
+  mimeType: string;
+  expiresAt: string | null;
+  uploadedByStaffId: string | null;
+  createdAt: string;
+}
+
+export interface SupplierContractRecord {
+  id: string;
+  supplierId: string;
+  contractNumber: string;
+  name: string;
+  startDate: string;
+  endDate: string | null;
+  currency: string;
+  paymentTerms: string | null;
+  creditTerms: string | null;
+  commissionPercent: number | null;
+  rebatePercent: number | null;
+  markupPercent: number | null;
+  settlementCycle: string | null;
+  cancellationConditions: string | null;
+  amendmentConditions: string | null;
+  documentUrl: string | null;
+  status: SupplierContractStatus2;
+  createdAt: string;
+  updatedAt: string;
+  supplier?: { legalName: string };
+}
+
+export interface Supplier {
+  id: string;
+  legalName: string;
+  tradingName: string | null;
+  type: SupplierType;
+  registrationNumber: string | null;
+  country: string | null;
+  address: string | null;
+  website: string | null;
+  email: string | null;
+  phone: string | null;
+  currency: string;
+  settlementCurrency: string | null;
+  paymentTerms: string | null;
+  settlementCycle: string | null;
+  creditLimit: number | null;
+  depositRequired: number | null;
+  bankName: string | null;
+  bankAccountName: string | null;
+  bankAccountNumber: string | null;
+  taxIdentificationNumber: string | null;
+  onboardingStatus: SupplierOnboardingStatus;
+  kycStatus: SupplierKycStatus;
+  riskStatus: SupplierRiskStatus;
+  accountManagerStaffId: string | null;
+  accountManagerStaff?: { firstName: string; lastName: string } | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+  contacts?: SupplierContact[];
+  documents?: SupplierDocument[];
+  contracts?: SupplierContractRecord[];
+}
+
+export interface SupplierBalance {
+  totalPayable: number;
+  totalPaid: number;
+  currentBalance: number;
+  creditLimit: number | null;
+  availableCredit: number | null;
+  utilization: number | null;
+  alert: string | null;
+}
+
 export type FlightRefundStatus =
   | 'REQUESTED'
   | 'APPROVED'

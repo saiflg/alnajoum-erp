@@ -4411,6 +4411,158 @@ async function seedPhase11EnterpriseGovernance() {
   );
 }
 
+/**
+ * Phase 16 spec #56 — a handful of demo suppliers across the domains that
+ * never had a master record before this phase (Hotel/Visa/Hajj/Transport —
+ * Flights keeps using its own seedPhase10FlightGds() data unchanged, same
+ * as production keeps FlightSupplier/Supplier as two separate models).
+ * One supplier is left mid-onboarding (COMMERCIAL_REVIEW) and one is fully
+ * ACTIVE with a contract and a linked SupplierPayable, so the admin UI has
+ * something real to show in every state without this seed pretending every
+ * supplier is instantly production-ready.
+ */
+async function seedPhase16Suppliers() {
+  const existing = await prisma.supplier.findFirst();
+  if (existing) {
+    console.log('Phase 16 supplier demo data already present — skipping');
+    return;
+  }
+
+  const agentIdentity = await prisma.identity.findUniqueOrThrow({
+    where: { email: 'fatima.sule@demo.alnajoum.travel' },
+    include: { staff: true },
+  });
+  const financeIdentity = await prisma.identity.findUniqueOrThrow({
+    where: { email: 'ibrahim.musa@demo.alnajoum.travel' },
+    include: { staff: true },
+  });
+  const companyId = agentIdentity.staff!.companyId;
+
+  const hotelWholesaler = await prisma.supplier.create({
+    data: {
+      companyId,
+      legalName: 'Haramain Hospitality Wholesale FZE',
+      tradingName: 'Haramain Hospitality',
+      type: 'HOTEL_WHOLESALER',
+      country: 'Saudi Arabia',
+      email: 'contracts@haramain-hospitality.example',
+      phone: '+966500000001',
+      currency: 'SAR',
+      settlementCurrency: 'NGN',
+      paymentTerms: 'Net 30',
+      settlementCycle: 'Monthly',
+      creditLimit: 15_000_000,
+      onboardingStatus: 'ACTIVE',
+      kycStatus: 'VERIFIED',
+      riskStatus: 'LOW',
+      accountManagerStaffId: financeIdentity.staff!.id,
+      notes: 'Primary Makkah/Madinah hotel allotment wholesaler.',
+    },
+  });
+  await prisma.supplierContact.create({
+    data: {
+      supplierId: hotelWholesaler.id,
+      name: 'Yusuf Al-Amin',
+      role: 'Contracting Manager',
+      email: 'yusuf@haramain-hospitality.example',
+      phone: '+966500000002',
+      isPrimary: true,
+    },
+  });
+  await prisma.supplierContract.create({
+    data: {
+      supplierId: hotelWholesaler.id,
+      contractNumber: 'SC-HW-2026-001',
+      name: '2026 Makkah/Madinah Allotment Agreement',
+      startDate: new Date('2026-01-01'),
+      endDate: new Date(Date.now() + 45 * 24 * 60 * 60 * 1000),
+      currency: 'SAR',
+      paymentTerms: 'Net 30',
+      commissionPercent: 8,
+      markupPercent: 12,
+      settlementCycle: 'Monthly',
+      cancellationConditions: 'Free cancellation up to 14 days before check-in',
+      status: 'ACTIVE',
+    },
+  });
+
+  const visaProvider = await prisma.supplier.create({
+    data: {
+      companyId,
+      legalName: 'Crescent Visa Facilitation Services Ltd',
+      tradingName: 'Crescent Visa Services',
+      type: 'VISA_PROVIDER',
+      country: 'Nigeria',
+      email: 'ops@crescent-visa.example',
+      phone: '+2348000000003',
+      currency: 'NGN',
+      paymentTerms: 'Net 14',
+      creditLimit: 3_000_000,
+      onboardingStatus: 'ACTIVE',
+      kycStatus: 'VERIFIED',
+      riskStatus: 'LOW',
+      accountManagerStaffId: financeIdentity.staff!.id,
+    },
+  });
+  const visaPayable = await prisma.supplierPayable.create({
+    data: {
+      companyId,
+      supplierName: visaProvider.legalName,
+      supplierId: visaProvider.id,
+      sourceModule: 'VISA_APPLICATION',
+      sourceId: `demo-seed-${visaProvider.id}`,
+      amount: 250_000,
+      currency: 'NGN',
+      status: 'OUTSTANDING',
+    },
+  });
+  void visaPayable; // demo exposure for Supplier.getBalance() — not linked to a real VisaApplication row
+
+  const hajjSupplier = await prisma.supplier.create({
+    data: {
+      companyId,
+      legalName: 'Masaeed Ziyarat & Transport Est.',
+      tradingName: 'Masaeed Ziyarat',
+      type: 'HAJJ_SUPPLIER',
+      country: 'Saudi Arabia',
+      email: 'bookings@masaeed-ziyarat.example',
+      currency: 'SAR',
+      onboardingStatus: 'COMMERCIAL_REVIEW', // deliberately mid-onboarding for the demo
+      kycStatus: 'IN_PROGRESS',
+      riskStatus: 'MEDIUM',
+      notes:
+        'Awaiting finalized commission terms before moving to finance review.',
+    },
+  });
+  await prisma.supplierContact.create({
+    data: {
+      supplierId: hajjSupplier.id,
+      name: 'Abdullah Rahman',
+      role: 'Operations Lead',
+      phone: '+966500000004',
+      isPrimary: true,
+    },
+  });
+
+  await prisma.supplier.create({
+    data: {
+      companyId,
+      legalName: 'Kano Intercity Bus Services Ltd',
+      tradingName: 'Kano Intercity',
+      type: 'TRANSPORT_COMPANY',
+      country: 'Nigeria',
+      currency: 'NGN',
+      onboardingStatus: 'DRAFT',
+      kycStatus: 'NOT_STARTED',
+      riskStatus: 'LOW',
+    },
+  });
+
+  console.log(
+    'Created 4 Phase 16 suppliers (hotel wholesaler/visa/hajj/transport) across onboarding stages, 1 contract, and 1 supplier payable',
+  );
+}
+
 async function main() {
   await seedPhase1And2();
   await seedPhase3Visa();
@@ -4422,6 +4574,7 @@ async function main() {
   await seedPhase9VisaOperations();
   await seedPhase10FlightGds();
   await seedPhase11EnterpriseGovernance();
+  await seedPhase16Suppliers();
 }
 
 main()
