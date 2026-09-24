@@ -16,10 +16,12 @@ import { resolveTenantFilter } from '../../common/utils/tenant.util';
 import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { UsersService } from '../users/users.service';
 import { AssignConversationDto } from './dto/assign-conversation.dto';
+import { SendPaymentLinkDto } from './dto/send-payment-link.dto';
 import { SendReplyDto } from './dto/send-reply.dto';
 import { SetConversationStatusDto } from './dto/set-conversation-status.dto';
 import { WhatsAppAiReplySuggestionService } from './whatsapp-ai-reply-suggestion.service';
 import { WhatsAppConversationsService } from './whatsapp-conversations.service';
+import { WhatsAppPaymentLinkService } from './whatsapp-payment-link.service';
 
 /** Phase 14 spec #32/#64 — the staff WhatsApp inbox API. Every method is
  * tenant-scoped through WhatsAppConversationsService exactly like every
@@ -30,6 +32,7 @@ export class WhatsAppAdminController {
     private readonly conversationsService: WhatsAppConversationsService,
     private readonly usersService: UsersService,
     private readonly aiReplySuggestionService: WhatsAppAiReplySuggestionService,
+    private readonly paymentLinkService: WhatsAppPaymentLinkService,
   ) {}
 
   @Get()
@@ -93,6 +96,27 @@ export class WhatsAppAdminController {
   @RequirePermissions(PERMISSIONS.WHATSAPP.SEND)
   suggestReply(@CurrentUser() user: AuthContext, @Param('id') id: string) {
     return this.aiReplySuggestionService.suggestReply(id, user);
+  }
+
+  /** Sends a real payment link (a genuine PaymentIntent + checkout URL
+   * from PaymentsService, same as the customer portal) for one invoice
+   * belonging to this conversation's verified customer — via the normal
+   * staff-reply pipeline, so it's attributed and stored like any other
+   * reply. */
+  @Post(':id/send-payment-link')
+  @RequirePermissions(PERMISSIONS.WHATSAPP.SEND)
+  async sendPaymentLink(
+    @CurrentUser() user: AuthContext,
+    @Param('id') id: string,
+    @Body() dto: SendPaymentLinkDto,
+  ) {
+    const staffId = await this.usersService.getStaffIdForIdentity(user.sub);
+    return this.paymentLinkService.sendForConversation(
+      id,
+      dto.invoiceId,
+      staffId ?? user.sub,
+      resolveTenantFilter(user),
+    );
   }
 
   @Post(':id/notes')

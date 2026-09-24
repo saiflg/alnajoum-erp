@@ -18,22 +18,26 @@ How can we help you?
 2. Talk to Staff
 3. Help
 
-Reply with a number, or just tell us what you need.`;
+Reply with a number, or just tell us what you need. You can also reply "PAY <your booking reference>" to get a payment link.`;
 
 const HELP_TEXT = `You can ask things like:
 - "my booking" or "my PNR" — see your flight booking status
+- "pay AJ-123" — get a payment link for that booking (replace with your own reference)
 - "agent" — talk to a staff member
 - "menu" — see this menu again`;
 
 /**
  * Phase 14 spec #14/#16 — the WhatsApp customer self-service surface.
- * Deliberately scoped to the menu + read-only booking lookup for this
- * increment (see WhatsAppModule's own doc comment for what's deferred —
- * flight search/booking, visa/Hajj/Umrah self-service, payment links).
- * Every booking fact comes straight from FlightsService — this service
- * never re-derives or guesses a booking's status/fare/route itself
- * (spec #18's "never invent restrictions/rules" applies just as much to
- * inventing booking facts).
+ * Deliberately scoped to the menu + read-only booking lookup + payment
+ * links for this increment (see WhatsAppModule's own doc comment for
+ * what's still deferred — flight search/booking, visa/Hajj/Umrah
+ * self-service beyond payment). Every booking fact comes straight from
+ * FlightsService — this service never re-derives or guesses a booking's
+ * status/fare/route itself (spec #18's "never invent restrictions/rules"
+ * applies just as much to inventing booking facts). Payment-link text is
+ * built by WhatsAppPaymentLinkService, which is equally strict: it only
+ * ever hands off to PaymentsService's real checkout/invoice calculation,
+ * never computes or claims a payment outcome itself.
  */
 @Injectable()
 export class WhatsAppSelfServiceService {
@@ -76,6 +80,16 @@ export class WhatsAppSelfServiceService {
 
   static requestsHelp(text: string): boolean {
     return ['help', '3'].includes(text.trim().toLowerCase());
+  }
+
+  /** Matches "PAY <booking reference>" (case-insensitive) and returns the
+   * reference, or null if the text isn't a payment request. A bare "pay"
+   * with nothing after it doesn't match — WhatsAppWebhookService's
+   * fallback (welcome menu) is a better response than guessing which
+   * booking. */
+  static parsePaymentRequest(text: string): string | null {
+    const match = /^pay\s+(\S+)$/i.exec(text.trim());
+    return match ? match[1] : null;
   }
 
   /** Formats the customer's most recent bookings — same data

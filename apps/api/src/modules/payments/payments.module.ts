@@ -9,6 +9,7 @@ import { UsersModule } from '../users/users.module';
 import { InvoicesAdminController } from './invoices-admin.controller';
 import { InvoicesOwnController } from './invoices-own.controller';
 import { InvoicesService } from './invoices.service';
+import { PaymentIntentReconciliationService } from './payment-intent-reconciliation.service';
 import { PaymentsService } from './payments.service';
 import { PaystackWebhookController } from './paystack-webhook.controller';
 import { MockPaymentProviderService } from './providers/mock-payment-provider.service';
@@ -39,6 +40,7 @@ import { ReceiptsService } from './receipts.service';
   providers: [
     InvoicesService,
     PaymentsService,
+    PaymentIntentReconciliationService,
     ReceiptsService,
     MockPaymentProviderService,
     PaystackPaymentProviderService,
@@ -46,6 +48,6 @@ import { ReceiptsService } from './receipts.service';
     PaymentProviderRouter,
     { provide: PAYMENT_PROVIDER, useExisting: PaymentProviderRouter },
   ],
-  exports: [InvoicesService],
+  exports: [InvoicesService, PaymentsService, PaymentProviderRouter],
 })
 export class PaymentsModule {}

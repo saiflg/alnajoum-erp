@@ -54,6 +54,9 @@ export default function WhatsAppInboxPage() {
   const [suggesting, setSuggesting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState('');
+  const [showPaymentLinkForm, setShowPaymentLinkForm] = useState(false);
+  const [paymentLinkInvoiceId, setPaymentLinkInvoiceId] = useState('');
+  const [sendingPaymentLink, setSendingPaymentLink] = useState(false);
 
   function loadConversations() {
     const query = statusFilter ? `?status=${statusFilter}` : '';
@@ -111,6 +114,27 @@ export default function WhatsAppInboxPage() {
       setError(err instanceof ApiError ? err.message : 'Failed to draft a suggestion');
     } finally {
       setSuggesting(false);
+    }
+  }
+
+  async function handleSendPaymentLink(e: FormEvent) {
+    e.preventDefault();
+    if (!selectedId || paymentLinkInvoiceId.trim().length === 0) return;
+    setSendingPaymentLink(true);
+    setError(null);
+    try {
+      await apiRequest(`/whatsapp/conversations/${selectedId}/send-payment-link`, {
+        method: 'POST',
+        body: { invoiceId: paymentLinkInvoiceId.trim() },
+      });
+      setPaymentLinkInvoiceId('');
+      setShowPaymentLinkForm(false);
+      loadMessages(selectedId);
+      loadConversations();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to send payment link');
+    } finally {
+      setSendingPaymentLink(false);
     }
   }
 
@@ -226,6 +250,18 @@ export default function WhatsAppInboxPage() {
                     >
                       Assign to me
                     </button>
+                    <button
+                      onClick={() => setShowPaymentLinkForm((v) => !v)}
+                      disabled={!selected.customer}
+                      title={
+                        selected.customer
+                          ? 'Send a real payment link for one of this customer\'s invoices'
+                          : 'Only available once this conversation is linked to a verified customer'
+                      }
+                      className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                    >
+                      💳 Payment link
+                    </button>
                     <select
                       value={selected.status}
                       onChange={(e) => handleStatusChange(e.target.value)}
@@ -239,6 +275,29 @@ export default function WhatsAppInboxPage() {
                     </select>
                   </div>
                 </div>
+
+                {showPaymentLinkForm && (
+                  <form
+                    onSubmit={handleSendPaymentLink}
+                    className="flex items-center gap-2 border-b border-slate-100 bg-slate-50 px-4 py-2"
+                  >
+                    <input
+                      value={paymentLinkInvoiceId}
+                      onChange={(e) => setPaymentLinkInvoiceId(e.target.value)}
+                      placeholder="Invoice ID (from /admin/invoices)"
+                      className="flex-1 rounded-md border border-slate-300 px-2 py-1 text-xs"
+                    />
+                    <button
+                      type="submit"
+                      disabled={
+                        sendingPaymentLink || paymentLinkInvoiceId.trim().length === 0
+                      }
+                      className="rounded-md bg-slate-900 px-3 py-1 text-xs font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+                    >
+                      {sendingPaymentLink ? 'Sending…' : 'Send link'}
+                    </button>
+                  </form>
+                )}
 
                 <div className="flex-1 space-y-2 overflow-y-auto px-4 py-3" style={{ maxHeight: 400 }}>
                   {messages?.map((m) => (

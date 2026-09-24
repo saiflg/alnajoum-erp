@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Test, TestingModule } from '@nestjs/testing';
 import {
   InvoiceStatus,
@@ -14,10 +15,12 @@ import {
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { FinancePostingService } from '../finance/finance-posting.service';
 import { IncentivesService } from '../incentives/incentives.service';
+import { IntegrationsService } from '../integrations/integrations.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { InvoicesService } from './invoices.service';
 import { PaymentsService } from './payments.service';
 import { PAYMENT_PROVIDER } from './providers/payment-provider.port';
+import { PaymentProviderRouter } from './providers/payment-provider.router';
 
 describe('PaymentsService', () => {
   let service: PaymentsService;
@@ -30,6 +33,9 @@ describe('PaymentsService', () => {
     verifyCheckout: jest.Mock;
   };
   let configService: { get: jest.Mock };
+  let integrationsService: { getActiveProvider: jest.Mock };
+  let eventEmitter: { emit: jest.Mock };
+  let paymentProviderRouter: { resolveByName: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
@@ -56,6 +62,13 @@ describe('PaymentsService', () => {
     configService = {
       get: jest.fn((_key: string, fallback?: unknown) => fallback),
     };
+    integrationsService = {
+      getActiveProvider: jest.fn().mockResolvedValue(null),
+    };
+    eventEmitter = { emit: jest.fn() };
+    paymentProviderRouter = {
+      resolveByName: jest.fn().mockReturnValue(paymentProvider),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -65,6 +78,9 @@ describe('PaymentsService', () => {
         { provide: NotificationsService, useValue: notificationsService },
         { provide: IncentivesService, useValue: incentivesService },
         { provide: ConfigService, useValue: configService },
+        { provide: IntegrationsService, useValue: integrationsService },
+        { provide: EventEmitter2, useValue: eventEmitter },
+        { provide: PaymentProviderRouter, useValue: paymentProviderRouter },
         { provide: PAYMENT_PROVIDER, useValue: paymentProvider },
         {
           provide: FinancePostingService,
@@ -306,6 +322,39 @@ describe('PaymentsService', () => {
         reference: 'CHK-ABC123',
       });
     });
+
+    it('records the DB-driven active provider on the PaymentIntent, not just the env var fallback', async () => {
+      // Regression test for a real bug found while building the WhatsApp
+      // payment-link reconciliation poller: this must match whatever
+      // PaymentProviderRouter.resolve() actually uses, or reconciliation
+      // looks up the wrong provider for an intent created after an admin
+      // switched providers via /admin/integrations rather than the env var.
+      integrationsService.getActiveProvider.mockResolvedValue('paystack');
+      prisma.invoice.findUnique.mockResolvedValue({
+        ...baseInvoice,
+        status: InvoiceStatus.ISSUED,
+      });
+      prisma.customer.findUnique.mockResolvedValue({
+        id: 'customer-1',
+        identity: { email: 'amina@example.com' },
+      });
+      prisma.paymentIntent.create.mockResolvedValue({
+        id: 'intent-1',
+        reference: 'CHK-ABC123',
+      });
+      paymentProvider.initiateCheckout.mockResolvedValue({
+        authorizationUrl: 'https://paystack.example/pay',
+        reference: 'CHK-ABC123',
+      });
+
+      await service.initiateCheckout('customer-1', 'invoice-1');
+
+      expect(prisma.paymentIntent.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ provider: 'paystack' }),
+        }),
+      );
+    });
   });
 
   describe('verifyCheckout', () => {
@@ -440,6 +489,15 @@ describe('PaymentsService', () => {
             recordedByStaffId: null,
           }),
         }),
+      );
+      expect(eventEmitter.emit).toHaveBeenCalledWith(
+        'invoice.payment.succeeded',
+        {
+          invoiceId: 'invoice-1',
+          customerId: 'customer-1',
+          amount: 30_000,
+          currency: 'NGN',
+        },
       );
       expect(notificationsService.sendPaymentReceipt).toHaveBeenCalledWith(
         'amina@example.com',
@@ -576,6 +634,104 @@ describe('PaymentsService', () => {
 
       expect(prisma.payment.create).not.toHaveBeenCalled();
       expect(notificationsService.sendPaymentReceipt).not.toHaveBeenCalled();
+      expect(eventEmitter.emit).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('reconcilePendingIntent', () => {
+    it('returns ok:false for an unknown intent id', async () => {
+      prisma.paymentIntent.findUnique.mockResolvedValue(null);
+
+      const result = await service.reconcilePendingIntent('missing');
+
+      expect(result).toEqual({
+        ok: false,
+        reason: 'Payment intent not found',
+      });
+      expect(paymentProviderRouter.resolveByName).not.toHaveBeenCalled();
+    });
+
+    it('no-ops for an intent that is no longer PENDING', async () => {
+      prisma.paymentIntent.findUnique.mockResolvedValue({
+        id: 'intent-1',
+        status: PaymentIntentStatus.SUCCEEDED,
+      });
+
+      const result = await service.reconcilePendingIntent('intent-1');
+
+      expect(result).toEqual({ ok: true });
+      expect(paymentProviderRouter.resolveByName).not.toHaveBeenCalled();
+    });
+
+    it('verifies against the provider stored on the intent, not the currently active one', async () => {
+      prisma.paymentIntent.findUnique.mockResolvedValue({
+        id: 'intent-1',
+        invoiceId: 'invoice-1',
+        customerId: 'customer-1',
+        reference: 'CHK-ABC123',
+        provider: 'opay',
+        amount: 30_000,
+        currency: 'NGN',
+        status: PaymentIntentStatus.PENDING,
+      });
+      paymentProvider.verifyCheckout.mockResolvedValue({
+        reference: 'CHK-ABC123',
+        success: true,
+        amount: 30_000,
+        currency: 'NGN',
+      });
+      prisma.customer.findUnique.mockResolvedValue(null);
+      invoicesService.recomputeStatus.mockResolvedValue({
+        id: 'invoice-1',
+        invoiceNumber: 'INV-ABCD1234',
+        status: InvoiceStatus.PAID,
+        totalAmount: 30_000,
+        currency: 'NGN',
+        payments: [{ amount: 30_000 }],
+      });
+      prisma.paymentIntent.updateMany.mockResolvedValue({ count: 1 });
+
+      const result = await service.reconcilePendingIntent('intent-1');
+
+      expect(paymentProviderRouter.resolveByName).toHaveBeenCalledWith('opay');
+      expect(paymentProvider.verifyCheckout).toHaveBeenCalledWith('CHK-ABC123');
+      expect(prisma.payment.create).toHaveBeenCalled();
+      expect(eventEmitter.emit).toHaveBeenCalledWith(
+        'invoice.payment.succeeded',
+        expect.objectContaining({ invoiceId: 'invoice-1' }),
+      );
+      expect(result).toEqual({ ok: true });
+    });
+
+    it('marks the intent FAILED when the provider reports it did not succeed', async () => {
+      prisma.paymentIntent.findUnique.mockResolvedValue({
+        id: 'intent-1',
+        invoiceId: 'invoice-1',
+        customerId: 'customer-1',
+        reference: 'CHK-ABC123',
+        provider: 'opay',
+        amount: 30_000,
+        currency: 'NGN',
+        status: PaymentIntentStatus.PENDING,
+      });
+      paymentProvider.verifyCheckout.mockResolvedValue({
+        reference: 'CHK-ABC123',
+        success: false,
+        amount: 0,
+        currency: '',
+      });
+
+      const result = await service.reconcilePendingIntent('intent-1');
+
+      expect(result).toEqual({
+        ok: false,
+        reason: 'The payment was not successful.',
+      });
+      expect(prisma.paymentIntent.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: { status: PaymentIntentStatus.FAILED },
+        }),
+      );
     });
   });
 });

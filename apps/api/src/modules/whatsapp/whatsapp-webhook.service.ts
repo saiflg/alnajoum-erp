@@ -12,6 +12,7 @@ import { WhatsAppProviderRouter } from './providers/whatsapp-provider.router';
 import { WhatsAppConsentService } from './whatsapp-consent.service';
 import { WhatsAppConversationsService } from './whatsapp-conversations.service';
 import { WhatsAppOtpService } from './whatsapp-otp.service';
+import { WhatsAppPaymentLinkService } from './whatsapp-payment-link.service';
 import { WhatsAppSelfServiceService } from './whatsapp-self-service.service';
 
 const OTP_PATTERN = /^\d{6}$/;
@@ -44,6 +45,7 @@ export class WhatsAppWebhookService {
     private readonly consentService: WhatsAppConsentService,
     private readonly otpService: WhatsAppOtpService,
     private readonly selfService: WhatsAppSelfServiceService,
+    private readonly paymentLinkService: WhatsAppPaymentLinkService,
     private readonly providerRouter: WhatsAppProviderRouter,
   ) {}
 
@@ -249,6 +251,29 @@ export class WhatsAppWebhookService {
       return;
     }
 
+    const paymentBookingRef =
+      WhatsAppSelfServiceService.parsePaymentRequest(text);
+    if (paymentBookingRef) {
+      if (customer) {
+        await this.reply(
+          phoneNumber,
+          await this.paymentLinkService.requestLinkForBooking(
+            customer.id,
+            paymentBookingRef,
+          ),
+        );
+        return;
+      }
+      const sentCode = await this.triggerVerificationIfPossible(phoneNumber);
+      await this.reply(
+        phoneNumber,
+        sentCode
+          ? `To protect your account, please verify it's you. Your code is: ${sentCode}\n\nReply with this 6-digit code, then send "PAY ${paymentBookingRef}" again.`
+          : "We couldn't find an account linked to this number. Please contact our staff or register through the customer portal first.",
+      );
+      return;
+    }
+
     if (WhatsAppSelfServiceService.requiresVerification(text)) {
       if (customer) {
         await this.reply(
@@ -257,20 +282,12 @@ export class WhatsAppWebhookService {
         );
         return;
       }
-      const candidate = await this.prisma.customer.findFirst({
-        where: { whatsapp: phoneNumber },
-      });
-      if (!candidate) {
-        await this.reply(
-          phoneNumber,
-          "We couldn't find an account linked to this number. Please contact our staff or register through the customer portal first.",
-        );
-        return;
-      }
-      const code = await this.otpService.requestOtp(phoneNumber, candidate.id);
+      const code = await this.triggerVerificationIfPossible(phoneNumber);
       await this.reply(
         phoneNumber,
-        `To protect your booking details, please verify it's you. Your code is: ${code}\n\nReply with this 6-digit code.`,
+        code
+          ? `To protect your booking details, please verify it's you. Your code is: ${code}\n\nReply with this 6-digit code.`
+          : "We couldn't find an account linked to this number. Please contact our staff or register through the customer portal first.",
       );
       return;
     }
@@ -279,6 +296,23 @@ export class WhatsAppWebhookService {
     // this increment (business-hours-aware messaging is deferred, see
     // WhatsAppModule's doc comment).
     await this.reply(phoneNumber, this.selfService.welcomeMenu());
+  }
+
+  /** Shared by every branch that needs a verified customer but doesn't
+   * have one yet: finds the Customer this number belongs to (if any) and
+   * requests an OTP for it. Returns the plaintext code to relay, or null
+   * if no account exists for this number at all — callers are
+   * responsible for phrasing the reply either way, since "you're not
+   * verified yet" and "verify with this code" need different wording per
+   * branch. */
+  private async triggerVerificationIfPossible(
+    phoneNumber: string,
+  ): Promise<string | null> {
+    const candidate = await this.prisma.customer.findFirst({
+      where: { whatsapp: phoneNumber },
+    });
+    if (!candidate) return null;
+    return this.otpService.requestOtp(phoneNumber, candidate.id);
   }
 
   private async storeInboundMessage(

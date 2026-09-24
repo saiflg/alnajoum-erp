@@ -5,6 +5,7 @@ import { WhatsAppProviderRouter } from './providers/whatsapp-provider.router';
 import { WhatsAppConsentService } from './whatsapp-consent.service';
 import { WhatsAppConversationsService } from './whatsapp-conversations.service';
 import { WhatsAppOtpService } from './whatsapp-otp.service';
+import { WhatsAppPaymentLinkService } from './whatsapp-payment-link.service';
 import { WhatsAppSelfServiceService } from './whatsapp-self-service.service';
 import { WhatsAppWebhookService } from './whatsapp-webhook.service';
 
@@ -36,6 +37,7 @@ describe('WhatsAppWebhookService', () => {
   let consentService: { recordConsent: jest.Mock };
   let otpService: { requestOtp: jest.Mock; verifyOtp: jest.Mock };
   let selfService: Record<string, any>;
+  let paymentLinkService: { requestLinkForBooking: jest.Mock };
   let providerRouter: { sendTextMessage: jest.Mock };
 
   beforeEach(async () => {
@@ -71,6 +73,9 @@ describe('WhatsAppWebhookService', () => {
       help: jest.fn().mockReturnValue('HELP_TEXT'),
       myBookings: jest.fn().mockResolvedValue('BOOKING: AJ-1'),
     };
+    paymentLinkService = {
+      requestLinkForBooking: jest.fn().mockResolvedValue('PAYMENT_LINK_TEXT'),
+    };
     providerRouter = {
       sendTextMessage: jest
         .fn()
@@ -88,6 +93,7 @@ describe('WhatsAppWebhookService', () => {
         { provide: WhatsAppConsentService, useValue: consentService },
         { provide: WhatsAppOtpService, useValue: otpService },
         { provide: WhatsAppSelfServiceService, useValue: selfService },
+        { provide: WhatsAppPaymentLinkService, useValue: paymentLinkService },
         { provide: WhatsAppProviderRouter, useValue: providerRouter },
       ],
     }).compile();
@@ -324,6 +330,64 @@ describe('WhatsAppWebhookService', () => {
         expect.objectContaining({
           body: expect.stringContaining("didn't match"),
         }),
+      );
+    });
+  });
+
+  describe('processEvent — "PAY <ref>" payment-link requests', () => {
+    it('answers directly when the customer is already verified', async () => {
+      selfService.findVerifiedCustomer.mockResolvedValue({ id: 'customer-1' });
+
+      await service.processEvent(textEvent('PAY AJ-000123'));
+
+      expect(paymentLinkService.requestLinkForBooking).toHaveBeenCalledWith(
+        'customer-1',
+        'AJ-000123',
+      );
+      expect(providerRouter.sendTextMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ body: 'PAYMENT_LINK_TEXT' }),
+      );
+    });
+
+    it('starts an OTP challenge for an unverified customer, referencing the original request in the prompt', async () => {
+      selfService.findVerifiedCustomer.mockResolvedValue(null);
+      prisma.customer.findFirst.mockResolvedValue({ id: 'customer-1' });
+
+      await service.processEvent(textEvent('pay AJ-000123'));
+
+      expect(otpService.requestOtp).toHaveBeenCalledWith(
+        '+2348031234567',
+        'customer-1',
+      );
+      expect(paymentLinkService.requestLinkForBooking).not.toHaveBeenCalled();
+      expect(providerRouter.sendTextMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: expect.stringContaining('PAY AJ-000123'),
+        }),
+      );
+    });
+
+    it('never reveals or creates a payment link for a phone number with no matching customer at all', async () => {
+      selfService.findVerifiedCustomer.mockResolvedValue(null);
+      prisma.customer.findFirst.mockResolvedValue(null);
+
+      await service.processEvent(textEvent('pay AJ-000123'));
+
+      expect(paymentLinkService.requestLinkForBooking).not.toHaveBeenCalled();
+      expect(otpService.requestOtp).not.toHaveBeenCalled();
+      expect(providerRouter.sendTextMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: expect.stringContaining("couldn't find an account"),
+        }),
+      );
+    });
+
+    it('does not treat a bare "pay" with no reference as a payment request', async () => {
+      await service.processEvent(textEvent('pay'));
+
+      expect(paymentLinkService.requestLinkForBooking).not.toHaveBeenCalled();
+      expect(providerRouter.sendTextMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ body: 'WELCOME_MENU' }),
       );
     });
   });

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AppController } from './app.controller';
@@ -50,6 +51,12 @@ import { WhatsAppModule } from './modules/whatsapp/whatsapp.module';
     }),
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
     ScheduleModule.forRoot(),
+    // Global on purpose — the one place two feature modules that must
+    // never import each other (Payments, WhatsApp) can still react to
+    // one another's domain events. See PaymentsService's
+    // 'invoice.payment.succeeded' emit and
+    // WhatsAppPaymentNotificationListener for the only current use.
+    EventEmitterModule.forRoot(),
     PrismaModule,
     AuditModule,
     IntegrationsModule,

@@ -34,7 +34,7 @@ function generateInvoiceNumber(): string {
  */
 function splitEvenly(total: number, count: number): number[] {
   const base = Math.floor(total / count);
-  const shares = new Array(count).fill(base);
+  const shares = new Array<number>(count).fill(base);
   shares[count - 1] += total - base * count;
   return shares;
 }
@@ -338,6 +338,18 @@ export class InvoicesService {
       where: { id: invoiceId },
       data: { status },
       include: { lineItems: true, payments: true },
+    });
+  }
+
+  /** The invoice tied to one flight booking, or null — used by
+   * WhatsAppPaymentLinkService to go from "customer's own booking,
+   * already ownership-checked via FlightsService.listForCustomer" to the
+   * invoice a payment link is for, without a second ownership check
+   * (the booking's ownership already implies the invoice's). */
+  getInvoiceForFlightBooking(flightBookingId: string) {
+    return this.prisma.invoice.findUnique({
+      where: { flightBookingId },
+      include: { payments: true },
     });
   }
 

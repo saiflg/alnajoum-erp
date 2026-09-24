@@ -28,6 +28,15 @@ export class PaymentProviderRouter implements PaymentProviderPort {
     const active = await this.integrationsService.getActiveProvider('PAYMENT');
     const providerName =
       active ?? this.configService.get<string>('PAYMENT_PROVIDER', 'mock');
+    return this.resolveByName(providerName);
+  }
+
+  /** For reconciling an already-created PaymentIntent, which must be
+   * verified against whichever provider actually issued it
+   * (`PaymentIntent.provider`), not whatever happens to be active now —
+   * an admin may have switched providers since. Exported for
+   * PaymentIntentReconciliationService. */
+  resolveByName(providerName: string): PaymentProviderPort {
     switch (providerName) {
       case 'paystack':
         return this.paystackProvider;

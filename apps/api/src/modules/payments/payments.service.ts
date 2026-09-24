@@ -8,6 +8,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   InvoiceStatus,
   PaymentIntent,
@@ -20,12 +21,27 @@ import { FinancePostingService } from '../finance/finance-posting.service';
 import { IncentivesService } from '../incentives/incentives.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { RecordPaymentDto } from './dto/record-payment.dto';
+import { IntegrationsService } from '../integrations/integrations.service';
 import { InvoicesService } from './invoices.service';
 import {
   PAYMENT_PROVIDER,
   VerifyCheckoutResult,
 } from './providers/payment-provider.port';
 import type { PaymentProviderPort } from './providers/payment-provider.port';
+import { PaymentProviderRouter } from './providers/payment-provider.router';
+
+/** Payload for the 'invoice.payment.succeeded' event — emitted once per
+ * finalized payment, after the Invoice/Payment rows are committed.
+ * Listened to by WhatsAppPaymentNotificationListener (in the WhatsApp
+ * module) to push a confirmation message, without PaymentsModule ever
+ * importing WhatsAppModule — see EventEmitterModule.forRoot()'s comment
+ * in app.module.ts for why this indirection exists. */
+export interface InvoicePaymentSucceededEvent {
+  invoiceId: string;
+  customerId: string;
+  amount: number;
+  currency: string;
+}
 
 function generatePaymentReference(): string {
   return `PAY-${randomBytes(4).toString('hex').toUpperCase()}`;
@@ -51,6 +67,9 @@ export class PaymentsService {
     private readonly configService: ConfigService,
     private readonly incentivesService: IncentivesService,
     private readonly financePostingService: FinancePostingService,
+    private readonly integrationsService: IntegrationsService,
+    private readonly eventEmitter: EventEmitter2,
+    private readonly paymentProviderRouter: PaymentProviderRouter,
     @Inject(PAYMENT_PROVIDER)
     private readonly paymentProvider: PaymentProviderPort,
   ) {}
@@ -168,10 +187,17 @@ export class PaymentsService {
       throw new NotFoundException('Customer profile not found');
     }
 
-    const providerName = this.configService.get<string>(
-      'PAYMENT_PROVIDER',
-      'mock',
-    );
+    // Must match whatever PaymentProviderRouter.resolve() will actually
+    // use for the initiateCheckout call below — previously this read
+    // only the env var, drifting from the DB-driven /admin/integrations
+    // setting the router itself checks first, so a PaymentIntent could
+    // record the wrong provider name whenever an admin had activated one
+    // via the UI rather than the env var. Reconciliation (anything that
+    // looks up a provider by `PaymentIntent.provider`, e.g. the
+    // WhatsApp-payment-link poller) depends on this being accurate.
+    const providerName =
+      (await this.integrationsService.getActiveProvider('PAYMENT')) ??
+      this.configService.get<string>('PAYMENT_PROVIDER', 'mock');
     const reference = generateCheckoutReference();
 
     const intent = await this.prisma.paymentIntent.create({
@@ -274,6 +300,31 @@ export class PaymentsService {
     }
   }
 
+  /**
+   * Poller-facing reconciliation — for a provider with no reliable
+   * webhook (OPay) or a customer who never returns to the browser after
+   * paying (the common case for a link sent over WhatsApp), this is the
+   * only path that will ever notice a payment succeeded. Verifies against
+   * whichever provider actually issued this specific intent
+   * (`intent.provider`), not whatever is active now. Never throws, same
+   * "one bad intent doesn't stop the batch" contract as the webhook path
+   * — used by PaymentIntentReconciliationService in a loop.
+   */
+  async reconcilePendingIntent(intentId: string): Promise<FinalizeResult> {
+    const intent = await this.prisma.paymentIntent.findUnique({
+      where: { id: intentId },
+    });
+    if (!intent) {
+      return { ok: false, reason: 'Payment intent not found' };
+    }
+    if (intent.status !== PaymentIntentStatus.PENDING) {
+      return { ok: true };
+    }
+    const provider = this.paymentProviderRouter.resolveByName(intent.provider);
+    const result = await provider.verifyCheckout(intent.reference);
+    return this.finalizeIntent(intent, result);
+  }
+
   private async finalizeIntent(
     intent: PaymentIntent,
     result: VerifyCheckoutResult,
@@ -371,6 +422,13 @@ export class PaymentsService {
       intent.invoiceId,
       intent.amount,
     );
+
+    this.eventEmitter.emit('invoice.payment.succeeded', {
+      invoiceId: intent.invoiceId,
+      customerId: intent.customerId,
+      amount: intent.amount,
+      currency: intent.currency,
+    } satisfies InvoicePaymentSucceededEvent);
 
     return { ok: true };
   }

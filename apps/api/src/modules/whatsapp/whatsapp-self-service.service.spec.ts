@@ -53,6 +53,23 @@ describe('WhatsAppSelfServiceService', () => {
     it.each(['help', '3'])('requestsHelp("%s") is true', (text) => {
       expect(WhatsAppSelfServiceService.requestsHelp(text)).toBe(true);
     });
+
+    it.each([
+      ['pay AJ-000123', 'AJ-000123'],
+      ['PAY aj-000123', 'aj-000123'],
+      ['  pay   AJ-1  ', 'AJ-1'],
+    ])('parsePaymentRequest("%s") extracts "%s"', (text, expected) => {
+      expect(WhatsAppSelfServiceService.parsePaymentRequest(text)).toBe(
+        expected,
+      );
+    });
+
+    it.each(['pay', 'pay ', 'payment', 'hello'])(
+      'parsePaymentRequest("%s") is null — never guesses a booking',
+      (text) => {
+        expect(WhatsAppSelfServiceService.parsePaymentRequest(text)).toBeNull();
+      },
+    );
   });
 
   describe('myBookings', () => {
