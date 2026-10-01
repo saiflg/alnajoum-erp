@@ -8,8 +8,15 @@ import { HotelBookingStatus, HotelProviderName } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { InvoicesService } from '../payments/invoices.service';
+import { HotelAllotmentsService } from './hotel-allotments.service';
 import { HotelsService } from './hotels.service';
 import { HOTEL_PROVIDER } from './providers/hotel-provider.port';
+import { RatePlansService } from './rate-plans.service';
+
+jest.mock('@nestjs/schedule', () => ({
+  Cron: () => () => undefined,
+  CronExpression: { EVERY_HOUR: 'EVERY_HOUR' },
+}));
 
 const baseOffer = {
   id: 'offer-1',
@@ -29,10 +36,17 @@ const baseOffer = {
   expiresAt: '2027-01-09T00:00:00.000Z',
 };
 
+const catalogOffer = {
+  ...baseOffer,
+  id: 'rt-1::2027-01-10::2027-01-12::1',
+  provider: HotelProviderName.CATALOG,
+};
+
 describe('HotelsService', () => {
   let service: HotelsService;
   let prisma: {
     customer: { findUnique: jest.Mock };
+    hotelRoomType: { findUnique: jest.Mock };
     hotelBooking: {
       create: jest.Mock;
       findMany: jest.Mock;
@@ -52,10 +66,16 @@ describe('HotelsService', () => {
     voidHotelBookingIfUnpaid: jest.Mock;
   };
   let notificationsService: { sendBookingConfirmation: jest.Mock };
+  let ratePlansService: { findApplicable: jest.Mock };
+  let hotelAllotmentsService: {
+    claimNights: jest.Mock;
+    releaseNights: jest.Mock;
+  };
 
   beforeEach(async () => {
     prisma = {
       customer: { findUnique: jest.fn() },
+      hotelRoomType: { findUnique: jest.fn() },
       hotelBooking: {
         create: jest.fn(),
         findMany: jest.fn(),
@@ -77,6 +97,11 @@ describe('HotelsService', () => {
       voidHotelBookingIfUnpaid: jest.fn(),
     };
     notificationsService = { sendBookingConfirmation: jest.fn() };
+    ratePlansService = { findApplicable: jest.fn().mockResolvedValue(null) };
+    hotelAllotmentsService = {
+      claimNights: jest.fn().mockResolvedValue(false),
+      releaseNights: jest.fn(),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -85,6 +110,8 @@ describe('HotelsService', () => {
         { provide: HOTEL_PROVIDER, useValue: provider },
         { provide: InvoicesService, useValue: invoicesService },
         { provide: NotificationsService, useValue: notificationsService },
+        { provide: RatePlansService, useValue: ratePlansService },
+        { provide: HotelAllotmentsService, useValue: hotelAllotmentsService },
       ],
     }).compile();
 
@@ -189,6 +216,119 @@ describe('HotelsService', () => {
       ).rejects.toThrow(ConflictException);
       expect(prisma.hotelBooking.create).not.toHaveBeenCalled();
     });
+
+    describe('Phase 17 — rate plans and allotment claim (CATALOG provider only)', () => {
+      beforeEach(() => {
+        provider.getOffer.mockResolvedValue(catalogOffer);
+        provider.createOrder.mockResolvedValue({
+          providerOrderId: 'CATALOG-1',
+          status: 'CONFIRMED',
+        });
+        prisma.customer.findUnique.mockResolvedValue({
+          id: 'customer-1',
+          companyId: 'company-a',
+          identity: { email: 'amina@example.com' },
+        });
+        prisma.hotelRoomType.findUnique.mockResolvedValue({
+          id: 'rt-1',
+          hotelId: 'hotel-1',
+          supplierCost: 40_000,
+        });
+        prisma.hotelBooking.create.mockResolvedValue({
+          id: 'booking-1',
+          bookingReference: 'HTL-ABC123',
+          hotelName: catalogOffer.hotelName,
+          city: catalogOffer.city,
+          checkInDate: new Date(catalogOffer.checkInDate),
+          totalAmount: catalogOffer.totalAmount,
+          currency: catalogOffer.currency,
+        });
+      });
+
+      it('uses the matching RatePlan netPrice instead of the flat supplierCost', async () => {
+        ratePlansService.findApplicable.mockResolvedValue({
+          id: 'rp-1',
+          netPrice: 30_000,
+        });
+
+        await service.createBooking('customer-1', 'offer-1');
+
+        expect(ratePlansService.findApplicable).toHaveBeenCalledWith(
+          'company-a',
+          'rt-1',
+          catalogOffer.checkInDate,
+          catalogOffer.checkOutDate,
+        );
+        // 2 nights * 1 room * 30,000 negotiated rate = 60,000
+        expect(prisma.hotelBooking.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({ supplierCost: 60_000 }),
+          }),
+        );
+      });
+
+      it('claims allotment nights and stamps usedAllotment=true on success', async () => {
+        hotelAllotmentsService.claimNights.mockResolvedValue(true);
+
+        await service.createBooking('customer-1', 'offer-1');
+
+        expect(hotelAllotmentsService.claimNights).toHaveBeenCalledWith(
+          prisma,
+          'company-a',
+          'rt-1',
+          catalogOffer.checkInDate,
+          catalogOffer.checkOutDate,
+          catalogOffer.rooms,
+        );
+        expect(prisma.hotelBooking.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({ usedAllotment: true }),
+          }),
+        );
+      });
+
+      it('stamps usedAllotment=false when the room type/dates are unmanaged', async () => {
+        hotelAllotmentsService.claimNights.mockResolvedValue(false);
+
+        await service.createBooking('customer-1', 'offer-1');
+
+        expect(prisma.hotelBooking.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({ usedAllotment: false }),
+          }),
+        );
+      });
+
+      it('propagates Conflict (and creates no booking) when the allotment claim fails', async () => {
+        hotelAllotmentsService.claimNights.mockRejectedValue(
+          new ConflictException(
+            'This offer is no longer available. Please search again.',
+          ),
+        );
+
+        await expect(
+          service.createBooking('customer-1', 'offer-1'),
+        ).rejects.toThrow(ConflictException);
+        expect(prisma.hotelBooking.create).not.toHaveBeenCalled();
+      });
+
+      it('never attempts an allotment claim for a MOCK-provider offer', async () => {
+        provider.getOffer.mockResolvedValue(baseOffer);
+        prisma.hotelBooking.create.mockResolvedValue({
+          id: 'booking-2',
+          bookingReference: 'HTL-XYZ999',
+          hotelName: baseOffer.hotelName,
+          city: baseOffer.city,
+          checkInDate: new Date(baseOffer.checkInDate),
+          totalAmount: baseOffer.totalAmount,
+          currency: baseOffer.currency,
+        });
+
+        await service.createBooking('customer-1', 'offer-1');
+
+        expect(hotelAllotmentsService.claimNights).not.toHaveBeenCalled();
+      });
+    });
   });
 
   describe('getBooking', () => {
@@ -248,6 +388,52 @@ describe('HotelsService', () => {
       await expect(service.cancelBooking('booking-1')).rejects.toThrow(
         ConflictException,
       );
+    });
+
+    it('releases the claimed allotment nights when the booking used one', async () => {
+      prisma.hotelBooking.findUnique.mockResolvedValue({
+        id: 'booking-1',
+        customerId: 'customer-1',
+        status: HotelBookingStatus.CONFIRMED,
+        providerOrderId: 'CATALOG-1',
+        usedAllotment: true,
+        roomTypeId: 'rt-1',
+        rooms: 1,
+        checkInDate: new Date('2027-01-10'),
+        checkOutDate: new Date('2027-01-12'),
+        customer: { companyId: 'company-a' },
+      });
+      prisma.hotelBooking.update.mockResolvedValue({
+        id: 'booking-1',
+        status: HotelBookingStatus.CANCELLED,
+      });
+
+      await service.cancelBooking('booking-1');
+
+      expect(hotelAllotmentsService.releaseNights).toHaveBeenCalledWith(
+        'company-a',
+        'rt-1',
+        new Date('2027-01-10'),
+        new Date('2027-01-12'),
+        1,
+      );
+    });
+
+    it('does not attempt a release when the booking never used an allotment', async () => {
+      prisma.hotelBooking.findUnique.mockResolvedValue({
+        id: 'booking-1',
+        customerId: 'customer-1',
+        status: HotelBookingStatus.CONFIRMED,
+        usedAllotment: false,
+      });
+      prisma.hotelBooking.update.mockResolvedValue({
+        id: 'booking-1',
+        status: HotelBookingStatus.CANCELLED,
+      });
+
+      await service.cancelBooking('booking-1');
+
+      expect(hotelAllotmentsService.releaseNights).not.toHaveBeenCalled();
     });
   });
 });

@@ -11,11 +11,13 @@ import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { InvoicesService } from '../payments/invoices.service';
 import { SearchHotelsDto } from './dto/search-hotels.dto';
+import { HotelAllotmentsService } from './hotel-allotments.service';
 import { HOTEL_PROVIDER } from './providers/hotel-provider.port';
 import type {
   HotelOffer,
   HotelProviderPort,
 } from './providers/hotel-provider.port';
+import { RatePlansService } from './rate-plans.service';
 
 function generateBookingReference(): string {
   return `HTL-${randomBytes(4).toString('hex').toUpperCase()}`;
@@ -34,6 +36,8 @@ export class HotelsService {
     @Inject(HOTEL_PROVIDER) private readonly provider: HotelProviderPort,
     private readonly invoicesService: InvoicesService,
     private readonly notificationsService: NotificationsService,
+    private readonly ratePlansService: RatePlansService,
+    private readonly hotelAllotmentsService: HotelAllotmentsService,
   ) {}
 
   async search(dto: SearchHotelsDto): Promise<HotelOffer[]> {
@@ -61,8 +65,16 @@ export class HotelsService {
 
   /** For a CATALOG offer, the offer id encodes the roomTypeId — this
    * recovers the supplierCost snapshot the offer was priced from, same
-   * "never recompute later" principle as VisaApplication's cost snapshot. */
-  private async resolveSupplierCost(offer: HotelOffer): Promise<{
+   * "never recompute later" principle as VisaApplication's cost snapshot.
+   * Phase 17: when the booking's tenant has a RatePlan covering this room
+   * type and stay window, its negotiated netPrice replaces the flat
+   * HotelRoomType.supplierCost per-night rate — companyId is only ever
+   * resolved at booking time (never on the @Public() search path, so
+   * offer.totalAmount/the customer-facing price is never affected). */
+  private async resolveSupplierCost(
+    offer: HotelOffer,
+    companyId?: string | null,
+  ): Promise<{
     supplierCost: number | null;
     roomTypeId: string | null;
     hotelId: string | null;
@@ -84,8 +96,20 @@ export class HotelsService {
           86_400_000,
       ),
     );
+    let perNightCost = roomType.supplierCost;
+    if (companyId) {
+      const ratePlan = await this.ratePlansService.findApplicable(
+        companyId,
+        roomTypeId,
+        offer.checkInDate,
+        offer.checkOutDate,
+      );
+      if (ratePlan) {
+        perNightCost = ratePlan.netPrice;
+      }
+    }
     return {
-      supplierCost: roomType.supplierCost * nights * offer.rooms,
+      supplierCost: perNightCost * nights * offer.rooms,
       roomTypeId: roomType.id,
       hotelId: roomType.hotelId,
     };
@@ -115,12 +139,34 @@ export class HotelsService {
       );
     }
 
+    const customer = await this.prisma.customer.findUnique({
+      where: { id: customerId },
+      include: { identity: { select: { email: true } } },
+    });
+    const companyId = customer?.companyId ?? null;
+
     const { supplierCost, roomTypeId, hotelId } =
-      await this.resolveSupplierCost(offer);
+      await this.resolveSupplierCost(offer, companyId);
     const markupAmount =
       supplierCost != null ? offer.totalAmount - supplierCost : null;
 
     const booking = await this.prisma.$transaction(async (tx) => {
+      let usedAllotment = false;
+      if (
+        offer.provider === HotelProviderName.CATALOG &&
+        roomTypeId &&
+        companyId
+      ) {
+        usedAllotment = await this.hotelAllotmentsService.claimNights(
+          tx,
+          companyId,
+          roomTypeId,
+          offer.checkInDate,
+          offer.checkOutDate,
+          offer.rooms,
+        );
+      }
+
       const created = await tx.hotelBooking.create({
         data: {
           bookingReference: generateBookingReference(),
@@ -147,6 +193,7 @@ export class HotelsService {
           roomTypeId,
           supplierCost,
           markupAmount,
+          usedAllotment,
           idempotencyKey,
           guestRecords: guests
             ? {
@@ -166,10 +213,6 @@ export class HotelsService {
       return created;
     });
 
-    const customer = await this.prisma.customer.findUnique({
-      where: { id: customerId },
-      include: { identity: { select: { email: true } } },
-    });
     if (customer) {
       await this.notificationsService.sendBookingConfirmation(
         customer.identity.email,
@@ -285,6 +328,20 @@ export class HotelsService {
       where: { id },
       data: { status: HotelBookingStatus.CANCELLED },
     });
+
+    if (
+      booking.usedAllotment &&
+      booking.roomTypeId &&
+      booking.customer.companyId
+    ) {
+      await this.hotelAllotmentsService.releaseNights(
+        booking.customer.companyId,
+        booking.roomTypeId,
+        booking.checkInDate,
+        booking.checkOutDate,
+        booking.rooms,
+      );
+    }
 
     await this.invoicesService.voidHotelBookingIfUnpaid(id);
 

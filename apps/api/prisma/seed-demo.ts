@@ -4563,6 +4563,72 @@ async function seedPhase16Suppliers() {
   );
 }
 
+async function seedPhase17RatePlansAndAllotments() {
+  const existing = await prisma.ratePlan.findFirst();
+  if (existing) {
+    console.log(
+      'Phase 17 rate plan/allotment demo data already present — skipping',
+    );
+    return;
+  }
+
+  const agentIdentity = await prisma.identity.findUniqueOrThrow({
+    where: { email: 'fatima.sule@demo.alnajoum.travel' },
+    include: { staff: true },
+  });
+  const companyId = agentIdentity.staff!.companyId;
+
+  const doubleRoom = await prisma.hotelRoomType.findFirstOrThrow({
+    where: { name: 'Deluxe Double' },
+  });
+  const hotelWholesaler = await prisma.supplier.findFirst({
+    where: { legalName: 'Haramain Hospitality Wholesale FZE' },
+  });
+
+  // Negotiated rate undercuts the room type's flat supplierCost (45,000) —
+  // HotelsService.resolveSupplierCost() should pick this up for any booking
+  // by a customer of this company against this room type/stay window.
+  await prisma.ratePlan.create({
+    data: {
+      companyId,
+      roomTypeId: doubleRoom.id,
+      supplierId: hotelWholesaler?.id,
+      name: 'Corporate Negotiated Rate — Q4 2026',
+      mealPlan: 'BED_AND_BREAKFAST',
+      currency: 'NGN',
+      netPrice: 38_000,
+      commissionPercent: 8,
+      cancellationPolicy: 'Free cancellation up to 14 days before check-in',
+      effectiveFrom: new Date('2026-10-01'),
+      effectiveTo: new Date('2026-12-31'),
+      notes: 'Negotiated directly with the wholesaler for the Q4 season.',
+    },
+  });
+
+  // Only 5 of the room type's 10 physical rooms are allocated to this
+  // channel for the next 14 nights — the other 5 stay with the hotel's own
+  // front desk/other channels, demonstrating the allotment is a sub-cap on
+  // top of (never equal to) HotelRoomType.totalRooms.
+  const startDate = new Date();
+  startDate.setUTCHours(0, 0, 0, 0);
+  startDate.setUTCDate(startDate.getUTCDate() + 1);
+  const rows = Array.from({ length: 14 }, (_, i) => {
+    const date = new Date(startDate);
+    date.setUTCDate(date.getUTCDate() + i);
+    return {
+      companyId,
+      roomTypeId: doubleRoom.id,
+      date,
+      totalAllocated: 5,
+    };
+  });
+  await prisma.hotelAllotment.createMany({ data: rows });
+
+  console.log(
+    'Created 1 Phase 17 rate plan and 14 days of hotel allotment (5 rooms/night) for the Deluxe Double room type',
+  );
+}
+
 async function main() {
   await seedPhase1And2();
   await seedPhase3Visa();
@@ -4575,6 +4641,7 @@ async function main() {
   await seedPhase10FlightGds();
   await seedPhase11EnterpriseGovernance();
   await seedPhase16Suppliers();
+  await seedPhase17RatePlansAndAllotments();
 }
 
 main()

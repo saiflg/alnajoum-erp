@@ -58,6 +58,12 @@ export const PERMISSIONS = {
     REFUND: 'hotel:refund',
     REPORTS_VIEW: 'hotel:reports_view',
     PACKAGE_MANAGE: 'hotel:package_manage', // build/manage travel packages
+    // Phase 17 — negotiated rate plans and day-level room allotments for
+    // the CATALOG provider. Separate from MANAGE_CATALOG (hotel/room-type
+    // definitions) since commercial terms and inventory counts are more
+    // sensitive/operational than catalog content.
+    RATE_PLAN_MANAGE: 'hotel:rate_plan_manage',
+    ALLOTMENT_MANAGE: 'hotel:allotment_manage',
   },
   VEHICLE_RENTAL: {
     BOOK: 'vehicle_rental:book',

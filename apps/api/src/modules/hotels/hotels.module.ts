@@ -6,6 +6,8 @@ import { IntegrationsModule } from '../integrations/integrations.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { UsersModule } from '../users/users.module';
+import { HotelAllotmentsController } from './hotel-allotments.controller';
+import { HotelAllotmentsService } from './hotel-allotments.service';
 import { HotelBookingsAdminController } from './hotel-bookings-admin.controller';
 import { HotelBookingsOwnController } from './hotel-bookings-own.controller';
 import { HotelCatalogController } from './hotel-catalog.controller';
@@ -21,6 +23,8 @@ import { CatalogHotelProviderService } from './providers/catalog-hotel-provider.
 import { HOTEL_PROVIDER } from './providers/hotel-provider.port';
 import { HotelProviderRouter } from './providers/hotel-provider.router';
 import { MockHotelProviderService } from './providers/mock-hotel-provider.service';
+import { RatePlansController } from './rate-plans.controller';
+import { RatePlansService } from './rate-plans.service';
 import { TravelPackagesController } from './travel-packages.controller';
 import { TravelPackagesService } from './travel-packages.service';
 
@@ -39,6 +43,8 @@ import { TravelPackagesService } from './travel-packages.service';
   controllers: [
     HotelsController,
     HotelCatalogController,
+    RatePlansController,
+    HotelAllotmentsController,
     HotelBookingsOwnController,
     HotelBookingsAdminController,
     HotelReportsController,
@@ -47,6 +53,8 @@ import { TravelPackagesService } from './travel-packages.service';
   providers: [
     HotelsService,
     HotelCatalogService,
+    RatePlansService,
+    HotelAllotmentsService,
     HotelCompletionService,
     HotelIncentivesService,
     HotelRefundsService,

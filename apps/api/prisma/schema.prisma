@@ -452,6 +452,8 @@ model Company {
   flightSuppliers FlightSupplier[]
   supplierPayables SupplierPayable[]
   suppliers Supplier[]
+  ratePlans RatePlan[]
+  hotelAllotments HotelAllotment[]
 
   @@map("companies")
 }
@@ -2657,6 +2659,12 @@ model HotelRoomType {
 
   bookings HotelBooking[]
 
+  // Phase 17 — see RatePlan/HotelAllotment's own doc comments for why
+  // these are tenant-scoped rows hanging off this platform-wide room
+  // type, not the other way around.
+  ratePlans  RatePlan[]
+  allotments HotelAllotment[]
+
   @@index([hotelId])
   @@index([isActive])
   @@map("hotel_room_types")
@@ -2825,6 +2833,15 @@ model HotelBooking {
   supplierCost Int?
   markupAmount Int?
 
+  // Phase 17 — true when this booking successfully claimed a night against
+  // a HotelAllotment row (see HotelAllotment's own doc comment) at creation
+  // time. Recorded explicitly rather than re-derived at cancellation time,
+  // since the allotment configuration for this room type may have changed
+  // (or been added/removed) between booking and cancellation — cancelling
+  // must release exactly what THIS booking actually claimed, never guess
+  // based on today's config.
+  usedAllotment Boolean @default(false)
+
   branchId String?
   branch   Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
 
@@ -2850,6 +2867,152 @@ model HotelBooking {
   @@index([hotelId])
   @@index([roomTypeId])
   @@map("hotel_bookings")
+}
+
+// ============================================================================
+// Phase 17 — Hotel rate-plan management and date-ranged allotment inventory.
+//
+// Hotel/HotelRoomType (above) are platform-wide catalogs with no companyId
+// of their own (see Hotel's own doc comment) — exactly the situation
+// Supplier's doc comment already reasons through for Phase 16. RatePlan and
+// HotelAllotment are therefore tenant-scoped (companyId, mandatory) and link
+// to HotelRoomType via a plain one-directional foreign key, never the other
+// way around: multiple companies can each negotiate their own rate/
+// allocation against the same shared catalog room type, exactly like a real
+// hotel selling independent allotments to several travel agencies.
+//
+// Neither model is consulted by the public, unauthenticated search endpoint
+// (HotelsController.search is @Public() — there is no tenant to resolve a
+// company-specific rate/allotment against for an anonymous request, and
+// changing that would be a much larger, separate change to how this
+// multi-tenant platform resolves a caller's company from a public request).
+// Both are resolved instead at booking time, once a customerId — and
+// through it, a companyId — is always known: see HotelsService.createBooking
+// for where this plugs in. Customer-facing price is never altered by a rate
+// plan; only the internal supplierCost/margin calculation is. Committed to
+// production before this comment was: no existing overselling protection
+// (HotelRoomType.totalRooms was never checked against existing bookings) —
+// this feature closes that gap for room types a company has actually
+// configured an allotment for, not for every room type platform-wide (a
+// separate, smaller fix, deliberately not attempted here).
+// ============================================================================
+
+/**
+ * Spec #5 — a company's negotiated per-room-night pricing for one room
+ * type, over a date window. Deliberately NOT used to change the price a
+ * customer already saw at search time (HotelRoomType.sellingPrice stays
+ * the one customer-facing number) — its role in this increment is the
+ * internal supplierCost figure HotelsService.resolveSupplierCost() uses
+ * for margin tracking, once a company-specific plan matches the stay.
+ * `grossPrice` is captured for completeness (spec #5 lists it) but not
+ * yet consumed by any booking-flow code — a real future use (e.g.
+ * repricing an offer against this instead of the flat catalog price) is
+ * a separate, larger change.
+ *
+ * Versioned by convention, not by database constraint: create a new row
+ * for a new negotiated price rather than editing an active plan's price
+ * fields, same "never overwrite historical commercial terms" discipline
+ * as SupplierContract. A single continuous effectiveFrom/effectiveTo
+ * window per row means true day-of-week (weekday vs. weekend) pricing
+ * within one season needs several narrow-window rows rather than one —
+ * a known simplification, not full calendar-grid pricing.
+ */
+model RatePlan {
+  id String @id @default(cuid())
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  roomTypeId String
+  roomType   HotelRoomType @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
+
+  supplierId String?
+  supplier   Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+
+  name     String
+  mealPlan MealPlan @default(ROOM_ONLY)
+  occupancy Int?
+
+  currency    String @default("NGN")
+  netPrice    Int // per room-night — what this company is charged
+  grossPrice  Int? // per room-night — informational reference sell price, see doc comment above
+
+  commissionPercent Float?
+  taxPercent        Float?
+  feeAmount         Int?
+  markupPercent     Float?
+
+  cancellationPolicy String?
+  changePolicy       String?
+  minStay            Int?
+  maxStay            Int?
+  advancePurchaseDays Int?
+  releasePeriodDays   Int?
+
+  effectiveFrom DateTime
+  effectiveTo   DateTime?
+
+  isActive Boolean @default(true)
+  notes    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([companyId])
+  @@index([roomTypeId])
+  @@index([companyId, roomTypeId])
+  @@index([isActive])
+  @@map("rate_plans")
+}
+
+/**
+ * Spec #6/#7 — one row per (company, room type, calendar day). A stay of
+ * N nights claims N consecutive rows. `date` is always normalized to
+ * midnight UTC by the service layer, never a caller-supplied arbitrary
+ * timestamp, so the unique constraint below reliably means "one row per
+ * day" rather than depending on every caller passing an already-truncated
+ * value.
+ *
+ * remaining = totalAllocated - bookedCount - heldCount - blockedCount,
+ * computed on read (spec #7's own formula) — never a separately-stored
+ * column, so it can never drift from the counters it's derived from.
+ * Claiming a night is a single atomic UPDATE guarded by this same
+ * arithmetic in its WHERE clause (see HotelAllotmentsService.claimNights)
+ * — the multi-column comparison Prisma's query builder can't express is
+ * the one deliberate, narrow use of raw SQL in this feature, mirroring
+ * PaymentIntent's updateMany-based atomic claim (this codebase's existing
+ * precedent for "only the caller that actually changes the row proceeds")
+ * extended across several rows in one transaction.
+ */
+model HotelAllotment {
+  id String @id @default(cuid())
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  roomTypeId String
+  roomType   HotelRoomType @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
+
+  date DateTime // date-only semantics — always midnight UTC
+
+  totalAllocated Int
+  bookedCount    Int @default(0)
+  heldCount      Int @default(0)
+  blockedCount   Int @default(0)
+
+  stopSell     Boolean   @default(false)
+  releaseDate  DateTime?
+  autoReleased Boolean   @default(false)
+
+  notes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([companyId, roomTypeId, date])
+  @@index([companyId, roomTypeId])
+  @@index([date])
+  @@map("hotel_allotments")
 }
 
 // ---------------------------------------------------------------------------
@@ -4014,6 +4177,7 @@ model Supplier {
   documents SupplierDocument[]
   contracts SupplierContract[]
   payables  SupplierPayable[]
+  ratePlans RatePlan[]
 
   // Phase 16 spec #6/#11/#12 — deliberately does NOT link directly to
   // Hotel/VisaService/HajjPackage/UmrahPackage. Those are platform-wide
