@@ -1,6 +1,7 @@
 'use client';
 
 import Image from 'next/image';
+import { PageBanner } from '@/components/visual/Showcase';
 import { Reveal } from '@/components/marketing/Reveal';
 
 const VALUES = [
@@ -24,7 +25,14 @@ const VALUES = [
 
 export default function AboutPage() {
   return (
-    <div className="mx-auto max-w-4xl px-4 py-20 sm:px-6 lg:px-8">
+    <>
+      <PageBanner
+        kind="makkah"
+        eyebrow="About us"
+        title="Making travel easy for you"
+        subtitle="IATA- and TAAN-accredited, based in Kaduna, Nigeria."
+      />
+      <div className="mx-auto max-w-4xl px-4 py-20 sm:px-6 lg:px-8">
       <Reveal className="text-center">
         <Image
           src="/brand/logo-full.png"
@@ -37,9 +45,9 @@ export default function AboutPage() {
         <span className="mt-6 inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-4 py-1.5 text-xs font-medium text-amber-700">
           About Alnajoum Travel Agency
         </span>
-        <h1 className="mt-6 text-4xl font-bold tracking-tight text-slate-900 sm:text-5xl">
+        <h2 className="mt-6 text-4xl font-bold tracking-tight text-slate-900 sm:text-5xl">
           Your journey, our priority
-        </h1>
+        </h2>
         <p className="mx-auto mt-6 max-w-2xl text-lg text-slate-600">
           Alnajoum Travel Agency Limited is an IATA- and TAAN-accredited travel agency
           based in Kaduna, Nigeria (RC: 6860328), offering flight tickets on all major
@@ -73,6 +81,7 @@ export default function AboutPage() {
           </Reveal>
         ))}
       </div>
-    </div>
+      </div>
+    </>
   );
 }

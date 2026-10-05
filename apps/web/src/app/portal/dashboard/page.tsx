@@ -1,5 +1,6 @@
 'use client';
 
+import { SceneSlideshow } from '@/components/visual/Showcase';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { AppShell } from '@/components/AppShell';
@@ -57,12 +58,17 @@ export default function CustomerPortalDashboardPage() {
   return (
     <ProtectedRoute allowedRoles={['CUSTOMER']}>
       <AppShell title="Customer Portal" navLinks={PORTAL_NAV}>
-        <h2 className="text-lg font-semibold text-slate-900">
-          Welcome{user ? `, ${user.email}` : ''}
-        </h2>
-        <p className="mt-1 max-w-2xl text-sm text-slate-600">
-          Manage your wallet, family, Hajj &amp; Umrah registrations, bookings, and payments — all in one place.
-        </p>
+        <div className="relative h-44 overflow-hidden rounded-3xl bg-slate-900 shadow-lg sm:h-52">
+          <SceneSlideshow intervalMs={6000} showCaption={false} />
+          <div className="relative flex h-full flex-col justify-center p-6 sm:p-8">
+            <h2 className="text-xl font-semibold tracking-tight text-white sm:text-2xl">
+              Welcome{user ? `, ${user.email}` : ''}
+            </h2>
+            <p className="mt-1 max-w-xl text-sm text-slate-200">
+              Manage your wallet, family, Hajj &amp; Umrah registrations, bookings, and payments — all in one place.
+            </p>
+          </div>
+        </div>
 
         <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           <StatTile

@@ -9,6 +9,7 @@ import { Marquee } from '@/components/marketing/Marquee';
 import { Reveal } from '@/components/marketing/Reveal';
 import { ServiceSlider } from '@/components/marketing/ServiceSlider';
 import { TransportBackdrop } from '@/components/marketing/TransportBackdrop';
+import { SceneGallery, SceneSlideshow, TiltCard } from '@/components/visual/Showcase';
 
 const TRUST_ITEMS = [
   'IATA Accredited',
@@ -227,6 +228,7 @@ export default function MarketingHomePage() {
     <>
       {/* Hero */}
       <section className="relative overflow-hidden bg-slate-900 pb-28 pt-20 sm:pb-36 sm:pt-28">
+        <SceneSlideshow showCaption={false} className="opacity-70" />
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0 opacity-40"
@@ -348,8 +350,8 @@ export default function MarketingHomePage() {
           <div className="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {SERVICES.map((service, i) => (
               <Reveal key={service.id} delay={(i % 3) * 0.08}>
+                <TiltCard className="rounded-2xl">
                 <motion.div
-                  whileHover={{ y: -6 }}
                   transition={{ duration: 0.25 }}
                   className="group h-full rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-shadow hover:shadow-lg"
                 >
@@ -374,9 +376,32 @@ export default function MarketingHomePage() {
                   </h3>
                   <p className="mt-2 text-sm text-slate-600">{service.description}</p>
                 </motion.div>
+                </TiltCard>
               </Reveal>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* Moving gallery */}
+      <section className="overflow-hidden bg-slate-950 py-20">
+        <Reveal className="mx-auto max-w-2xl px-4 text-center sm:px-6 lg:px-8">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-400">Journeys we craft</p>
+          <h2 className="mt-3 text-3xl font-bold tracking-tight text-white sm:text-4xl">
+            From the Holy Cities to the world
+          </h2>
+          <p className="mt-3 text-slate-400">Hover a card to slow the reel and look closer.</p>
+        </Reveal>
+        <div className="mt-10">
+          <SceneGallery
+            items={[
+              { kind: 'makkah', title: 'Hajj & Umrah', caption: 'Guided, group-managed pilgrimages' },
+              { kind: 'sky', title: 'Flights worldwide', caption: 'Compare fares across providers' },
+              { kind: 'city', title: 'Hotels', caption: 'Rooms near the sites that matter' },
+              { kind: 'desert', title: 'Madinah & ziyarat', caption: 'Transfers, tours and transport' },
+              { kind: 'globe', title: 'Visa services', caption: 'Applications tracked step by step' },
+            ]}
+          />
         </div>
       </section>
 

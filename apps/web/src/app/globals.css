@@ -40,3 +40,19 @@ body {
 .animate-marquee {
   animation: marquee 26s linear infinite;
 }
+
+
+/* Scene art: cheap CSS-only twinkle/flicker (hundreds of elements, so not JS-driven). */
+@keyframes sc-twinkle {
+  0%, 100% { opacity: 0.2; }
+  50% { opacity: 1; }
+}
+@keyframes sc-flicker {
+  0%, 100% { opacity: 0.9; }
+  50% { opacity: 0.35; }
+}
+.sc-twinkle { animation: sc-twinkle var(--d, 3s) ease-in-out infinite; animation-delay: var(--dl, 0s); }
+.sc-flicker { animation: sc-flicker var(--d, 4s) ease-in-out infinite; animation-delay: var(--dl, 0s); }
+@media (prefers-reduced-motion: reduce) {
+  .sc-twinkle, .sc-flicker { animation: none; }
+}

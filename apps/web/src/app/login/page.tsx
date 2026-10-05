@@ -1,5 +1,6 @@
 'use client';
 
+import { AuthSplit } from '@/components/visual/AuthSplit';
 import { useRouter } from 'next/navigation';
 import { FormEvent, useEffect, useState } from 'react';
 import { BrandMark } from '@/components/BrandMark';
@@ -35,7 +36,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex flex-1 items-center justify-center bg-slate-50 px-4">
+    <AuthSplit>
       <div className="w-full max-w-sm rounded-lg border border-slate-200 bg-white p-8 shadow-sm">
         <div className="flex items-center gap-2">
           <BrandMark size={32} />
@@ -82,6 +83,6 @@ export default function LoginPage() {
           </button>
         </form>
       </div>
-    </div>
+    </AuthSplit>
   );
 }

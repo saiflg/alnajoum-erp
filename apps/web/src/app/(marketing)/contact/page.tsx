@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, useState } from 'react';
+import { PageBanner } from '@/components/visual/Showcase';
 import { Reveal } from '@/components/marketing/Reveal';
 import { apiRequest, ApiError } from '@/lib/api';
 
@@ -35,17 +36,14 @@ export default function ContactPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-20 sm:px-6 lg:px-8">
-      <Reveal className="text-center">
-        <h1 className="text-4xl font-bold tracking-tight text-slate-900 sm:text-5xl">
-          Get in touch
-        </h1>
-        <p className="mx-auto mt-6 max-w-xl text-lg text-slate-600">
-          Questions about a booking, a package, or the platform itself — send us a
-          message and it goes straight to our team.
-        </p>
-      </Reveal>
-
+    <>
+      <PageBanner
+        kind="city"
+        eyebrow="Contact"
+        title="Get in touch"
+        subtitle="Questions about a booking, a package, or the platform itself — send us a message and it goes straight to our team."
+      />
+      <div className="mx-auto max-w-3xl px-4 py-20 sm:px-6 lg:px-8">
       <Reveal delay={0.1} className="mt-14">
         <div className="grid gap-10 rounded-2xl border border-slate-200 bg-white p-8 shadow-sm sm:grid-cols-5">
           <div className="sm:col-span-2">
@@ -119,6 +117,7 @@ export default function ContactPage() {
           </form>
         </div>
       </Reveal>
-    </div>
+      </div>
+    </>
   );
 }

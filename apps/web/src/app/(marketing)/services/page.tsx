@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { PageBanner } from '@/components/visual/Showcase';
 import { Reveal } from '@/components/marketing/Reveal';
 
 const SERVICES = [
@@ -96,19 +97,15 @@ const SERVICES = [
 
 export default function ServicesPage() {
   return (
-    <div className="mx-auto max-w-5xl px-4 py-20 sm:px-6 lg:px-8">
-      <Reveal className="text-center">
-        <h1 className="text-4xl font-bold tracking-tight text-slate-900 sm:text-5xl">
-          Our services
-        </h1>
-        <p className="mx-auto mt-6 max-w-2xl text-lg text-slate-600">
-          Flights, hotels, car/van/bus rental, family travel, Hajj &amp; Umrah packages,
-          visa processing, and corporate travel are all live and bookable today, built on
-          the same real infrastructure end to end.
-        </p>
-      </Reveal>
-
-      <div className="mt-16 space-y-6">
+    <>
+      <PageBanner
+        kind="sky"
+        eyebrow="What we do"
+        title="Our services"
+        subtitle="Flights, hotels, car/van/bus rental, family travel, Hajj & Umrah packages, visa processing, and corporate travel — all live and bookable today."
+      />
+      <div className="mx-auto max-w-5xl px-4 py-20 sm:px-6 lg:px-8">
+      <div className="space-y-6">
         {SERVICES.map((service, i) => (
           <Reveal key={service.id} delay={Math.min(i, 3) * 0.06}>
             <div
@@ -148,6 +145,7 @@ export default function ServicesPage() {
           </Reveal>
         ))}
       </div>
-    </div>
+      </div>
+    </>
   );
 }
