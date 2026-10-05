@@ -65,7 +65,10 @@ describe('HotelsService', () => {
     createForHotelBooking: jest.Mock;
     voidHotelBookingIfUnpaid: jest.Mock;
   };
-  let notificationsService: { sendBookingConfirmation: jest.Mock };
+  let notificationsService: {
+    sendBookingConfirmation: jest.Mock;
+    sendBookingConfirmationPush: jest.Mock;
+  };
   let ratePlansService: { findApplicable: jest.Mock };
   let hotelAllotmentsService: {
     claimNights: jest.Mock;
@@ -96,7 +99,10 @@ describe('HotelsService', () => {
       createForHotelBooking: jest.fn(),
       voidHotelBookingIfUnpaid: jest.fn(),
     };
-    notificationsService = { sendBookingConfirmation: jest.fn() };
+    notificationsService = {
+      sendBookingConfirmation: jest.fn(),
+      sendBookingConfirmationPush: jest.fn(),
+    };
     ratePlansService = { findApplicable: jest.fn().mockResolvedValue(null) };
     hotelAllotmentsService = {
       claimNights: jest.fn().mockResolvedValue(false),

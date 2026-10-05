@@ -18,9 +18,11 @@ import type { AuthContext } from '../../common/interfaces/auth-context.interface
 import { ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE } from './auth.constants';
 import { AuthService, RequestMeta, TokenPair } from './auth.service';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterCustomerDto } from './dto/register-customer.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { TwoFactorLoginVerifyDto } from './dto/two-factor-login-verify.dto';
 import { TwoFactorVerifyDto } from './dto/two-factor-verify.dto';
 import { SessionsService } from './sessions.service';
@@ -169,6 +171,31 @@ export class AuthController {
   ) {
     await this.authService.changePassword(user.sub, dto);
     return { changed: true };
+  }
+
+  // --- Phase 18 — self-service account recovery -----------------------
+
+  @Public()
+  @Post('forgot-password')
+  async forgotPassword(
+    @Body() dto: ForgotPasswordDto,
+    @Req() req: Request,
+    @Ip() ip: string,
+  ) {
+    await this.authService.forgotPassword(dto.email, this.buildMeta(req, ip));
+    // Deliberately uniform regardless of whether the email exists.
+    return { message: 'If an account exists for this email, a reset link has been sent.' };
+  }
+
+  @Public()
+  @Post('reset-password')
+  async resetPassword(
+    @Body() dto: ResetPasswordDto,
+    @Req() req: Request,
+    @Ip() ip: string,
+  ) {
+    await this.authService.resetPassword(dto, this.buildMeta(req, ip));
+    return { reset: true };
   }
 
   // --- Phase 11 spec #15 — self-service 2FA management ---------------------

@@ -4266,6 +4266,12 @@ async function seedPhase11EnterpriseGovernance() {
         'Automatic staff incentive payout processing (vs. manual finance review)',
       isEnabledByDefault: false,
     },
+    {
+      key: 'ENABLE_MOBILE_APP',
+      description:
+        'Enterprise mobile app / customer super-app (Phase 18) — not yet checked by any endpoint; registered for future per-tenant rollout control',
+      isEnabledByDefault: true,
+    },
   ];
   for (const flag of featureFlags) {
     await prisma.featureFlag.upsert({

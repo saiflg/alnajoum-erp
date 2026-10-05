@@ -30,7 +30,46 @@ describe('NotificationPreferencesService', () => {
       smsEnabled: true,
       whatsappEnabled: true,
       inAppEnabled: true,
+      pushEnabled: true,
     });
+  });
+
+  it('Phase 18: an opted-out PUSH channel blocks a non-mandatory notification type', async () => {
+    prisma.notificationPreference.findUnique.mockResolvedValue({
+      identityId: 'identity-1',
+      emailEnabled: true,
+      smsEnabled: true,
+      whatsappEnabled: true,
+      inAppEnabled: true,
+      pushEnabled: false,
+    });
+
+    const allowed = await service.isAllowed(
+      'identity-1',
+      NotificationType.BOOKING_CONFIRMATION,
+      NotificationChannel.PUSH,
+    );
+
+    expect(allowed).toBe(false);
+  });
+
+  it('Phase 18: PASSWORD_RESET is mandatory on every channel including PUSH', async () => {
+    prisma.notificationPreference.findUnique.mockResolvedValue({
+      identityId: 'identity-1',
+      emailEnabled: false,
+      smsEnabled: false,
+      whatsappEnabled: false,
+      inAppEnabled: false,
+      pushEnabled: false,
+    });
+
+    const allowed = await service.isAllowed(
+      'identity-1',
+      NotificationType.PASSWORD_RESET,
+      NotificationChannel.PUSH,
+    );
+
+    expect(allowed).toBe(true);
   });
 
   it('spec #19: a mandatory notification type is always allowed regardless of the stored preference', async () => {

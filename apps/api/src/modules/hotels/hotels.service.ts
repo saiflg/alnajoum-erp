@@ -214,6 +214,10 @@ export class HotelsService {
     });
 
     if (customer) {
+      await this.notificationsService.sendBookingConfirmationPush(
+        customer.identityId,
+        booking.bookingReference,
+      );
       await this.notificationsService.sendBookingConfirmation(
         customer.identity.email,
         {

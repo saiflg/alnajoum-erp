@@ -6,6 +6,7 @@ import * as argon2 from 'argon2';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { CompanyService } from '../company/company.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { RbacService } from '../rbac/rbac.service';
 import { TwoFactorService } from './two-factor.service';
 import { AuthService } from './auth.service';
@@ -18,11 +19,14 @@ describe('AuthService', () => {
     refreshToken: Record<string, jest.Mock>;
     staff: Record<string, jest.Mock>;
     customer: Record<string, jest.Mock>;
+    passwordResetToken: Record<string, jest.Mock>;
+    $transaction: jest.Mock;
   };
   let rbacService: { getEffectiveAccess: jest.Mock };
   let auditService: { record: jest.Mock };
   let jwtService: { signAsync: jest.Mock; verifyAsync: jest.Mock };
   let twoFactorService: { verifyChallenge: jest.Mock };
+  let notificationsService: { sendPasswordResetEmail: jest.Mock };
 
   const baseIdentity = {
     id: 'identity-1',
@@ -49,6 +53,15 @@ describe('AuthService', () => {
       },
       staff: { findUnique: jest.fn() },
       customer: { findUnique: jest.fn() },
+      passwordResetToken: {
+        create: jest.fn(),
+        findUnique: jest.fn(),
+        update: jest.fn(),
+      },
+      $transaction: jest.fn((ops: unknown[]) => Promise.all(ops)),
+    };
+    notificationsService = {
+      sendPasswordResetEmail: jest.fn().mockResolvedValue(undefined),
     };
     rbacService = {
       getEffectiveAccess: jest
@@ -81,6 +94,7 @@ describe('AuthService', () => {
         },
         { provide: RbacService, useValue: rbacService },
         { provide: AuditService, useValue: auditService },
+        { provide: NotificationsService, useValue: notificationsService },
       ],
     }).compile();
 
@@ -338,6 +352,123 @@ describe('AuthService', () => {
           newPassword: 'new-password2',
         }),
       ).rejects.toThrow(UnauthorizedException);
+    });
+  });
+
+  describe('forgotPassword', () => {
+    it('does nothing (no email, no token) when the email does not exist — anti-enumeration', async () => {
+      prisma.identity.findUnique.mockResolvedValue(null);
+
+      await service.forgotPassword('missing@example.com', {});
+
+      expect(prisma.passwordResetToken.create).not.toHaveBeenCalled();
+      expect(notificationsService.sendPasswordResetEmail).not.toHaveBeenCalled();
+    });
+
+    it('creates a hashed token and emails a reset link for an existing identity', async () => {
+      prisma.identity.findUnique.mockResolvedValue(baseIdentity);
+      prisma.staff.findUnique.mockResolvedValue({ companyId: 'company-1' });
+
+      await service.forgotPassword('user@example.com', {});
+
+      expect(prisma.passwordResetToken.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            identityId: 'identity-1',
+            tokenHash: expect.any(String),
+          }),
+        }),
+      );
+      // The plaintext token was never persisted — only its hash.
+      const createCall = prisma.passwordResetToken.create.mock.calls[0][0];
+      expect(createCall.data.tokenHash).not.toContain('reset-password?token=');
+      expect(notificationsService.sendPasswordResetEmail).toHaveBeenCalledWith(
+        'user@example.com',
+        'identity-1',
+        expect.stringContaining('/reset-password?token='),
+      );
+      expect(auditService.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'security.password_reset_requested',
+        }),
+      );
+    });
+  });
+
+  describe('resetPassword', () => {
+    it('rejects an unknown token', async () => {
+      prisma.passwordResetToken.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.resetPassword({ token: 'bogus', newPassword: 'new-password2' }, {}),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('rejects an already-used token', async () => {
+      prisma.passwordResetToken.findUnique.mockResolvedValue({
+        id: 'prt-1',
+        identityId: 'identity-1',
+        usedAt: new Date(),
+        expiresAt: new Date(Date.now() + 60_000),
+        identity: baseIdentity,
+      });
+
+      await expect(
+        service.resetPassword({ token: 'used', newPassword: 'new-password2' }, {}),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('rejects an expired token', async () => {
+      prisma.passwordResetToken.findUnique.mockResolvedValue({
+        id: 'prt-1',
+        identityId: 'identity-1',
+        usedAt: null,
+        expiresAt: new Date(Date.now() - 60_000),
+        identity: baseIdentity,
+      });
+
+      await expect(
+        service.resetPassword({ token: 'expired', newPassword: 'new-password2' }, {}),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('updates the password, marks the token used, and revokes every refresh token', async () => {
+      prisma.passwordResetToken.findUnique.mockResolvedValue({
+        id: 'prt-1',
+        identityId: 'identity-1',
+        usedAt: null,
+        expiresAt: new Date(Date.now() + 60_000),
+        identity: baseIdentity,
+      });
+
+      await service.resetPassword(
+        { token: 'valid-token', newPassword: 'new-password2' },
+        {},
+      );
+
+      expect(prisma.$transaction).toHaveBeenCalled();
+      expect(prisma.identity.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'identity-1' },
+          data: expect.objectContaining({ passwordHash: expect.any(String) }),
+        }),
+      );
+      expect(prisma.passwordResetToken.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'prt-1' },
+          data: expect.objectContaining({ usedAt: expect.any(Date) }),
+        }),
+      );
+      expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { identityId: 'identity-1', revokedAt: null },
+        }),
+      );
+      expect(auditService.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'security.password_reset_completed',
+        }),
+      );
     });
   });
 

@@ -319,6 +319,14 @@ export const PERMISSIONS = {
     CONTRACT_MANAGE: 'supplier:contract:manage', // create/edit/activate a SupplierContract
     DOCUMENT_MANAGE: 'supplier:document:manage', // upload/delete a SupplierDocument
   },
+  // Phase 18 — enterprise mobile app admin control center (min/recommended
+  // version, force-update, maintenance mode). A customer's own device
+  // registration/push-token management needs no permission of its own —
+  // same "manage your own, no extra grant needed" shape as auth sessions.
+  MOBILE: {
+    APP_CONFIG_VIEW: 'mobile:app_config:view',
+    APP_CONFIG_MANAGE: 'mobile:app_config:manage',
+  },
 } as const;
 
 export const ALL_PERMISSION_KEYS: string[] = Object.values(PERMISSIONS).flatMap(

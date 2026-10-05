@@ -24,6 +24,7 @@ export class NotificationPreferencesController {
       smsEnabled: boolean;
       whatsappEnabled: boolean;
       inAppEnabled: boolean;
+      pushEnabled: boolean;
     }>,
   ) {
     return this.preferencesService.update(user.sub, body);

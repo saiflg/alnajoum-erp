@@ -21,6 +21,7 @@ export class NotificationPreferencesService {
       smsEnabled: true,
       whatsappEnabled: true,
       inAppEnabled: true,
+      pushEnabled: true,
     };
   }
 
@@ -31,6 +32,7 @@ export class NotificationPreferencesService {
       smsEnabled: boolean;
       whatsappEnabled: boolean;
       inAppEnabled: boolean;
+      pushEnabled: boolean;
     }>,
   ) {
     return this.prisma.notificationPreference.upsert({
@@ -57,6 +59,8 @@ export class NotificationPreferencesService {
         return prefs.whatsappEnabled;
       case NotificationChannel.IN_APP:
         return prefs.inAppEnabled;
+      case NotificationChannel.PUSH:
+        return prefs.pushEnabled;
       default:
         return true;
     }

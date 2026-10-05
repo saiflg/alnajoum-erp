@@ -72,6 +72,11 @@ model Identity {
   approvalRequestsMade     ApprovalRequest[] @relation("ApprovalRequester")
   approvalDecisionsMade    ApprovalDecision[] @relation("ApprovalDecider")
 
+  // Phase 18 — mobile app device registrations and self-service password
+  // reset (no account-recovery flow existed before this phase at all).
+  mobileDevices       MobileDevice[]
+  passwordResetTokens PasswordResetToken[]
+
   @@index([type])
   @@map("identities")
 }
@@ -590,6 +595,95 @@ model RefreshToken {
 
   @@index([identityId])
   @@map("refresh_tokens")
+}
+
+/**
+ * Phase 18 — self-service password reset (no account-recovery flow of any
+ * kind existed before this phase). Deliberately mirrors RefreshToken's
+ * "store only a hash, never the plaintext token" shape: the emailed link
+ * carries the plaintext, only its SHA-256 hash is persisted. Single-use
+ * (usedAt) and short-lived (expiresAt) — same discipline as a payment
+ * idempotency key, since a reset link is itself a bearer credential.
+ */
+model PasswordResetToken {
+  id         String   @id @default(cuid())
+  identityId String
+  identity   Identity @relation(fields: [identityId], references: [id], onDelete: Cascade)
+
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+
+  createdByIp String?
+  createdAt   DateTime @default(now())
+
+  @@index([identityId])
+  @@map("password_reset_tokens")
+}
+
+enum MobilePlatform {
+  IOS
+  ANDROID
+}
+
+/**
+ * Phase 18 — one row per installed app instance (not per login session;
+ * RefreshToken already covers that). `deviceId` is a client-generated
+ * stable installation identifier (e.g. Expo's installation ID), so a
+ * reinstall registers as a new device rather than silently reusing an old
+ * row. `pushToken` is nullable because a device can be registered (and
+ * listed/revoked from "manage devices") before push permission is ever
+ * granted. `revokedAt` is how a customer's self-service "sign out this
+ * device" and this phase's push fan-out both recognize a dead device —
+ * revoked devices are skipped for push, same "soft state, not a delete"
+ * discipline as RefreshToken.revokedAt.
+ */
+model MobileDevice {
+  id         String   @id @default(cuid())
+  identityId String
+  identity   Identity @relation(fields: [identityId], references: [id], onDelete: Cascade)
+
+  deviceId   String
+  platform   MobilePlatform
+  appVersion String
+  osVersion  String?
+
+  pushToken    String?
+  pushProvider String? // 'EXPO' | 'FCM' | 'APNS' — null until a token is registered
+
+  lastActiveAt DateTime  @default(now())
+  revokedAt    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([identityId, deviceId])
+  @@index([identityId])
+  @@index([pushToken])
+  @@map("mobile_devices")
+}
+
+/**
+ * Phase 18 — backend-controlled mobile app configuration (spec #32/#42):
+ * minimum/recommended version, force-update, and maintenance mode, per
+ * platform. Singleton-per-platform, same "no row needed until an admin
+ * actually sets one" shape as FinanceSettings — MobileAppConfigService
+ * returns sensible defaults (no force-update, no maintenance mode) when
+ * a platform has no row yet.
+ */
+model MobileAppConfig {
+  id       String         @id @default(cuid())
+  platform MobilePlatform @unique
+
+  minSupportedVersion String
+  recommendedVersion  String
+  forceUpdate         Boolean @default(false)
+  maintenanceMode     Boolean @default(false)
+  maintenanceMessage  String?
+
+  updatedAt DateTime @updatedAt
+
+  @@map("mobile_app_configs")
 }
 
 model AuditLog {
@@ -1625,6 +1719,8 @@ enum NotificationType {
   INCENTIVE_GENERATED
   INCENTIVE_APPROVED
   INCENTIVE_PAID
+  // Phase 18 — self-service password reset.
+  PASSWORD_RESET
 }
 
 enum NotificationStatus {
@@ -1637,6 +1733,7 @@ enum NotificationChannel {
   SMS
   WHATSAPP
   IN_APP
+  PUSH
 }
 
 /**
@@ -4780,6 +4877,8 @@ model NotificationPreference {
   smsEnabled      Boolean @default(true)
   whatsappEnabled Boolean @default(true)
   inAppEnabled    Boolean @default(true)
+  // Phase 18 — mobile push, same opt-out shape as every other channel.
+  pushEnabled     Boolean @default(true)
 
   updatedAt DateTime @updatedAt
 

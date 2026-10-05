@@ -43,6 +43,7 @@ import { DataModule } from './modules/data/data.module';
 import { AiModule } from './modules/ai/ai.module';
 import { WhatsAppModule } from './modules/whatsapp/whatsapp.module';
 import { SuppliersModule } from './modules/suppliers/suppliers.module';
+import { MobileModule } from './modules/mobile/mobile.module';
 
 @Module({
   imports: [
@@ -90,6 +91,7 @@ import { SuppliersModule } from './modules/suppliers/suppliers.module';
     AiModule,
     WhatsAppModule,
     SuppliersModule,
+    MobileModule,
   ],
   controllers: [AppController],
   providers: [

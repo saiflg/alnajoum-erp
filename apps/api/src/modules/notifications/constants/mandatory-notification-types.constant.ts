@@ -12,4 +12,8 @@ export const MANDATORY_NOTIFICATION_TYPES: ReadonlySet<NotificationType> =
     NotificationType.MANUAL_PAYMENT_APPROVED,
     NotificationType.MANUAL_PAYMENT_REJECTED,
     NotificationType.INCENTIVE_PAID,
+    // Phase 18 — a password-reset email must always reach the account
+    // owner regardless of their email-notification preference, same
+    // reasoning as every other entry here.
+    NotificationType.PASSWORD_RESET,
   ]);

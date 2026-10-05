@@ -17,6 +17,7 @@ import {
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { CompanyService } from '../company/company.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { TwoFactorService } from './two-factor.service';
 import {
   DEFAULT_ROLE_DEFINITIONS,
@@ -31,6 +32,7 @@ import {
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterCustomerDto } from './dto/register-customer.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 
 export interface RequestMeta {
   ipAddress?: string;
@@ -74,6 +76,7 @@ export class AuthService {
     private readonly auditService: AuditService,
     private readonly companyService: CompanyService,
     private readonly twoFactorService: TwoFactorService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   private resolveDashboardPath(roles: string[]): string {
@@ -484,6 +487,98 @@ export class AuthService {
     await this.prisma.refreshToken.updateMany({
       where: { identityId, revokedAt: null },
       data: { revokedAt: new Date() },
+    });
+  }
+
+  /**
+   * Phase 18 — the account-recovery flow that never existed before this
+   * phase (change-password requires already knowing the current password,
+   * which doesn't help a customer who's actually locked out). Always
+   * responds the same way whether or not the email exists — same
+   * anti-enumeration discipline as validateCredentials's uniform "Invalid
+   * email or password" — so the caller learns nothing about which emails
+   * have accounts.
+   */
+  async forgotPassword(email: string, meta: RequestMeta): Promise<void> {
+    const identity = await this.prisma.identity.findUnique({
+      where: { email },
+    });
+    if (!identity) return;
+
+    const token = randomBytes(32).toString('hex');
+    await this.prisma.passwordResetToken.create({
+      data: {
+        identityId: identity.id,
+        tokenHash: hashToken(token),
+        expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+        createdByIp: meta.ipAddress,
+      },
+    });
+
+    const webOrigin = this.configService.get<string>(
+      'PUBLIC_WEB_ORIGIN',
+      'http://localhost:3000',
+    );
+    const resetUrl = `${webOrigin}/reset-password?token=${token}`;
+    await this.notificationsService.sendPasswordResetEmail(
+      identity.email,
+      identity.id,
+      resetUrl,
+    );
+
+    await this.auditService.record({
+      identityId: identity.id,
+      action: 'security.password_reset_requested',
+      entityType: 'Identity',
+      entityId: identity.id,
+      companyId: await this.resolveCompanyIdForAudit(identity),
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
+    });
+  }
+
+  /** Single-use and short-lived (see PasswordResetToken's own doc comment)
+   * — consuming it revokes every existing refresh token, same "a password
+   * change invalidates every other session" discipline as changePassword. */
+  async resetPassword(dto: ResetPasswordDto, meta: RequestMeta): Promise<void> {
+    const tokenHash = hashToken(dto.token);
+    const stored = await this.prisma.passwordResetToken.findUnique({
+      where: { tokenHash },
+      include: { identity: true },
+    });
+
+    if (
+      !stored ||
+      stored.usedAt ||
+      stored.expiresAt < new Date()
+    ) {
+      throw new UnauthorizedException('This reset link is invalid or has expired');
+    }
+
+    const passwordHash = await argon2.hash(dto.newPassword);
+    await this.prisma.$transaction([
+      this.prisma.identity.update({
+        where: { id: stored.identityId },
+        data: { passwordHash },
+      }),
+      this.prisma.passwordResetToken.update({
+        where: { id: stored.id },
+        data: { usedAt: new Date() },
+      }),
+      this.prisma.refreshToken.updateMany({
+        where: { identityId: stored.identityId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      }),
+    ]);
+
+    await this.auditService.record({
+      identityId: stored.identityId,
+      action: 'security.password_reset_completed',
+      entityType: 'Identity',
+      entityId: stored.identityId,
+      companyId: await this.resolveCompanyIdForAudit(stored.identity),
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
     });
   }
 

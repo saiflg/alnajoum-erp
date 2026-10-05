@@ -6,6 +6,9 @@ import {
   NotificationType,
 } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
+import { MobileDevicesService } from '../mobile/mobile-devices.service';
+import { PUSH_NOTIFICATION_PROVIDER } from '../mobile/providers/push-notification-provider.port';
+import type { PushNotificationProviderPort } from '../mobile/providers/push-notification-provider.port';
 import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { NotificationPreferencesService } from './notification-preferences.service';
 import { NOTIFICATION_PROVIDER } from './providers/notification-provider.port';
@@ -72,6 +75,9 @@ export class NotificationsService {
     private readonly preferencesService: NotificationPreferencesService,
     @Inject(NOTIFICATION_PROVIDER)
     private readonly provider: NotificationProviderPort,
+    private readonly mobileDevicesService: MobileDevicesService,
+    @Inject(PUSH_NOTIFICATION_PROVIDER)
+    private readonly pushProvider: PushNotificationProviderPort,
   ) {}
 
   /**
@@ -182,6 +188,67 @@ export class NotificationsService {
     }
   }
 
+  /**
+   * Phase 18 — fans out to every active (non-revoked) MobileDevice with a
+   * push token on file for this identity. Records exactly one Notification
+   * row regardless of how many devices received it (status SENT if at
+   * least one device succeeded) — the per-device detail belongs in the
+   * push provider's own delivery logs, not duplicated here, same
+   * reasoning as `send()` not recording once per SMTP relay hop.
+   */
+  private async sendPush(
+    type: NotificationType,
+    identityId: string,
+    title: string,
+    body: string,
+    data?: Record<string, string>,
+  ): Promise<void> {
+    try {
+      if (
+        !(await this.preferencesService.isAllowed(
+          identityId,
+          type,
+          NotificationChannel.PUSH,
+        ))
+      ) {
+        return;
+      }
+      const devices = await this.mobileDevicesService.listForIdentity(identityId);
+      const targets = devices.filter((d) => !d.revokedAt && d.pushToken);
+      if (targets.length === 0) return;
+
+      const results = await Promise.all(
+        targets.map((device) =>
+          this.pushProvider.sendPush({
+            token: device.pushToken!,
+            title,
+            body,
+            data,
+            provider: device.pushProvider,
+          } as never),
+        ),
+      );
+      const succeeded = results.some((r) => r.success);
+      await this.prisma.notification.create({
+        data: {
+          type,
+          channel: NotificationChannel.PUSH,
+          recipient: identityId,
+          subject: title,
+          body,
+          status: succeeded ? NotificationStatus.SENT : NotificationStatus.FAILED,
+          errorMessage: succeeded
+            ? undefined
+            : results.find((r) => r.error)?.error,
+          identityId,
+        },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to send/record ${type} push notification: ${message}`);
+    }
+  }
+
   async sendStaffTempPassword(
     email: string,
     firstName: string,
@@ -218,6 +285,25 @@ export class NotificationsService {
       email,
       subject,
       body,
+    );
+  }
+
+  /** Phase 18 reference push integration — booking confirmation is wired
+   * end-to-end (HotelsService.createBooking) as the proof this channel
+   * actually works; the other booking flows (flights, vehicle rentals,
+   * Hajj/Umrah, visa) still only notify by email/SMS/WhatsApp today — see
+   * this phase's final report for why that fan-out was scoped out rather
+   * than touched shallowly everywhere at once. */
+  async sendBookingConfirmationPush(
+    identityId: string,
+    bookingReference: string,
+  ): Promise<void> {
+    await this.sendPush(
+      NotificationType.BOOKING_CONFIRMATION,
+      identityId,
+      'Booking confirmed',
+      `Your booking ${bookingReference} is confirmed.`,
+      { type: 'booking.confirmed', bookingReference },
     );
   }
 
@@ -579,6 +665,31 @@ export class NotificationsService {
   ): Promise<void> {
     await this.send(
       NotificationType.CONTACT_MESSAGE,
+      email,
+      subject,
+      body,
+      identityId,
+    );
+  }
+
+  /** Phase 18 — self-service password reset. The link itself carries the
+   * plaintext token; see PasswordResetToken's own doc comment for why only
+   * its hash is ever persisted. */
+  async sendPasswordResetEmail(
+    email: string,
+    identityId: string,
+    resetUrl: string,
+  ): Promise<void> {
+    const subject = 'Reset your Alnajoum Travel Agency password';
+    const body = [
+      'We received a request to reset your password.',
+      '',
+      `Reset link (expires in 30 minutes): ${resetUrl}`,
+      '',
+      "If you didn't request this, you can safely ignore this email.",
+    ].join('\n');
+    await this.send(
+      NotificationType.PASSWORD_RESET,
       email,
       subject,
       body,

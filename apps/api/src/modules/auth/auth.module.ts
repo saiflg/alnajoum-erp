@@ -5,6 +5,7 @@ import { PassportModule } from '@nestjs/passport';
 import { durationToSeconds } from '../../common/utils/duration.util';
 import { AuditModule } from '../audit/audit.module';
 import { CompanyModule } from '../company/company.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { RbacModule } from '../rbac/rbac.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
@@ -18,6 +19,7 @@ import { TwoFactorService } from './two-factor.service';
     RbacModule,
     AuditModule,
     CompanyModule,
+    NotificationsModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],

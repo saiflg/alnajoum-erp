@@ -1,6 +1,7 @@
 import { Module, OnModuleInit } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { IntegrationsModule } from '../integrations/integrations.module';
+import { MobileModule } from '../mobile/mobile.module';
 import { NotificationPreferencesController } from './notification-preferences.controller';
 import { NotificationPreferencesService } from './notification-preferences.service';
 import { NotificationsController } from './notifications.controller';
@@ -14,7 +15,7 @@ import { TemplatesController } from './templates.controller';
 import { TemplatesService } from './templates.service';
 
 @Module({
-  imports: [ConfigModule, IntegrationsModule],
+  imports: [ConfigModule, IntegrationsModule, MobileModule],
   controllers: [
     NotificationsOwnController,
     NotificationsController,

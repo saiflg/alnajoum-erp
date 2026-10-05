@@ -6,6 +6,8 @@ import {
   NotificationType,
 } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
+import { MobileDevicesService } from '../mobile/mobile-devices.service';
+import { PUSH_NOTIFICATION_PROVIDER } from '../mobile/providers/push-notification-provider.port';
 import { NotificationPreferencesService } from './notification-preferences.service';
 import { NotificationsService } from './notifications.service';
 import { NOTIFICATION_PROVIDER } from './providers/notification-provider.port';
@@ -23,6 +25,8 @@ describe('NotificationsService', () => {
   };
   let configService: { get: jest.Mock };
   let preferencesService: { isAllowed: jest.Mock };
+  let mobileDevicesService: { listForIdentity: jest.Mock };
+  let pushProvider: { sendPush: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
@@ -38,6 +42,8 @@ describe('NotificationsService', () => {
       get: jest.fn((_key: string, fallback?: unknown) => fallback),
     };
     preferencesService = { isAllowed: jest.fn().mockResolvedValue(true) };
+    mobileDevicesService = { listForIdentity: jest.fn().mockResolvedValue([]) };
+    pushProvider = { sendPush: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -49,6 +55,8 @@ describe('NotificationsService', () => {
           provide: NotificationPreferencesService,
           useValue: preferencesService,
         },
+        { provide: MobileDevicesService, useValue: mobileDevicesService },
+        { provide: PUSH_NOTIFICATION_PROVIDER, useValue: pushProvider },
       ],
     }).compile();
 
@@ -177,6 +185,30 @@ describe('NotificationsService', () => {
     );
   });
 
+  describe('sendPasswordResetEmail (Phase 18)', () => {
+    it('sends the reset URL and is mandatory regardless of preference', async () => {
+      provider.sendEmail.mockResolvedValue({ success: true });
+
+      await service.sendPasswordResetEmail(
+        'amina@example.com',
+        'identity-1',
+        'http://localhost:3000/reset-password?token=abc123',
+      );
+
+      expect(provider.sendEmail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: 'amina@example.com',
+          textBody: expect.stringContaining('reset-password?token=abc123'),
+        }),
+      );
+      expect(prisma.notification.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ type: NotificationType.PASSWORD_RESET }),
+        }),
+      );
+    });
+  });
+
   describe('sendInstallmentReminder', () => {
     const reminder = {
       registrationNumber: 'HAJJ-ABC123',
@@ -296,6 +328,86 @@ describe('NotificationsService', () => {
 
       expect(provider.sendEmail).toHaveBeenCalled();
       expect(preferencesService.isAllowed).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('sendBookingConfirmationPush (Phase 18)', () => {
+    it('does nothing when the identity has no registered devices', async () => {
+      mobileDevicesService.listForIdentity.mockResolvedValue([]);
+
+      await service.sendBookingConfirmationPush('identity-1', 'HTL-ABC123');
+
+      expect(pushProvider.sendPush).not.toHaveBeenCalled();
+      expect(prisma.notification.create).not.toHaveBeenCalled();
+    });
+
+    it('skips revoked devices and devices with no push token', async () => {
+      mobileDevicesService.listForIdentity.mockResolvedValue([
+        { id: 'd1', pushToken: 'tok-1', pushProvider: 'EXPO', revokedAt: null },
+        { id: 'd2', pushToken: null, pushProvider: null, revokedAt: null },
+        { id: 'd3', pushToken: 'tok-3', pushProvider: 'EXPO', revokedAt: new Date() },
+      ]);
+      pushProvider.sendPush.mockResolvedValue({ success: true });
+
+      await service.sendBookingConfirmationPush('identity-1', 'HTL-ABC123');
+
+      expect(pushProvider.sendPush).toHaveBeenCalledTimes(1);
+      expect(pushProvider.sendPush).toHaveBeenCalledWith(
+        expect.objectContaining({ token: 'tok-1' }),
+      );
+    });
+
+    it('records one SENT notification when at least one device succeeds', async () => {
+      mobileDevicesService.listForIdentity.mockResolvedValue([
+        { id: 'd1', pushToken: 'tok-1', pushProvider: 'EXPO', revokedAt: null },
+        { id: 'd2', pushToken: 'tok-2', pushProvider: 'EXPO', revokedAt: null },
+      ]);
+      pushProvider.sendPush
+        .mockResolvedValueOnce({ success: true })
+        .mockResolvedValueOnce({ success: false, error: 'FCM is not configured for this deployment' });
+
+      await service.sendBookingConfirmationPush('identity-1', 'HTL-ABC123');
+
+      expect(prisma.notification.create).toHaveBeenCalledTimes(1);
+      expect(prisma.notification.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            channel: NotificationChannel.PUSH,
+            status: NotificationStatus.SENT,
+            identityId: 'identity-1',
+          }),
+        }),
+      );
+    });
+
+    it('records a FAILED notification when every device fails', async () => {
+      mobileDevicesService.listForIdentity.mockResolvedValue([
+        { id: 'd1', pushToken: 'tok-1', pushProvider: 'FCM', revokedAt: null },
+      ]);
+      pushProvider.sendPush.mockResolvedValue({
+        success: false,
+        error: 'FCM is not configured for this deployment',
+      });
+
+      await service.sendBookingConfirmationPush('identity-1', 'HTL-ABC123');
+
+      expect(prisma.notification.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: NotificationStatus.FAILED,
+            errorMessage: 'FCM is not configured for this deployment',
+          }),
+        }),
+      );
+    });
+
+    it('respects pushEnabled=false the same way other channels do', async () => {
+      preferencesService.isAllowed.mockResolvedValue(false);
+
+      await service.sendBookingConfirmationPush('identity-1', 'HTL-ABC123');
+
+      expect(mobileDevicesService.listForIdentity).not.toHaveBeenCalled();
+      expect(pushProvider.sendPush).not.toHaveBeenCalled();
     });
   });
 
