@@ -1,112 +1,71 @@
 'use client';
 
+import { AnimatePresence, LayoutGroup, motion } from 'framer-motion';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { FormEvent, Suspense, useState } from 'react';
-import { AirportInput } from '@/components/AirportInput';
+import { Suspense, useMemo, useState } from 'react';
+import { FlightOfferCard, offerMinutes, offerStops, OfferSkeleton } from '@/components/flights/FlightOfferCard';
+import { FlightSearchForm } from '@/components/flights/FlightSearchForm';
 import { AppShell } from '@/components/AppShell';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { apiRequest, ApiError } from '@/lib/api';
-import { formatCurrency, formatDateTime, formatDuration } from '@/lib/format';
+import { buildApiLegs, buildSearchBody, decodeSearchParams, FlightSearchState } from '@/lib/flight-search';
+import { formatCurrency } from '@/lib/format';
 import { PORTAL_NAV } from '@/lib/portal-nav';
-import { CabinClass, FlightLegCriteria, FlightOffer, TripType } from '@/lib/types';
+import { FlightOffer } from '@/lib/types';
 
-const CABIN_CLASSES: CabinClass[] = ['ECONOMY', 'PREMIUM_ECONOMY', 'BUSINESS', 'FIRST'];
+type SortKey = 'price' | 'duration' | 'departure';
 
-const TRIP_TYPES: Array<{ value: TripType; label: string }> = [
-  { value: 'ONE_WAY', label: 'One way' },
-  { value: 'ROUND_TRIP', label: 'Round trip' },
-  { value: 'MULTI_CITY', label: 'Multi-city' },
+const SORTS: Array<{ key: SortKey; label: string }> = [
+  { key: 'price', label: 'Cheapest' },
+  { key: 'duration', label: 'Fastest' },
+  { key: 'departure', label: 'Earliest' },
 ];
 
-const MIN_MULTI_CITY_LEGS = 2;
-const MAX_LEGS = 6;
-
-function emptyLeg(): FlightLegCriteria {
-  return { origin: '', destination: '', departureDate: '' };
+function Toggle({ on, onClick, children }: { on: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={on}
+      onClick={onClick}
+      className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+        on
+          ? 'border-amber-500 bg-amber-50 text-amber-800'
+          : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+      }`}
+    >
+      {on ? '✓ ' : ''}
+      {children}
+    </button>
+  );
 }
 
-function FlightSearchForm() {
+function FlightSearchPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [tripType, setTripType] = useState<TripType>('ONE_WAY');
-  // Prefills from the marketing site's search teaser, carried through
-  // registration/login (?origin=&destination=&date=) — read once at
-  // initialization rather than via an effect, since the URL is already
-  // known on first render and doesn't need to "synchronize" afterward.
-  const [legs, setLegs] = useState<FlightLegCriteria[]>(() => {
-    const origin = searchParams.get('origin');
-    const destination = searchParams.get('destination');
-    const date = searchParams.get('date');
-    return origin || destination || date
-      ? [{ origin: origin ?? '', destination: destination ?? '', departureDate: date ?? '' }]
-      : [emptyLeg()];
-  });
-  const [returnDate, setReturnDate] = useState('');
-  const [adults, setAdults] = useState(1);
-  const [children, setChildren] = useState(0);
-  const [infants, setInfants] = useState(0);
-  const [cabinClass, setCabinClass] = useState<CabinClass>('ECONOMY');
+  // Prefilled from the homepage hero search (carried through register/login)
+  // — read once at initialisation, the URL is already known on first render.
+  const [search, setSearch] = useState<FlightSearchState>(() => decodeSearchParams(searchParams));
 
   const [offers, setOffers] = useState<FlightOffer[] | null>(null);
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [searchedRoute, setSearchedRoute] = useState('');
 
-  function handleTripTypeChange(next: TripType) {
-    setTripType(next);
-    setOffers(null);
-    if (next === 'MULTI_CITY' && legs.length < MIN_MULTI_CITY_LEGS) {
-      setLegs((prev) => [...prev, emptyLeg()]);
-    } else if (next !== 'MULTI_CITY') {
-      setLegs((prev) => [prev[0] ?? emptyLeg()]);
-    }
-  }
+  const [sort, setSort] = useState<SortKey>('price');
+  const [directOnly, setDirectOnly] = useState(false);
+  const [refundableOnly, setRefundableOnly] = useState(false);
 
-  function updateLeg(index: number, patch: Partial<FlightLegCriteria>) {
-    setLegs((prev) => prev.map((leg, i) => (i === index ? { ...leg, ...patch } : leg)));
-  }
-
-  function addLeg() {
-    setLegs((prev) => (prev.length >= MAX_LEGS ? prev : [...prev, emptyLeg()]));
-  }
-
-  function removeLeg(index: number) {
-    setLegs((prev) => prev.filter((_, i) => i !== index));
-  }
-
-  async function handleSearch(e: FormEvent) {
-    e.preventDefault();
+  async function runSearch(state: FlightSearchState) {
     setError(null);
     setSearching(true);
     setOffers(null);
+    setSearchedRoute(
+      buildApiLegs(state)
+        .map((l) => `${l.origin} → ${l.destination}`)
+        .join('  ·  '),
+    );
     try {
-      const searchLegs: FlightLegCriteria[] =
-        tripType === 'ROUND_TRIP'
-          ? [
-              legs[0],
-              {
-                origin: legs[0].destination,
-                destination: legs[0].origin,
-                departureDate: returnDate,
-              },
-            ]
-          : legs;
-
-      const results = await apiRequest<FlightOffer[]>('/flights/search', {
-        method: 'POST',
-        body: {
-          tripType,
-          legs: searchLegs.map((leg) => ({
-            ...leg,
-            origin: leg.origin.toUpperCase(),
-            destination: leg.destination.toUpperCase(),
-          })),
-          adults,
-          children: children || undefined,
-          infants: infants || undefined,
-          cabinClass,
-        },
-      });
-      setOffers(results);
+      setOffers(await apiRequest<FlightOffer[]>('/flights/search', { method: 'POST', body: buildSearchBody(state) }));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Flight search failed');
     } finally {
@@ -114,233 +73,158 @@ function FlightSearchForm() {
     }
   }
 
+  const visible = useMemo(() => {
+    if (!offers) return null;
+    const filtered = offers.filter(
+      (o) =>
+        (!directOnly || offerStops(o) === 0) &&
+        (!refundableOnly || o.fareConditions?.refundable === 'REFUNDABLE'),
+    );
+    return [...filtered].sort((a, b) =>
+      sort === 'price'
+        ? a.totalAmount - b.totalAmount
+        : sort === 'duration'
+          ? offerMinutes(a) - offerMinutes(b)
+          : new Date(a.legs[0].departureAt).getTime() - new Date(b.legs[0].departureAt).getTime(),
+    );
+  }, [offers, sort, directOnly, refundableOnly]);
+
+  const cheapest = offers && offers.length ? Math.min(...offers.map((o) => o.totalAmount)) : null;
+
   return (
     <ProtectedRoute allowedRoles={['CUSTOMER']}>
       <AppShell title="Book a Flight" navLinks={PORTAL_NAV}>
-        <h2 className="text-lg font-semibold text-slate-900">Book a Flight</h2>
-
-        <div className="mt-4 flex max-w-3xl gap-2">
-          {TRIP_TYPES.map((t) => (
-            <button
-              key={t.value}
-              type="button"
-              onClick={() => handleTripTypeChange(t.value)}
-              className={`rounded-md px-3 py-1.5 text-sm font-medium ${
-                tripType === t.value
-                  ? 'bg-slate-900 text-white'
-                  : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50'
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-
-        <form onSubmit={handleSearch} className="mt-3 max-w-3xl space-y-3">
-          <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-4">
-            {legs.map((leg, index) => (
-              <div key={index} className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <div>
-                  <AirportInput
-                    id={`leg-${index}-origin`}
-                    label={tripType === 'MULTI_CITY' ? `Flight ${index + 1}: From` : 'From'}
-                    placeholder="LOS"
-                    value={leg.origin}
-                    onChange={(code) => updateLeg(index, { origin: code })}
-                    required
-                    inputClassName="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm uppercase focus:border-slate-500 focus:outline-none"
-                    labelClassName="block text-sm font-medium text-slate-700"
-                  />
-                </div>
-                <div>
-                  <AirportInput
-                    id={`leg-${index}-destination`}
-                    label="To"
-                    placeholder="ABV"
-                    value={leg.destination}
-                    onChange={(code) => updateLeg(index, { destination: code })}
-                    required
-                    inputClassName="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm uppercase focus:border-slate-500 focus:outline-none"
-                    labelClassName="block text-sm font-medium text-slate-700"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700">Depart</label>
-                  <input
-                    required
-                    type="date"
-                    value={leg.departureDate}
-                    onChange={(e) => updateLeg(index, { departureDate: e.target.value })}
-                    className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
-                  />
-                </div>
-                <div className="flex items-end">
-                  {tripType === 'MULTI_CITY' && legs.length > MIN_MULTI_CITY_LEGS && (
-                    <button
-                      type="button"
-                      onClick={() => removeLeg(index)}
-                      className="mb-0.5 rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50"
-                    >
-                      Remove
-                    </button>
-                  )}
-                  {tripType === 'ROUND_TRIP' && index === 0 && (
-                    <div className="w-full">
-                      <label className="block text-sm font-medium text-slate-700">Return</label>
-                      <input
-                        required
-                        type="date"
-                        value={returnDate}
-                        onChange={(e) => setReturnDate(e.target.value)}
-                        className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
-                      />
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-
-            {tripType === 'MULTI_CITY' && legs.length < MAX_LEGS && (
-              <button
-                type="button"
-                onClick={addLeg}
-                className="rounded-md border border-dashed border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
-              >
-                + Add another flight
-              </button>
-            )}
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:grid-cols-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700">Adults</label>
-              <input
-                type="number"
-                min={1}
-                max={9}
-                value={adults}
-                onChange={(e) => setAdults(Number(e.target.value))}
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700">Children</label>
-              <input
-                type="number"
-                min={0}
-                max={9}
-                value={children}
-                onChange={(e) => setChildren(Number(e.target.value))}
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700">Infants</label>
-              <input
-                type="number"
-                min={0}
-                max={9}
-                value={infants}
-                onChange={(e) => setInfants(Number(e.target.value))}
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700">Cabin</label>
-              <select
-                value={cabinClass}
-                onChange={(e) => setCabinClass(e.target.value as CabinClass)}
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
-              >
-                {CABIN_CLASSES.map((c) => (
-                  <option key={c} value={c}>
-                    {c.replace('_', ' ')}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <button
-            type="submit"
-            disabled={searching}
-            className="w-fit rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+        <div className="mx-auto max-w-5xl">
+          <motion.section
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+            className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-6 sm:p-8"
           >
-            {searching ? 'Searching…' : 'Search flights'}
-          </button>
-        </form>
+            <motion.div
+              aria-hidden
+              animate={{ x: [0, 24, 0], y: [0, -12, 0] }}
+              transition={{ duration: 14, repeat: Infinity, ease: 'easeInOut' }}
+              className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-amber-500/20 blur-3xl"
+            />
+            <div className="relative">
+              <h2 className="text-2xl font-semibold tracking-tight text-white sm:text-3xl">Where to next?</h2>
+              <p className="mt-1 text-sm text-slate-300">
+                One way, round trip, or build a multi-city journey with up to six flights.
+              </p>
+              <div className="mt-5 rounded-2xl bg-white p-5 shadow-2xl shadow-black/30">
+                <FlightSearchForm
+                  idPrefix="portal"
+                  value={search}
+                  onChange={setSearch}
+                  onSubmit={runSearch}
+                  busy={searching}
+                />
+              </div>
+            </div>
+          </motion.section>
 
-        {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
-
-        {offers && (
-          <div className="mt-6 max-w-3xl space-y-3">
-            {offers.map((offer) => (
-              <div
-                key={offer.id}
-                className="flex items-center justify-between rounded-lg border border-slate-200 bg-white p-4"
+          <AnimatePresence>
+            {error && (
+              <motion.p
+                role="alert"
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                className="mt-5 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700"
               >
+                {error}
+              </motion.p>
+            )}
+          </AnimatePresence>
+
+          {searching && (
+            <div className="mt-6 space-y-3" aria-busy="true" aria-label="Searching flights">
+              <p className="text-sm text-slate-500">Searching {searchedRoute}…</p>
+              {[0, 1, 2].map((i) => (
+                <OfferSkeleton key={i} />
+              ))}
+            </div>
+          )}
+
+          {visible && offers && (
+            <section className="mt-6">
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  {offer.legs.map((leg, i) => (
-                    <p key={i} className="text-sm text-slate-600">
-                      {leg.segments[0].airline} · {leg.segments[0].flightNumber} ·{' '}
-                      {leg.origin} → {leg.destination} · {formatDateTime(leg.departureAt)} ·{' '}
-                      {formatDuration(leg.segments[0].durationMinutes)}
-                    </p>
-                  ))}
-                  <p className="mt-1 text-sm text-slate-500">
-                    {offer.cabinClass.replace('_', ' ')} ·{' '}
-                    {offer.tripType === 'ONE_WAY'
-                      ? 'One way'
-                      : offer.tripType === 'ROUND_TRIP'
-                        ? 'Round trip'
-                        : 'Multi-city'}
-                    {offer.fareConditions && (
-                      <>
-                        {' · '}
-                        <span
-                          className={
-                            offer.fareConditions.refundable === 'REFUNDABLE'
-                              ? 'text-emerald-700'
-                              : offer.fareConditions.refundable === 'NON_REFUNDABLE'
-                                ? 'text-red-600'
-                                : 'text-amber-700'
-                          }
-                        >
-                          {offer.fareConditions.refundable.replace('_', ' ')}
-                        </span>
-                      </>
-                    )}
+                  <p className="text-sm font-semibold text-slate-900">
+                    {visible.length} of {offers.length} flight{offers.length === 1 ? '' : 's'}
                   </p>
-                  {offer.fareConditions && offer.fareConditions.warnings.length > 0 && (
-                    <div className="mt-1 space-y-0.5">
-                      {offer.fareConditions.warnings.map((w, i) => (
-                        <p key={i} className="text-xs text-amber-700">
-                          ⚠ {w.message}
-                          {!w.verified && ' (could not be automatically verified)'}
-                        </p>
+                  <p className="text-xs text-slate-500">
+                    {searchedRoute}
+                    {cheapest != null && offers[0] && <> · from {formatCurrency(cheapest, offers[0].currency)}</>}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <LayoutGroup id="sort">
+                    <div className="inline-flex rounded-full bg-slate-100 p-1">
+                      {SORTS.map((s) => (
+                        <button
+                          key={s.key}
+                          type="button"
+                          onClick={() => setSort(s.key)}
+                          className={`relative rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                            sort === s.key ? 'text-white' : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          {sort === s.key && (
+                            <motion.span
+                              layoutId="sort-pill"
+                              className="absolute inset-0 rounded-full bg-slate-900"
+                              transition={{ type: 'spring', stiffness: 420, damping: 34 }}
+                            />
+                          )}
+                          <span className="relative">{s.label}</span>
+                        </button>
                       ))}
                     </div>
-                  )}
-                </div>
-                <div className="text-right">
-                  <p className="text-lg font-semibold text-slate-900">
-                    {formatCurrency(offer.totalAmount, offer.currency)}
-                  </p>
-                  <p className="text-xs text-slate-500">{offer.seatsAvailable} seats left</p>
-                  <button
-                    onClick={() => router.push(`/portal/flights/book/${offer.id}`)}
-                    className="mt-2 rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800"
-                  >
-                    Select
-                  </button>
+                  </LayoutGroup>
+                  <Toggle on={directOnly} onClick={() => setDirectOnly((v) => !v)}>
+                    Direct only
+                  </Toggle>
+                  <Toggle on={refundableOnly} onClick={() => setRefundableOnly((v) => !v)}>
+                    Refundable
+                  </Toggle>
                 </div>
               </div>
-            ))}
-            {offers.length === 0 && (
-              <p className="text-sm text-slate-500">No flights found for that search.</p>
-            )}
-          </div>
-        )}
+
+              <div className="mt-4 space-y-4">
+                <AnimatePresence mode="popLayout">
+                  {visible.map((offer, i) => (
+                    <FlightOfferCard
+                      key={offer.id}
+                      offer={offer}
+                      index={i}
+                      onSelect={() => router.push(`/portal/flights/book/${offer.id}`)}
+                    />
+                  ))}
+                </AnimatePresence>
+              </div>
+
+              {visible.length === 0 && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center"
+                >
+                  <p className="text-3xl">🛫</p>
+                  <p className="mt-2 text-sm font-medium text-slate-800">
+                    {offers.length === 0 ? 'No flights found for that search.' : 'No flights match your filters.'}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {offers.length === 0
+                      ? 'Try different dates or nearby airports.'
+                      : 'Turn off a filter to see more options.'}
+                  </p>
+                </motion.div>
+              )}
+            </section>
+          )}
+        </div>
       </AppShell>
     </ProtectedRoute>
   );
@@ -349,7 +233,7 @@ function FlightSearchForm() {
 export default function FlightSearchPage() {
   return (
     <Suspense fallback={null}>
-      <FlightSearchForm />
+      <FlightSearchPageContent />
     </Suspense>
   );
 }

@@ -1,5 +1,6 @@
 'use client';
 
+import { AuthSplit } from '@/components/visual/AuthSplit';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { FormEvent, Suspense, useEffect, useRef, useState } from 'react';
@@ -40,7 +41,18 @@ function RegisterForm() {
       const next = searchParams.get('next');
       if (next) {
         const forward = new URLSearchParams();
-        for (const key of ['origin', 'destination', 'date']) {
+        for (const key of [
+          'origin',
+          'destination',
+          'date',
+          'trip',
+          'legs',
+          'ret',
+          'ad',
+          'ch',
+          'in',
+          'cabin',
+        ]) {
           const value = searchParams.get(key);
           if (value) forward.set(key, value);
         }
@@ -57,7 +69,7 @@ function RegisterForm() {
   }
 
   return (
-    <div className="flex flex-1 items-center justify-center bg-slate-50 px-4 py-12">
+    <AuthSplit>
       <div className="w-full max-w-sm rounded-lg border border-slate-200 bg-white p-8 shadow-sm">
         <Link href="/" className="flex items-center gap-2">
           <BrandMark size={32} />
@@ -144,7 +156,7 @@ function RegisterForm() {
           </Link>
         </p>
       </div>
-    </div>
+    </AuthSplit>
   );
 }
 
