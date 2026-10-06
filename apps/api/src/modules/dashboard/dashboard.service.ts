@@ -164,7 +164,10 @@ export class DashboardService {
         take: 10,
       }),
       this.prisma.flightSupplier.findMany({
-        where: { name: { contains: q, mode: 'insensitive' } },
+        where: {
+          ...companyFilter,
+          name: { contains: q, mode: 'insensitive' },
+        },
         select: { id: true, name: true, type: true },
         take: 10,
       }),

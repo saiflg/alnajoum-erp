@@ -109,3 +109,99 @@ describe('AnalyticsScopeService', () => {
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 });
+
+describe('AnalyticsScopeService — by-id guards for the legacy report services', () => {
+  const mkPrisma = (staff: unknown, customer: unknown) => ({
+    staff: {
+      findUnique: jest.fn(),
+      findFirst: jest.fn().mockResolvedValue(staff),
+    },
+    customer: { findFirst: jest.fn().mockResolvedValue(customer) },
+    branch: { findFirst: jest.fn() },
+  });
+
+  it('tenantOf: SUPER_ADMIN is undefined, others get their token company, no company is refused', () => {
+    const svc = new AnalyticsScopeService({} as never);
+    expect(svc.tenantOf(user(['SUPER_ADMIN'], null))).toBeUndefined();
+    expect(svc.tenantOf(user(['COMPANY_ADMIN'], 'co-A'))).toBe('co-A');
+    expect(() => svc.tenantOf(user(['COMPANY_ADMIN'], null))).toThrow(
+      ForbiddenException,
+    );
+  });
+
+  it('assertStaffInScope looks the staff member up inside the caller’s company', async () => {
+    const prisma = mkPrisma({ id: 's1' }, null);
+    const svc = new AnalyticsScopeService(prisma as never);
+    await svc.assertStaffInScope(
+      { companyId: 'co-A', branchId: undefined, branchLocked: false },
+      's1',
+    );
+    expect(prisma.staff.findFirst.mock.calls[0][0].where).toEqual({
+      id: 's1',
+      companyId: 'co-A',
+    });
+  });
+
+  it('assertStaffInScope also pins a branch-locked caller to their branch', async () => {
+    const prisma = mkPrisma({ id: 's1' }, null);
+    const svc = new AnalyticsScopeService(prisma as never);
+    await svc.assertStaffInScope(
+      { companyId: 'co-A', branchId: 'br-9', branchLocked: true },
+      's1',
+    );
+    expect(prisma.staff.findFirst.mock.calls[0][0].where).toEqual({
+      id: 's1',
+      companyId: 'co-A',
+      branchId: 'br-9',
+    });
+  });
+
+  it('assertStaffInScope does NOT pin a company-wide caller who merely filtered by branch', async () => {
+    const prisma = mkPrisma({ id: 's1' }, null);
+    const svc = new AnalyticsScopeService(prisma as never);
+    await svc.assertStaffInScope(
+      { companyId: 'co-A', branchId: 'br-1', branchLocked: false },
+      's1',
+    );
+    expect(prisma.staff.findFirst.mock.calls[0][0].where).toEqual({
+      id: 's1',
+      companyId: 'co-A',
+    });
+  });
+
+  it('a staff member or customer outside the scope is a 404', async () => {
+    const prisma = mkPrisma(null, null);
+    const svc = new AnalyticsScopeService(prisma as never);
+    const scope = {
+      companyId: 'co-A',
+      branchId: undefined,
+      branchLocked: false,
+    };
+    await expect(svc.assertStaffInScope(scope, 'x')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    await expect(svc.assertCustomerInScope(scope, 'x')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    expect(prisma.customer.findFirst.mock.calls[0][0].where).toEqual({
+      id: 'x',
+      companyId: 'co-A',
+    });
+  });
+
+  it('SUPER_ADMIN (no company) is not tenant-filtered', async () => {
+    const prisma = mkPrisma({ id: 's1' }, { id: 'c1' });
+    const svc = new AnalyticsScopeService(prisma as never);
+    const scope = {
+      companyId: undefined,
+      branchId: undefined,
+      branchLocked: false,
+    };
+    await svc.assertStaffInScope(scope, 's1');
+    await svc.assertCustomerInScope(scope, 'c1');
+    expect(prisma.staff.findFirst.mock.calls[0][0].where).toEqual({ id: 's1' });
+    expect(prisma.customer.findFirst.mock.calls[0][0].where).toEqual({
+      id: 'c1',
+    });
+  });
+});

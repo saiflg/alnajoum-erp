@@ -5,6 +5,10 @@ import {
   ProviderTransactionStatus,
 } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
+import {
+  customerTenant,
+  ReportScope,
+} from '../analytics/analytics-scope.service';
 
 interface LogEntryInput {
   provider: FlightProviderName;
@@ -37,15 +41,30 @@ export class ProviderTransactionLogService {
     }
   }
 
-  listAll(filters: { provider?: FlightProviderName; bookingId?: string }) {
+  /**
+   * A log row has no tenant of its own — only its booking (and through it the
+   * booking's customer) does. A tenant-scoped caller therefore sees exactly the
+   * rows tied to their own bookings; rows with no booking (provider searches,
+   * which happen before any customer exists) cannot be attributed to a company
+   * and are visible to SUPER_ADMIN's platform-wide view only. Tenant is the
+   * only dimension: provider diagnostics were never narrowed by branch.
+   */
+  private bookingScope(scope: Pick<ReportScope, 'companyId'>) {
+    return scope.companyId ? { booking: customerTenant(scope) } : {};
+  }
+
+  listAll(
+    filters: { provider?: FlightProviderName; bookingId?: string },
+    scope: Pick<ReportScope, 'companyId'>,
+  ) {
     return this.prisma.providerTransactionLog.findMany({
-      where: filters,
+      where: { ...filters, ...this.bookingScope(scope) },
       orderBy: { createdAt: 'desc' },
       take: 200,
     });
   }
 
-  async successRateByProvider(): Promise<
+  async successRateByProvider(scope: Pick<ReportScope, 'companyId'>): Promise<
     Array<{
       provider: FlightProviderName;
       total: number;
@@ -55,6 +74,7 @@ export class ProviderTransactionLogService {
   > {
     const rows = await this.prisma.providerTransactionLog.groupBy({
       by: ['provider', 'status'],
+      where: this.bookingScope(scope),
       _count: { _all: true },
     });
 

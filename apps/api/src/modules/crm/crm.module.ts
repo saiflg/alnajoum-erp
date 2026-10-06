@@ -1,3 +1,4 @@
+import { AnalyticsModule } from '../analytics/analytics.module';
 import { Module, OnModuleInit } from '@nestjs/common';
 import { AuditModule } from '../audit/audit.module';
 import { CompanyModule } from '../company/company.module';
@@ -24,6 +25,7 @@ import { TasksService } from './tasks.service';
 
 @Module({
   imports: [
+    AnalyticsModule,
     AuditModule,
     NotificationsModule,
     UsersModule,

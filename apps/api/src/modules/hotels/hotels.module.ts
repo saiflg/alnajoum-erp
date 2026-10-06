@@ -1,3 +1,4 @@
+import { AnalyticsModule } from '../analytics/analytics.module';
 import { Module } from '@nestjs/common';
 import { AuditModule } from '../audit/audit.module';
 import { CustomersModule } from '../customers/customers.module';
@@ -32,6 +33,7 @@ import { TravelPackagesService } from './travel-packages.service';
   // Order matters: the static "hotels/bookings/me" and "hotels/catalog"
   // routes must be registered before "hotels/bookings/:id".
   imports: [
+    AnalyticsModule,
     CustomersModule,
     UsersModule,
     PaymentsModule,

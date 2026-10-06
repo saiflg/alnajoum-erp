@@ -1,10 +1,18 @@
 import { Injectable } from '@nestjs/common';
 import { HotelBookingStatus } from '@prisma/client';
+import type { AuthContext } from '../../common/interfaces/auth-context.interface';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
+import {
+  AnalyticsScopeService,
+  customerTenant,
+  ReportScope,
+  staffTenant,
+} from '../analytics/analytics-scope.service';
 
 export interface HotelFilters {
   from?: Date;
   to?: Date;
+  /** Caller-supplied; validated against the caller's own tenant/branch before use. */
   branchId?: string;
   staffId?: string;
 }
@@ -14,20 +22,42 @@ export interface HotelFilters {
  * breakdowns computed from the same booking rows. */
 @Injectable()
 export class HotelReportsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly scopes: AnalyticsScopeService,
+  ) {}
 
-  private where(filters: HotelFilters) {
+  /**
+   * The tenant comes from the caller's token, never from the request. A branch
+   * the caller asks for must belong to their company (404 otherwise) and a
+   * branch-locked caller (branch manager) is held to their own branch; a staff
+   * filter must be someone in that same scope.
+   */
+  private async scopeFor(
+    user: AuthContext,
+    filters: HotelFilters,
+  ): Promise<ReportScope> {
+    const scope = await this.scopes.resolve(user, filters.branchId);
+    if (filters.staffId) {
+      await this.scopes.assertStaffInScope(scope, filters.staffId);
+    }
+    return scope;
+  }
+
+  private where(filters: HotelFilters, scope: ReportScope) {
     return {
       ...(filters.from || filters.to
         ? { createdAt: { gte: filters.from, lte: filters.to } }
         : {}),
-      ...(filters.branchId ? { branchId: filters.branchId } : {}),
+      ...(scope.branchId ? { branchId: scope.branchId } : {}),
       ...(filters.staffId ? { bookedByStaffId: filters.staffId } : {}),
+      ...customerTenant(scope),
     };
   }
 
-  async kpis(filters: HotelFilters) {
-    const where = this.where(filters);
+  async kpis(user: AuthContext, filters: HotelFilters) {
+    const scope = await this.scopeFor(user, filters);
+    const where = this.where(filters, scope);
     const bookings = await this.prisma.hotelBooking.findMany({ where });
 
     const completed = bookings.filter(
@@ -45,10 +75,17 @@ export class HotelReportsService {
 
     const bookingIds = bookings.map((b) => b.id);
     const refunds = await this.prisma.hotelRefund.count({
-      where: { bookingId: { in: bookingIds } },
+      where: {
+        bookingId: { in: bookingIds },
+        booking: { ...customerTenant(scope) },
+      },
     });
     const staffIncentivesAgg = await this.prisma.staffIncentive.aggregate({
-      where: { sourceType: 'HOTEL_BOOKING', sourceId: { in: bookingIds } },
+      where: {
+        sourceType: 'HOTEL_BOOKING',
+        sourceId: { in: bookingIds },
+        ...staffTenant(scope),
+      },
       _sum: { amount: true },
     });
 
@@ -82,8 +119,9 @@ export class HotelReportsService {
     };
   }
 
-  async profitReport(filters: HotelFilters) {
-    const where = this.where(filters);
+  async profitReport(user: AuthContext, filters: HotelFilters) {
+    const scope = await this.scopeFor(user, filters);
+    const where = this.where(filters, scope);
     const bookings = await this.prisma.hotelBooking.findMany({
       where,
       include: {
@@ -98,6 +136,7 @@ export class HotelReportsService {
       where: {
         sourceType: 'HOTEL_BOOKING',
         sourceId: { in: bookings.map((b) => b.id) },
+        ...staffTenant(scope),
       },
     });
     const incentivesByBooking = new Map<string, number>();

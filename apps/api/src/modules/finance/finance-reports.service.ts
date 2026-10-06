@@ -1,6 +1,17 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { AccountType } from '@prisma/client';
+import type { AuthContext } from '../../common/interfaces/auth-context.interface';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
+import {
+  AnalyticsScopeService,
+  customerTenant,
+  ReportScope,
+  staffTenant,
+} from '../analytics/analytics-scope.service';
 import {
   ACCOUNT_CODES,
   isDebitNormal,
@@ -32,7 +43,24 @@ export class FinanceReportsService {
     private readonly prisma: PrismaService,
     private readonly ledger: LedgerService,
     private readonly investments: CompanyInvestmentsService,
+    private readonly scopes: AnalyticsScopeService,
   ) {}
+
+  /**
+   * The ledger (JournalEntry / LedgerAccount) and company investments have no
+   * companyId, and a join through `sourceId` would be invented rather than
+   * known, so the figures built from them cannot be split per tenant. Until the
+   * ledger carries a tenant they are SUPER_ADMIN (platform-wide) only; a tenant
+   * caller is refused instead of being shown every company's money. Per-company
+   * revenue/collections are available from /analytics/* meanwhile.
+   */
+  private requirePlatformLedger(user: AuthContext): void {
+    if (this.scopes.tenantOf(user) !== undefined) {
+      throw new ForbiddenException(
+        'The general ledger is not yet separated per company, so this report is limited to platform administrators. Use the executive analytics for figures on your own company.',
+      );
+    }
+  }
 
   private whereCreatedAt(range: DateRange) {
     if (!range.from && !range.to) return {};
@@ -45,7 +73,8 @@ export class FinanceReportsService {
   }
 
   /** Spec #17. */
-  async profitAndLoss(range: DateRange) {
+  async profitAndLoss(user: AuthContext, range: DateRange) {
+    this.requirePlatformLedger(user);
     const entries = await this.prisma.journalEntry.findMany({
       where: { status: 'POSTED', ...this.whereCreatedAt(range) },
       include: { debitAccount: true, creditAccount: true },
@@ -144,7 +173,8 @@ export class FinanceReportsService {
   }
 
   /** Spec #18 — investment inflows kept separate from operating revenue via sourceModule. */
-  async cashFlow(range: DateRange) {
+  async cashFlow(user: AuthContext, range: DateRange) {
+    this.requirePlatformLedger(user);
     const cashAccounts = await this.prisma.ledgerAccount.findMany({
       where: {
         code: { in: [ACCOUNT_CODES.CASH, ACCOUNT_CODES.BANK_ACCOUNTS] },
@@ -200,7 +230,8 @@ export class FinanceReportsService {
   }
 
   /** Spec #26. */
-  async dashboardKpis() {
+  async dashboardKpis(user: AuthContext) {
+    this.requirePlatformLedger(user);
     const [
       pl,
       cash,
@@ -215,8 +246,8 @@ export class FinanceReportsService {
       payoutsPending,
       payoutsSuccessful,
     ] = await Promise.all([
-      this.profitAndLoss({}),
-      this.cashFlow({}),
+      this.profitAndLoss(user, {}),
+      this.cashFlow(user, {}),
       this.investments.position(),
       this.ledger.getAccountBalance(ACCOUNT_CODES.CASH),
       this.ledger.getAccountBalance(ACCOUNT_CODES.BANK_ACCOUNTS),
@@ -280,9 +311,16 @@ export class FinanceReportsService {
   }
 
   /** Spec #21 — derived from the source records directly (bookings/expenses/incentives already carry branchId) rather than a per-branch ledger fork, since this chart of accounts is company-wide (see LedgerAccount's doc comment). */
-  async branchAccounting() {
+  async branchAccounting(user: AuthContext) {
+    // Only the caller's own company's branches — and for a branch manager only
+    // their own branch.
+    const scope = await this.scopes.resolve(user);
     const branches = await this.prisma.branch.findMany({
-      where: { isActive: true },
+      where: {
+        isActive: true,
+        ...(scope.companyId ? { companyId: scope.companyId } : {}),
+        ...(scope.branchId ? { id: scope.branchId } : {}),
+      },
     });
     return Promise.all(
       branches.map(async (branch) => {
@@ -291,6 +329,7 @@ export class FinanceReportsService {
             this.prisma.flightBooking.aggregate({
               where: {
                 branchId: branch.id,
+                ...customerTenant(scope),
                 status: { notIn: ['CANCELLED', 'FAILED'] },
               },
               _sum: { totalAmount: true },
@@ -298,17 +337,27 @@ export class FinanceReportsService {
             this.prisma.hotelBooking.aggregate({
               where: {
                 branchId: branch.id,
+                ...customerTenant(scope),
                 status: { notIn: ['CANCELLED', 'REFUNDED'] },
               },
               _sum: { totalAmount: true },
             }),
             this.prisma.expense.aggregate({
-              where: { branchId: branch.id, status: 'PAID' },
+              where: {
+                branchId: branch.id,
+                ...(scope.companyId
+                  ? { createdByStaff: { companyId: scope.companyId } }
+                  : {}),
+                status: 'PAID',
+              },
               _sum: { amount: true },
             }),
             this.prisma.staffIncentive.aggregate({
               where: {
-                staff: { branchId: branch.id },
+                staff: {
+                  branchId: branch.id,
+                  ...(scope.companyId ? { companyId: scope.companyId } : {}),
+                },
                 status: { not: 'REJECTED' },
               },
               _sum: { amount: true },
@@ -332,9 +381,18 @@ export class FinanceReportsService {
   }
 
   /** Spec #24 — no internal cost/margin fields exposed. */
-  async customerStatement(customerId: string, range: DateRange) {
-    const customer = await this.prisma.customer.findUnique({
-      where: { id: customerId },
+  async customerStatement(
+    user: AuthContext,
+    customerId: string,
+    range: DateRange,
+  ) {
+    // Another company's customer is a 404, indistinguishable from no such id.
+    const scope = this.scopes.tenantScope(user);
+    const customer = await this.prisma.customer.findFirst({
+      where: {
+        id: customerId,
+        ...(scope.companyId ? { companyId: scope.companyId } : {}),
+      },
       select: { firstName: true, lastName: true },
     });
     if (!customer) {
@@ -344,7 +402,7 @@ export class FinanceReportsService {
     const dateFilter = this.whereCreatedAt(range);
     const [invoices, payments, walletTransactions] = await Promise.all([
       this.prisma.invoice.findMany({
-        where: { customerId, ...dateFilter },
+        where: { customerId, ...customerTenant(scope), ...dateFilter },
         select: {
           id: true,
           invoiceNumber: true,
@@ -357,7 +415,7 @@ export class FinanceReportsService {
       }),
       this.prisma.payment.findMany({
         where: {
-          invoice: { customerId },
+          invoice: { customerId, ...customerTenant(scope) },
           ...(range.from || range.to ? { paidAt: dateFilter.createdAt } : {}),
         },
         select: {
@@ -369,7 +427,10 @@ export class FinanceReportsService {
         orderBy: { paidAt: 'asc' },
       }),
       this.prisma.walletTransaction.findMany({
-        where: { wallet: { customerId }, ...dateFilter },
+        where: {
+          wallet: { customerId, ...customerTenant(scope) },
+          ...dateFilter,
+        },
         select: {
           reference: true,
           type: true,
@@ -408,9 +469,25 @@ export class FinanceReportsService {
   }
 
   /** Spec #25. */
-  async staffIncentiveStatement(staffId: string) {
-    const staff = await this.prisma.staff.findUnique({
-      where: { id: staffId },
+  async staffIncentiveStatement(
+    user: AuthContext,
+    staffId: string,
+    self = false,
+  ) {
+    // Another company's staff member is a 404 (and a branch manager is held to
+    // their own branch's staff). `self` is the caller's own record, in scope by
+    // construction.
+    const scope: ReportScope = self
+      ? this.scopes.tenantScope(user)
+      : await this.scopes.resolve(user);
+    const staff = await this.prisma.staff.findFirst({
+      where: {
+        id: staffId,
+        ...(scope.companyId ? { companyId: scope.companyId } : {}),
+        ...(scope.branchLocked && scope.branchId
+          ? { branchId: scope.branchId }
+          : {}),
+      },
       select: { firstName: true, lastName: true, employeeCode: true },
     });
     if (!staff) {
@@ -418,7 +495,7 @@ export class FinanceReportsService {
     }
 
     const incentives = await this.prisma.staffIncentive.findMany({
-      where: { staffId },
+      where: { staffId, ...staffTenant(scope) },
       include: { payout: true },
       orderBy: { createdAt: 'desc' },
     });
@@ -450,9 +527,25 @@ export class FinanceReportsService {
   }
 
   /** Spec #27 — one transaction, fully explained. */
-  async transactionProfitability(sourceType: string, sourceId: string) {
+  async transactionProfitability(
+    user: AuthContext,
+    sourceType: string,
+    sourceId: string,
+  ) {
+    // Located through the earning staff member, so another company's
+    // transaction is the same 404 as one that does not exist.
+    const scope = await this.scopes.resolve(user);
     const incentive = await this.prisma.staffIncentive.findFirst({
-      where: { sourceType, sourceId },
+      where: {
+        sourceType,
+        sourceId,
+        staff: {
+          ...(scope.companyId ? { companyId: scope.companyId } : {}),
+          ...(scope.branchLocked && scope.branchId
+            ? { branchId: scope.branchId }
+            : {}),
+        },
+      },
       include: { staff: { select: { firstName: true, lastName: true } } },
     });
     if (!incentive) {

@@ -1,6 +1,13 @@
 import { Injectable } from '@nestjs/common';
-import { FlightBookingStatus } from '@prisma/client';
+import { FlightBookingStatus, FlightProviderName } from '@prisma/client';
+import type { AuthContext } from '../../common/interfaces/auth-context.interface';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
+import {
+  AnalyticsScopeService,
+  customerTenant,
+  ReportScope,
+  staffTenant,
+} from '../analytics/analytics-scope.service';
 import { ProviderTransactionLogService } from './provider-transaction-log.service';
 
 export interface FlightKpis {
@@ -26,6 +33,7 @@ export interface FlightKpis {
 export interface FlightFilters {
   from?: Date;
   to?: Date;
+  /** Caller-supplied; validated against the caller's own tenant/branch before use. */
   branchId?: string;
   staffId?: string;
   airlineCode?: string;
@@ -43,24 +51,46 @@ export class FlightReportsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly providerLog: ProviderTransactionLogService,
+    private readonly scopes: AnalyticsScopeService,
   ) {}
 
-  private dateRange(filters: FlightFilters) {
+  /**
+   * The tenant comes from the caller's token, never from the request. A branch
+   * the caller asks for must belong to their company (404 otherwise) and a
+   * branch-locked caller (branch manager) is held to their own branch; a staff
+   * filter must be someone in that same scope.
+   */
+  private async scopeFor(
+    user: AuthContext,
+    filters: FlightFilters,
+  ): Promise<ReportScope> {
+    const scope = await this.scopes.resolve(user, filters.branchId);
+    if (filters.staffId) {
+      await this.scopes.assertStaffInScope(scope, filters.staffId);
+    }
+    return scope;
+  }
+
+  private dateRange(filters: FlightFilters, scope: ReportScope) {
     return {
       ...(filters.from || filters.to
         ? { createdAt: { gte: filters.from, lte: filters.to } }
         : {}),
-      ...(filters.branchId ? { branchId: filters.branchId } : {}),
+      ...(scope.branchId ? { branchId: scope.branchId } : {}),
       ...(filters.staffId ? { bookedByStaffId: filters.staffId } : {}),
+      ...customerTenant(scope),
     };
   }
 
-  async kpis(filters: FlightFilters): Promise<FlightKpis> {
-    const where = this.dateRange(filters);
+  async kpis(user: AuthContext, filters: FlightFilters): Promise<FlightKpis> {
+    const scope = await this.scopeFor(user, filters);
+    const where = this.dateRange(filters, scope);
     const bookings = await this.prisma.flightBooking.findMany({ where });
 
+    // Provider searches carry no booking, hence no tenant: only SUPER_ADMIN's
+    // platform-wide view can count them (a tenant caller gets 0).
     const searches = await this.providerLog
-      .listAll({})
+      .listAll({}, scope)
       .then((rows) => rows.filter((r) => r.operation === 'SEARCH').length);
 
     const ticketed = bookings.filter(
@@ -80,18 +110,24 @@ export class FlightReportsService {
       .reduce((sum, b) => sum + (b.markupAmount ?? 0), 0);
 
     const bookingIds = bookings.map((b) => b.id);
+    const bookingRel = { booking: { ...customerTenant(scope) } };
     const refunds = await this.prisma.flightRefund.count({
-      where: { bookingId: { in: bookingIds } },
+      where: { bookingId: { in: bookingIds }, ...bookingRel },
     });
     const reissues = await this.prisma.flightReissue.count({
-      where: { bookingId: { in: bookingIds } },
+      where: { bookingId: { in: bookingIds }, ...bookingRel },
     });
     const staffIncentivesAgg = await this.prisma.staffIncentive.aggregate({
-      where: { sourceType: 'FLIGHT_BOOKING', sourceId: { in: bookingIds } },
+      where: {
+        sourceType: 'FLIGHT_BOOKING',
+        sourceId: { in: bookingIds },
+        ...staffTenant(scope),
+      },
       _sum: { amount: true },
     });
 
-    const providerSuccessRate = await this.providerLog.successRateByProvider();
+    const providerSuccessRate =
+      await this.providerLog.successRateByProvider(scope);
 
     return {
       searches,
@@ -109,8 +145,16 @@ export class FlightReportsService {
     };
   }
 
-  async profitReport(filters: FlightFilters) {
-    const where = this.dateRange(filters);
+  async providerLogs(user: AuthContext, provider?: FlightProviderName) {
+    return this.providerLog.listAll(
+      { provider },
+      this.scopes.tenantScope(user),
+    );
+  }
+
+  async profitReport(user: AuthContext, filters: FlightFilters) {
+    const scope = await this.scopeFor(user, filters);
+    const where = this.dateRange(filters, scope);
     const bookings = await this.prisma.flightBooking.findMany({
       where,
       include: {
@@ -126,6 +170,7 @@ export class FlightReportsService {
       where: {
         sourceType: 'FLIGHT_BOOKING',
         sourceId: { in: bookings.map((b) => b.id) },
+        ...staffTenant(scope),
       },
     });
     for (const inc of incentives) {

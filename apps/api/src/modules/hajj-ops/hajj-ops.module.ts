@@ -1,3 +1,4 @@
+import { AnalyticsModule } from '../analytics/analytics.module';
 import { Module } from '@nestjs/common';
 import { AuditModule } from '../audit/audit.module';
 import { CrmModule } from '../crm/crm.module';
@@ -35,7 +36,13 @@ import { UmrahGroupsService } from './umrah-groups.service';
  * matching the convention already used by CrmModule/SupportModule/HajjModule.
  */
 @Module({
-  imports: [AuditModule, UsersModule, CustomersModule, CrmModule],
+  imports: [
+    AnalyticsModule,
+    AuditModule,
+    UsersModule,
+    CustomersModule,
+    CrmModule,
+  ],
   controllers: [
     HajjGroupsController,
     UmrahGroupsController,

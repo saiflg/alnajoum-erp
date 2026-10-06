@@ -36,23 +36,36 @@ export class CrmReportsController {
     if (!staffId) {
       throw new ForbiddenException('Only staff have a performance report');
     }
-    return this.reportsService.staffPerformance(staffId, this.range(from, to));
+    return this.reportsService.staffPerformance(
+      user,
+      staffId,
+      this.range(from, to),
+      true,
+    );
   }
 
   @Get('staff/:staffId')
   @RequirePermissions(PERMISSIONS.CRM.DASHBOARD_VIEW)
   staffPerformance(
+    @CurrentUser() user: AuthContext,
     @Param('staffId') staffId: string,
     @Query('from') from?: string,
     @Query('to') to?: string,
   ) {
-    return this.reportsService.staffPerformance(staffId, this.range(from, to));
+    return this.reportsService.staffPerformance(
+      user,
+      staffId,
+      this.range(from, to),
+    );
   }
 
   @Get('customer-value/:customerId')
   @RequirePermissions(PERMISSIONS.CRM.CUSTOMER_360_VIEW)
-  customerValue(@Param('customerId') customerId: string) {
-    return this.reportsService.customerValue(customerId);
+  customerValue(
+    @CurrentUser() user: AuthContext,
+    @Param('customerId') customerId: string,
+  ) {
+    return this.reportsService.customerValue(user, customerId);
   }
 
   @Get('dashboard/me')
@@ -61,18 +74,21 @@ export class CrmReportsController {
     if (!staffId) {
       throw new ForbiddenException('Only staff have a CRM dashboard');
     }
-    return this.reportsService.staffDashboard(staffId);
+    return this.reportsService.staffDashboard(user, staffId, true);
   }
 
   @Get('dashboard/branch/:branchId')
   @RequirePermissions(PERMISSIONS.CRM.DASHBOARD_VIEW)
-  branchDashboard(@Param('branchId') branchId: string) {
-    return this.reportsService.branchDashboard(branchId);
+  branchDashboard(
+    @CurrentUser() user: AuthContext,
+    @Param('branchId') branchId: string,
+  ) {
+    return this.reportsService.branchDashboard(user, branchId);
   }
 
   @Get('dashboard/company')
   @RequirePermissions(PERMISSIONS.CRM.DASHBOARD_VIEW)
-  companyDashboard() {
-    return this.reportsService.companyDashboard();
+  companyDashboard(@CurrentUser() user: AuthContext) {
+    return this.reportsService.companyDashboard(user);
   }
 }

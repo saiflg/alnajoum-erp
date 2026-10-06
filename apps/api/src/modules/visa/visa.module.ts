@@ -1,3 +1,4 @@
+import { AnalyticsModule } from '../analytics/analytics.module';
 import { Module } from '@nestjs/common';
 import { AuditModule } from '../audit/audit.module';
 import { CrmModule } from '../crm/crm.module';
@@ -50,6 +51,7 @@ import { VisaService } from './visa.service';
   // "visa/services/public" routes must be registered before the dynamic
   // "visa/applications/:id" / "visa/services/:id" ones.
   imports: [
+    AnalyticsModule,
     CustomersModule,
     UsersModule,
     PaymentsModule,

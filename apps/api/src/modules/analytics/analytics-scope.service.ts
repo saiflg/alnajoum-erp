@@ -30,6 +30,27 @@ export interface AnalyticsScope {
   description: string;
 }
 
+/** The part of a scope the legacy per-module report services need. */
+export type ReportScope = Pick<
+  AnalyticsScope,
+  'companyId' | 'branchId' | 'branchLocked'
+>;
+
+/**
+ * Prisma fragments that tie a row to a tenant. Bookings, tickets, invoices etc.
+ * have no `companyId` column — `customer.companyId` (or `staff.companyId`) is how
+ * they belong to a company. `undefined` company (SUPER_ADMIN) = no filter.
+ */
+export const customerTenant = (
+  scope: Pick<ReportScope, 'companyId'>,
+): { customer?: { companyId: string } } =>
+  scope.companyId ? { customer: { companyId: scope.companyId } } : {};
+
+export const staffTenant = (
+  scope: Pick<ReportScope, 'companyId'>,
+): { staff?: { companyId: string } } =>
+  scope.companyId ? { staff: { companyId: scope.companyId } } : {};
+
 /**
  * Phase 20 — decides WHAT DATA a caller's analytics may cover.
  *
@@ -46,14 +67,65 @@ export interface AnalyticsScope {
 export class AnalyticsScopeService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async resolve(
-    user: AuthContext,
-    requestedBranchId?: string,
-  ): Promise<AnalyticsScope> {
+  /**
+   * Tenant only (no branch dimension): for reports whose data has no branch
+   * (hajj-ops, company-wide CRM counts). `undefined` = SUPER_ADMIN, platform-wide.
+   */
+  tenantOf(user: AuthContext): string | undefined {
     const tenant = resolveTenantFilter(user);
     if (tenant === '__no_tenant__') {
       throw new ForbiddenException('Your account is not attached to a company');
     }
+    return tenant;
+  }
+
+  tenantScope(user: AuthContext): ReportScope {
+    return {
+      companyId: this.tenantOf(user),
+      branchId: undefined,
+      branchLocked: false,
+    };
+  }
+
+  /**
+   * A staff id taken from a path or query string must belong to the caller's
+   * tenant — and, for a branch-locked caller, to their own branch. Anything
+   * else is a 404, indistinguishable from an id that does not exist.
+   */
+  async assertStaffInScope(scope: ReportScope, staffId: string): Promise<void> {
+    const staff = await this.prisma.staff.findFirst({
+      where: {
+        id: staffId,
+        ...(scope.companyId ? { companyId: scope.companyId } : {}),
+        ...(scope.branchLocked && scope.branchId
+          ? { branchId: scope.branchId }
+          : {}),
+      },
+      select: { id: true },
+    });
+    if (!staff) throw new NotFoundException('Staff member not found');
+  }
+
+  /** Same rule for a customer id: another company's customer is a 404. */
+  async assertCustomerInScope(
+    scope: ReportScope,
+    customerId: string,
+  ): Promise<void> {
+    const customer = await this.prisma.customer.findFirst({
+      where: {
+        id: customerId,
+        ...(scope.companyId ? { companyId: scope.companyId } : {}),
+      },
+      select: { id: true },
+    });
+    if (!customer) throw new NotFoundException('Customer not found');
+  }
+
+  async resolve(
+    user: AuthContext,
+    requestedBranchId?: string,
+  ): Promise<AnalyticsScope> {
+    const tenant = this.tenantOf(user);
     const companyWide = user.roles.some((r) => COMPANY_WIDE_ROLES.includes(r));
 
     if (!companyWide) {

@@ -28,40 +28,53 @@ export class FinanceReportsController {
   }
 
   @Get('profit-and-loss')
-  profitAndLoss(@Query('from') from?: string, @Query('to') to?: string) {
-    return this.reportsService.profitAndLoss(this.range(from, to));
+  profitAndLoss(
+    @CurrentUser() user: AuthContext,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.reportsService.profitAndLoss(user, this.range(from, to));
   }
 
   @Get('cash-flow')
-  cashFlow(@Query('from') from?: string, @Query('to') to?: string) {
-    return this.reportsService.cashFlow(this.range(from, to));
+  cashFlow(
+    @CurrentUser() user: AuthContext,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.reportsService.cashFlow(user, this.range(from, to));
   }
 
   @Get('dashboard')
-  dashboard() {
-    return this.reportsService.dashboardKpis();
+  dashboard(@CurrentUser() user: AuthContext) {
+    return this.reportsService.dashboardKpis(user);
   }
 
   @Get('branches')
-  branches() {
-    return this.reportsService.branchAccounting();
+  branches(@CurrentUser() user: AuthContext) {
+    return this.reportsService.branchAccounting(user);
   }
 
   @Get('customer-statement/:customerId')
   customerStatement(
+    @CurrentUser() user: AuthContext,
     @Param('customerId') customerId: string,
     @Query('from') from?: string,
     @Query('to') to?: string,
   ) {
     return this.reportsService.customerStatement(
+      user,
       customerId,
       this.range(from, to),
     );
   }
 
   @Get('staff-incentive-statement/:staffId')
-  staffIncentiveStatement(@Param('staffId') staffId: string) {
-    return this.reportsService.staffIncentiveStatement(staffId);
+  staffIncentiveStatement(
+    @CurrentUser() user: AuthContext,
+    @Param('staffId') staffId: string,
+  ) {
+    return this.reportsService.staffIncentiveStatement(user, staffId);
   }
 
   /**
@@ -79,14 +92,19 @@ export class FinanceReportsController {
     if (!staffId) {
       throw new ForbiddenException('Only staff have an incentive statement');
     }
-    return this.reportsService.staffIncentiveStatement(staffId);
+    return this.reportsService.staffIncentiveStatement(user, staffId, true);
   }
 
   @Get('transaction/:sourceType/:sourceId')
   transactionProfitability(
+    @CurrentUser() user: AuthContext,
     @Param('sourceType') sourceType: string,
     @Param('sourceId') sourceId: string,
   ) {
-    return this.reportsService.transactionProfitability(sourceType, sourceId);
+    return this.reportsService.transactionProfitability(
+      user,
+      sourceType,
+      sourceId,
+    );
   }
 }

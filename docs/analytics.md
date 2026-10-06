@@ -98,9 +98,37 @@ Read-only checks, each with a count, severity, the metrics it distorts and sampl
 - **Not covering every service.** Booked value includes flights and hotels only. Visa, Hajj, Umrah, vehicle rental, corporate and package sales are not in these totals yet.
 - **Not accounting.** No P&L, balance sheet or tax figures: the ledger has no company column and the existing platform P&L mishandles reversals (a pre-existing defect, left as found).
 
+## Legacy report endpoints: tenant isolation (follow-up)
+
+The Phase 20 audit found that the older per-module report endpoints did not filter by tenant. They now do. **This is an isolation fix only**: no figure was redefined and no response shape changed, with two documented exceptions (SUPER_ADMIN-only finance reports; provider-search counts).
+
+How it works, everywhere: the tenant comes from the caller's token (`resolveTenantFilter`, via `AnalyticsScopeService`), never from a parameter; rows with no `companyId` are tied to a tenant through `customer.companyId` / `staff.companyId`; a SUPER_ADMIN is unfiltered (platform-wide) exactly as before; a caller with no company and no SUPER_ADMIN role is refused.
+
+| Endpoint | What changed |
+|---|---|
+| `GET /flights/reports/kpis`, `/profit` · `/hotels/reports/kpis`, `/profit` · `/visa/reports/kpis`, `/profit`, `/status-breakdown` | Bookings/applications and every follow-up query (refunds, reissues, incentives) filtered by tenant. `branchId` goes through `AnalyticsScopeService`: another company's branch is **404**, and a branch manager is locked to their own branch. `staffId` must be a staff member of the caller's tenant (and, for a branch manager, own branch) or it is a **404**. `customerId` (visa status breakdown) is ANDed with the tenant filter, so another company's customer matches nothing. |
+| `GET /flights/reports/provider-logs` | Only log rows tied to the caller's own bookings. |
+| `GET /finance/reports/branches` | Only the caller's company's branches (a branch manager: their own); every figure re-filtered by tenant. |
+| `GET /finance/reports/customer-statement/:customerId`, `/staff-incentive-statement/:staffId`, `/transaction/:type/:id` | Cross-tenant ids are **404**. A branch manager is held to staff of their own branch. |
+| `GET /crm/reports/staff/:staffId`, `/customer-value/:customerId`, `/dashboard/branch/:branchId` | Cross-tenant ids are **404** (a branch manager: another branch is also 404). |
+| `GET /crm/reports/dashboard/company`, `/dashboard/me`, `/staff/me` | Every count tenant-scoped (the unscoped `customer`/`lead`/`supportTicket` counts are gone). `/me` routes stay available to a staff member with no branch. |
+| `GET /hajj-ops/reports/dashboard`, `/profitability/hajj\|umrah/:packageId` | Groups, departures, check-ins and fleet tenant-scoped; profitability counts only the caller's own registrations. |
+| `GET /dashboard/search` | The `FlightSupplier` branch is now filtered by company like the others. |
+
+### Deliberate exceptions and limitations (read these)
+
+1. **`/finance/reports/profit-and-loss`, `/cash-flow`, `/dashboard` are SUPER_ADMIN-only (403 for everyone else).** `JournalEntry` / `LedgerAccount` / `CompanyInvestment` have no `companyId`, and joining through `sourceId` would be a guess. Company-level revenue/cash/receivables are in `/analytics/*` meanwhile. Fix properly by giving the ledger a company column. *Side effect:* the finance dashboard page loses the P&L / cash-flow / KPI panels for non-platform users (the branch table still loads).
+2. **Provider searches have no booking, hence no tenant.** For a tenant caller `searches` in `/flights/reports/kpis` is `0`, and `providerSuccessRate` and `/provider-logs` cover only provider calls tied to their own bookings. SUPER_ADMIN's figures (including with a `branchId` filter) are unchanged.
+3. **Hajj/Umrah packages are a shared catalog with no owner** (`HajjPackage`/`UmrahPackage` have no `companyId`, and the package list endpoints are not tenant-scoped either). The profitability endpoints count only the caller's own registrations; a package whose registrations all belong to *other* companies is a 404; a package nobody has registered for yet shows zeros. A tenant can therefore still see a shared package's name/currency through the catalog. Needs a package owner column to close.
+4. **Hajj/Umrah groups are attributed through their pilgrims' customers or their coordinator**; a group with neither is unattributable and counted for SUPER_ADMIN only. **Fleet vehicles/drivers have no owner at all**, so a tenant's dashboard counts only those used by its own groups' transports (a never-used vehicle is invisible to tenants). `checkInsToday` is joined in SQL through the pilgrim's registration.
+5. **CRM:** a lead is a tenant's if its assigned branch *or* assigned staff is; an unassigned lead is counted for SUPER_ADMIN only. Campaigns have no company column and are attributed through the staff member who created them (a campaign with no creator: SUPER_ADMIN only).
+6. **Company-wide dashboards are not branch-locked** (`/crm/reports/dashboard/company`, `/hajj-ops/reports/dashboard`, by-id customer endpoints): they have no branch dimension, so a branch manager still sees their *company's* totals. Branch-dimension reports (flights/hotels/visa/finance branches/CRM branch dashboard/staff by id) *are* locked.
+7. **Behaviour change for non-company-wide roles** (BRANCH_MANAGER, STAFF) on the flights/hotels/visa/finance-branches reports: they now see only their own branch (a staff member with no branch sees nothing), where before they saw everything.
+8. Tests: each service has a spec asserting the tenant id appears in **every** query it issues (`common/testing/tenant-scope.testkit.ts`), a cross-tenant 404 per by-id endpoint, branch-manager locking, and that SUPER_ADMIN stays unfiltered.
+
 ## Known limitations and open risks
 
-1. **Legacy report endpoints are still not tenant-scoped and still use their own definitions** (`/finance/reports/*`, `/flights/reports/*`, `/hotels/reports/*`, `/visa/reports/*`, `/hajj-ops/reports/*`, `/crm/reports/*`). Anyone holding those permissions can read across companies. This was found by the audit and **not fixed in this phase** — it needs its own change with regression tests. Highest priority follow-up.
+1. **Legacy report endpoints — fixed for tenant isolation, with the exceptions listed in [Legacy report endpoints](#legacy-report-endpoints-tenant-isolation-follow-up) below.** They still use their own (older) definitions, so their figures can differ from `/analytics`; that is unchanged. The ledger-backed finance reports are now SUPER_ADMIN-only because the ledger has no company column.
 2. Receivables ageing is days *since issue*, because invoices have no due date.
 3. Cancellation dates are approximate (`updatedAt`).
 4. No exports, scheduled reports, alerts/anomaly detection, forecasting, cohort analysis, supplier scorecards or staff leaderboards.

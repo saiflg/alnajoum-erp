@@ -1,3 +1,4 @@
+import { AnalyticsModule } from '../analytics/analytics.module';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AuditModule } from '../audit/audit.module';
@@ -46,6 +47,7 @@ import { TravelportFlightProviderService } from './providers/travelport-flight-p
 
 @Module({
   imports: [
+    AnalyticsModule,
     ConfigModule,
     CustomersModule,
     UsersModule,

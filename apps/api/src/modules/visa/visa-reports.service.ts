@@ -4,7 +4,14 @@ import {
   VisaApplicationStatus,
   VisaType,
 } from '@prisma/client';
+import type { AuthContext } from '../../common/interfaces/auth-context.interface';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
+import {
+  AnalyticsScopeService,
+  customerTenant,
+  ReportScope,
+  staffTenant,
+} from '../analytics/analytics-scope.service';
 
 export interface VisaProfitRow {
   applicationId: string;
@@ -36,17 +43,44 @@ export interface VisaProfitRow {
  */
 @Injectable()
 export class VisaReportsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly scopes: AnalyticsScopeService,
+  ) {}
 
-  async profitReport(filters: {
-    from?: Date;
-    to?: Date;
-    branchId?: string;
-    staffId?: string;
-    country?: string;
-  }): Promise<VisaProfitRow[]> {
+  /**
+   * The tenant comes from the caller's token, never from the request. A branch
+   * the caller asks for must belong to their company (404 otherwise) and a
+   * branch-locked caller (branch manager) is held to their own branch; a staff
+   * filter must be someone in that same scope. (`customerId` on the status
+   * breakdown needs no lookup: it is ANDed with the tenant filter, so another
+   * company's customer simply matches nothing.)
+   */
+  private async scopeFor(
+    user: AuthContext,
+    filters: { branchId?: string; staffId?: string },
+  ): Promise<ReportScope> {
+    const scope = await this.scopes.resolve(user, filters.branchId);
+    if (filters.staffId) {
+      await this.scopes.assertStaffInScope(scope, filters.staffId);
+    }
+    return scope;
+  }
+
+  async profitReport(
+    user: AuthContext,
+    filters: {
+      from?: Date;
+      to?: Date;
+      branchId?: string;
+      staffId?: string;
+      country?: string;
+    },
+  ): Promise<VisaProfitRow[]> {
+    const scope = await this.scopeFor(user, filters);
     const applications = await this.prisma.visaApplication.findMany({
       where: {
+        ...customerTenant(scope),
         createdAt: { gte: filters.from, lte: filters.to },
         destinationCountry: filters.country,
         OR: filters.staffId
@@ -79,11 +113,11 @@ export class VisaReportsService {
       orderBy: { createdAt: 'desc' },
     });
 
-    const filtered = filters.branchId
+    const filtered = scope.branchId
       ? applications.filter(
           (a) =>
-            a.appliedByStaff?.branchId === filters.branchId ||
-            a.assignedStaff?.branchId === filters.branchId,
+            a.appliedByStaff?.branchId === scope.branchId ||
+            a.assignedStaff?.branchId === scope.branchId,
         )
       : applications;
 
@@ -91,6 +125,7 @@ export class VisaReportsService {
       where: {
         sourceType: 'VISA_APPLICATION',
         sourceId: { in: filtered.map((a) => a.id) },
+        ...staffTenant(scope),
       },
     });
     const incentiveByApplication = new Map(
@@ -144,16 +179,21 @@ export class VisaReportsService {
    * same underlying query — see VisaReportsController for how the query
    * params map to this).
    */
-  async kpis(filters: {
-    from?: Date;
-    to?: Date;
-    branchId?: string;
-    staffId?: string;
-    country?: string;
-    visaType?: VisaType;
-  }) {
+  async kpis(
+    user: AuthContext,
+    filters: {
+      from?: Date;
+      to?: Date;
+      branchId?: string;
+      staffId?: string;
+      country?: string;
+      visaType?: VisaType;
+    },
+  ) {
+    const scope = await this.scopeFor(user, filters);
     const applications = await this.prisma.visaApplication.findMany({
       where: {
+        ...customerTenant(scope),
         createdAt: { gte: filters.from, lte: filters.to },
         destinationCountry: filters.country,
         visaType: filters.visaType,
@@ -170,11 +210,11 @@ export class VisaReportsService {
       },
     });
 
-    const filtered = filters.branchId
+    const filtered = scope.branchId
       ? applications.filter(
           (a) =>
-            a.appliedByStaff?.branchId === filters.branchId ||
-            a.assignedStaff?.branchId === filters.branchId,
+            a.appliedByStaff?.branchId === scope.branchId ||
+            a.assignedStaff?.branchId === scope.branchId,
         )
       : applications;
 
@@ -182,6 +222,7 @@ export class VisaReportsService {
       where: {
         sourceType: 'VISA_APPLICATION',
         sourceId: { in: filtered.map((a) => a.id) },
+        ...staffTenant(scope),
       },
     });
 
@@ -246,21 +287,26 @@ export class VisaReportsService {
    * carries no cost/margin figures — Visa Manager and Staff roles (spec
    * #28) can see it too, not just Super Admin/Finance.
    */
-  async statusBreakdown(filters: {
-    from?: Date;
-    to?: Date;
-    branchId?: string;
-    staffId?: string;
-    country?: string;
-    visaType?: VisaType;
-    customerId?: string;
-    status?: VisaApplicationStatus;
-  }): Promise<{
+  async statusBreakdown(
+    user: AuthContext,
+    filters: {
+      from?: Date;
+      to?: Date;
+      branchId?: string;
+      staffId?: string;
+      country?: string;
+      visaType?: VisaType;
+      customerId?: string;
+      status?: VisaApplicationStatus;
+    },
+  ): Promise<{
     total: number;
     byStatus: Record<VisaApplicationStatus, number>;
   }> {
+    const scope = await this.scopeFor(user, filters);
     const applications = await this.prisma.visaApplication.findMany({
       where: {
+        ...customerTenant(scope),
         createdAt: { gte: filters.from, lte: filters.to },
         destinationCountry: filters.country,
         visaType: filters.visaType,
@@ -280,11 +326,11 @@ export class VisaReportsService {
       },
     });
 
-    const filtered = filters.branchId
+    const filtered = scope.branchId
       ? applications.filter(
           (a) =>
-            a.appliedByStaff?.branchId === filters.branchId ||
-            a.assignedStaff?.branchId === filters.branchId,
+            a.appliedByStaff?.branchId === scope.branchId ||
+            a.assignedStaff?.branchId === scope.branchId,
         )
       : applications;
 

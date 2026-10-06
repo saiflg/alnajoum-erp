@@ -1,5 +1,7 @@
 import { Controller, Get, Param } from '@nestjs/common';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
+import type { AuthContext } from '../../common/interfaces/auth-context.interface';
 import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { HajjOpsReportsService } from './hajj-ops-reports.service';
 
@@ -9,19 +11,25 @@ export class HajjOpsReportsController {
 
   @Get('dashboard')
   @RequirePermissions(PERMISSIONS.HAJJ_OPS.DASHBOARD_VIEW)
-  dashboard() {
-    return this.service.dashboard();
+  dashboard(@CurrentUser() user: AuthContext) {
+    return this.service.dashboard(user);
   }
 
   @Get('profitability/hajj/:packageId')
   @RequirePermissions(PERMISSIONS.HAJJ_OPS.PROFITABILITY_VIEW)
-  hajjProfitability(@Param('packageId') packageId: string) {
-    return this.service.hajjPackageProfitability(packageId);
+  hajjProfitability(
+    @CurrentUser() user: AuthContext,
+    @Param('packageId') packageId: string,
+  ) {
+    return this.service.hajjPackageProfitability(user, packageId);
   }
 
   @Get('profitability/umrah/:packageId')
   @RequirePermissions(PERMISSIONS.HAJJ_OPS.PROFITABILITY_VIEW)
-  umrahProfitability(@Param('packageId') packageId: string) {
-    return this.service.umrahPackageProfitability(packageId);
+  umrahProfitability(
+    @CurrentUser() user: AuthContext,
+    @Param('packageId') packageId: string,
+  ) {
+    return this.service.umrahPackageProfitability(user, packageId);
   }
 }

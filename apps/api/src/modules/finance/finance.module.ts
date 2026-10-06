@@ -1,3 +1,4 @@
+import { AnalyticsModule } from '../analytics/analytics.module';
 import { Module, OnModuleInit } from '@nestjs/common';
 import { AuditModule } from '../audit/audit.module';
 import { UsersModule } from '../users/users.module';
@@ -32,7 +33,7 @@ import { TaxRulesService } from './tax-rules.service';
  * circular dependency.
  */
 @Module({
-  imports: [AuditModule, UsersModule],
+  imports: [AnalyticsModule, AuditModule, UsersModule],
   controllers: [
     ChartOfAccountsController,
     ExpensesController,

@@ -96,5 +96,32 @@ describe('DashboardService', () => {
         }),
       );
     });
+
+    it("scopes every search branch, including suppliers, to the caller's tenant", async () => {
+      await service.globalSearch('okafor', 'company-a');
+
+      const queries = [
+        prisma.customer.findMany,
+        prisma.flightBooking.findMany,
+        prisma.staff.findMany,
+        prisma.flightSupplier.findMany,
+      ];
+      for (const q of queries) {
+        expect(JSON.stringify(q.mock.calls)).toContain('company-a');
+      }
+      expect(prisma.flightSupplier.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ companyId: 'company-a' }),
+        }),
+      );
+    });
+
+    it('searches suppliers platform-wide for SUPER_ADMIN (no tenant given)', async () => {
+      await service.globalSearch('okafor');
+
+      expect(
+        JSON.stringify(prisma.flightSupplier.findMany.mock.calls),
+      ).not.toContain('companyId');
+    });
   });
 });
