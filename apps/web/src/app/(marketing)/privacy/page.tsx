@@ -1,3 +1,4 @@
+import { PageBanner } from '@/components/visual/Showcase';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
@@ -73,13 +74,15 @@ const SECTIONS = [
 
 export default function PrivacyPage() {
   return (
-    <div className="mx-auto max-w-3xl px-4 py-20 sm:px-6 lg:px-8">
+    <>
+      <PageBanner kind="globe" eyebrow="Legal" title="Privacy Policy" subtitle="How we collect, use and protect your information." />
+      <div className="mx-auto max-w-3xl px-4 py-20 sm:px-6 lg:px-8">
       <span className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-4 py-1.5 text-xs font-medium text-amber-700">
         Legal
       </span>
-      <h1 className="mt-6 text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
+      <h2 className="mt-6 text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
         Privacy Policy
-      </h1>
+      </h2>
       <p className="mt-3 text-sm text-slate-500">Last updated: 14 August 2026</p>
       <p className="mt-6 text-sm text-slate-500">
         This is a starting policy for Alnajoum Travel and should be reviewed by
@@ -101,6 +104,7 @@ export default function PrivacyPage() {
           </section>
         ))}
       </div>
-    </div>
+      </div>
+    </>
   );
 }

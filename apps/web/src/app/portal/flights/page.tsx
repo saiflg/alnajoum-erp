@@ -1,5 +1,6 @@
 'use client';
 
+import { PageHeader } from '@/components/portal/PageHeader';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { AppShell } from '@/components/AppShell';
@@ -29,9 +30,8 @@ export default function MyFlightBookingsPage() {
   return (
     <ProtectedRoute allowedRoles={['CUSTOMER']}>
       <AppShell title="My Bookings" navLinks={PORTAL_NAV}>
-        <h2 className="text-lg font-semibold text-slate-900">My Flight Bookings</h2>
-
-        {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
+        <PageHeader scene="sky" title="My Flight Bookings" />
+{error && <p className="mt-4 text-sm text-red-600">{error}</p>}
 
         <div className="mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white">
           <table className="min-w-full divide-y divide-slate-200 text-sm">

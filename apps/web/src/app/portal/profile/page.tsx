@@ -1,5 +1,6 @@
 'use client';
 
+import { PageHeader } from '@/components/portal/PageHeader';
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { AppShell } from '@/components/AppShell';
 import { CountrySelect } from '@/components/CountrySelect';
@@ -112,8 +113,8 @@ export default function CustomerProfilePage() {
 
         {profile && (
           <>
-            <h2 className="text-lg font-semibold text-slate-900">My Profile</h2>
-            <p className="text-sm text-slate-500">{profile.identity?.email}</p>
+            <PageHeader scene="globe" title="My Profile" subtitle={profile.identity?.email} />
+
 
             <form onSubmit={handleSave} className="mt-6 grid max-w-lg grid-cols-2 gap-4">
               <div>

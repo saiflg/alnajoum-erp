@@ -1,5 +1,6 @@
 'use client';
 
+import { PageHeader } from '@/components/portal/PageHeader';
 import { useSearchParams } from 'next/navigation';
 import { useRouter } from 'next/navigation';
 import { FormEvent, Suspense, useCallback, useEffect, useState } from 'react';
@@ -105,9 +106,8 @@ function WalletPageContent() {
           </p>
         )}
 
-        <h2 className="text-lg font-semibold text-slate-900">My Wallet</h2>
-
-        {data && (
+        <PageHeader scene="desert" title="My Wallet" />
+{data && (
           <>
             <div className="mt-4 max-w-sm rounded-lg border border-slate-200 bg-white p-6">
               <p className="text-sm text-slate-500">Available balance</p>

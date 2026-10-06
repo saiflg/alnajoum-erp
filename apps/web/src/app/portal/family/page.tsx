@@ -1,5 +1,6 @@
 'use client';
 
+import { PageHeader } from '@/components/portal/PageHeader';
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { AppShell } from '@/components/AppShell';
 import { CountrySelect } from '@/components/CountrySelect';
@@ -175,11 +176,8 @@ export default function FamilyMembersPage() {
       <AppShell title="Family Members" navLinks={PORTAL_NAV}>
         {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
 
-        <h2 className="text-lg font-semibold text-slate-900">Family Members</h2>
-        <p className="mt-1 text-sm text-slate-500">
-          Add spouses, children, or other dependents to include them on
-          bookings and applications later.
-        </p>
+        <PageHeader scene="sky" title="Family Members" subtitle="Add spouses, children, or other dependents to include them on bookings and applications later." />
+
 
         <form
           onSubmit={handleCreate}

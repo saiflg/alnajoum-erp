@@ -1,5 +1,6 @@
 'use client';
 
+import { PageHeader } from '@/components/portal/PageHeader';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { AppShell } from '@/components/AppShell';
@@ -79,10 +80,8 @@ export default function HajjPage() {
         {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
         {notice && <p className="mb-4 text-sm text-emerald-600">{notice}</p>}
 
-        <h2 className="text-lg font-semibold text-slate-900">Available Hajj Packages</h2>
-        <p className="mt-1 text-sm text-slate-500">
-          Register yourself and any family members for a package, then pay in installments.
-        </p>
+        <PageHeader scene="makkah" title="Available Hajj Packages" subtitle="Register yourself and any family members for a package, then pay in installments." />
+
 
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           {packages?.map((pkg) => (

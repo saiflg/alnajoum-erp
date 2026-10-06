@@ -1,5 +1,6 @@
 'use client';
 
+import { StatCard, StatTone } from '@/components/portal/StatCard';
 import { SceneSlideshow } from '@/components/visual/Showcase';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
@@ -19,14 +20,19 @@ import {
   WalletWithBalance,
 } from '@/lib/types';
 
+const TILE_STYLE: Record<string, { icon: string; tone: StatTone; order: number }> = {
+  'Wallet Balance': { icon: '₦', tone: 'emerald', order: 0 },
+  'Active Bookings': { icon: '✈', tone: 'sky', order: 1 },
+  'Pending Payments': { icon: '⏳', tone: 'amber', order: 2 },
+  'Hajj Applications': { icon: '☪', tone: 'violet', order: 3 },
+  'Umrah Applications': { icon: '🕋', tone: 'violet', order: 4 },
+  'Family Members': { icon: '👪', tone: 'rose', order: 5 },
+  Notifications: { icon: '🔔', tone: 'slate', order: 6 },
+};
+
 function StatTile({ label, value, href }: { label: string; value: string; href?: string }) {
-  const content = (
-    <div className="rounded-lg border border-slate-200 bg-white p-4 transition-colors hover:border-slate-300">
-      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="mt-1 text-2xl font-semibold text-slate-900">{value}</p>
-    </div>
-  );
-  return href ? <Link href={href}>{content}</Link> : content;
+  const style = TILE_STYLE[label];
+  return <StatCard label={label} value={value} href={href} icon={style?.icon} tone={style?.tone} index={style?.order ?? 0} />;
 }
 
 export default function CustomerPortalDashboardPage() {

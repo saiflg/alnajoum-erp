@@ -1,5 +1,6 @@
 'use client';
 
+import { PageHeader } from '@/components/portal/PageHeader';
 import { FormEvent, useEffect, useState } from 'react';
 import { AppShell } from '@/components/AppShell';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
@@ -154,11 +155,8 @@ export default function PortalHotelsPage() {
   return (
     <ProtectedRoute allowedRoles={['CUSTOMER']}>
       <AppShell title="Hotels" navLinks={PORTAL_NAV}>
-        <h2 className="text-lg font-semibold text-slate-900">Book a Hotel</h2>
-        <p className="mt-1 text-sm text-slate-500">
-          Search by city, dates, and guest count — every confirmed booking generates a
-          matching invoice automatically, same as flights.
-        </p>
+        <PageHeader scene="city" title="Book a Hotel" subtitle="Search by city, dates, and guest count — every confirmed booking generates a matching invoice automatically, same as flights." />
+
 
         <form onSubmit={handleSearch} className="mt-4 max-w-3xl space-y-3">
           <div className="grid grid-cols-2 gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:grid-cols-5">

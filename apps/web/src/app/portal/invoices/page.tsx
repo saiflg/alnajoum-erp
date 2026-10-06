@@ -1,5 +1,6 @@
 'use client';
 
+import { PageHeader } from '@/components/portal/PageHeader';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { AppShell } from '@/components/AppShell';
@@ -34,9 +35,8 @@ export default function MyInvoicesPage() {
   return (
     <ProtectedRoute allowedRoles={['CUSTOMER']}>
       <AppShell title="My Invoices" navLinks={PORTAL_NAV}>
-        <h2 className="text-lg font-semibold text-slate-900">My Invoices</h2>
-
-        {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
+        <PageHeader scene="desert" title="My Invoices" />
+{error && <p className="mt-4 text-sm text-red-600">{error}</p>}
 
         <div className="mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white">
           <table className="min-w-full divide-y divide-slate-200 text-sm">

@@ -1,5 +1,6 @@
 'use client';
 
+import { PageHeader } from '@/components/portal/PageHeader';
 import { FormEvent, useEffect, useState } from 'react';
 import { AppShell } from '@/components/AppShell';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
@@ -125,8 +126,8 @@ export default function PortalSupportPage() {
   return (
     <ProtectedRoute allowedRoles={['CUSTOMER']}>
       <AppShell title="Support" navLinks={PORTAL_NAV}>
-        <h2 className="text-lg font-semibold text-slate-900">Support</h2>
-        <p className="mt-1 text-sm text-slate-500">Open a ticket and chat with our team here — replies arrive by email too.</p>
+        <PageHeader scene="city" title="Support" subtitle="Open a ticket and chat with our team here — replies arrive by email too." />
+
         {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
 
         <form onSubmit={handleCreate} className="mt-4 grid grid-cols-1 gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:grid-cols-2">

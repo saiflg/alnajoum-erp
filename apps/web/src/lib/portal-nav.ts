@@ -1,6 +1,7 @@
 import type { NavLink } from '@/components/AppShell';
+import { assignGroups } from './nav-groups';
 
-export const PORTAL_NAV: NavLink[] = [
+const PORTAL_LINKS: NavLink[] = [
   { href: '/portal/dashboard', label: 'Dashboard', icon: 'dashboard' },
   { href: '/portal/profile', label: 'My Profile', icon: 'account' },
   { href: '/portal/family', label: 'Family Members', icon: 'family' },
@@ -16,3 +17,10 @@ export const PORTAL_NAV: NavLink[] = [
   { href: '/portal/support', label: 'Support', icon: 'bell' },
   { href: '/portal/notifications', label: 'Notifications', icon: 'bell' },
 ];
+
+export const PORTAL_NAV: NavLink[] = assignGroups(PORTAL_LINKS, {
+  'Travel': ['/portal/flights/search', '/portal/flights', '/portal/hotels', '/portal/vehicle-rentals', '/portal/visa'],
+  'Hajj & Umrah': ['/portal/hajj', '/portal/umrah'],
+  'My Account': ['/portal/profile', '/portal/family', '/portal/wallet', '/portal/invoices'],
+  'Help & Alerts': ['/portal/support', '/portal/notifications'],
+});

@@ -1,5 +1,6 @@
 'use client';
 
+import { PageHeader } from '@/components/portal/PageHeader';
 import { FormEvent, useEffect, useState } from 'react';
 import { AppShell } from '@/components/AppShell';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
@@ -80,11 +81,8 @@ export default function PortalVehicleRentalsPage() {
   return (
     <ProtectedRoute allowedRoles={['CUSTOMER']}>
       <AppShell title="Car, Van & Bus Rental" navLinks={PORTAL_NAV}>
-        <h2 className="text-lg font-semibold text-slate-900">Rent a Vehicle</h2>
-        <p className="mt-1 text-sm text-slate-500">
-          Cars, vans, and buses, with or without a driver — the same real invoicing flow
-          as flights and hotels.
-        </p>
+        <PageHeader scene="desert" title="Rent a Vehicle" subtitle="Cars, vans, and buses, with or without a driver — the same real invoicing flow as flights and hotels." />
+
 
         <form onSubmit={handleSearch} className="mt-4 max-w-3xl space-y-3">
           <div className="flex gap-2">

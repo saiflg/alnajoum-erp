@@ -1,5 +1,6 @@
 'use client';
 
+import { PageHeader } from '@/components/portal/PageHeader';
 import Link from 'next/link';
 import { FormEvent, useEffect, useState } from 'react';
 import { AppShell } from '@/components/AppShell';
@@ -257,12 +258,8 @@ export default function PortalVisaPage() {
   return (
     <ProtectedRoute allowedRoles={['CUSTOMER']}>
       <AppShell title="Visa Applications" navLinks={PORTAL_NAV}>
-        <h2 className="text-lg font-semibold text-slate-900">Apply for a Visa</h2>
-        <p className="mt-1 text-sm text-slate-500">
-          Choose one of our pre-configured visa packages below, or fill in your destination
-          directly. We handle document collection and embassy processing, and keep you
-          updated as the status changes.
-        </p>
+        <PageHeader scene="globe" title="Apply for a Visa" subtitle="Choose one of our pre-configured visa packages below, or fill in your destination directly. We handle document collection and embassy processing, and keep you updated as the status changes." />
+
 
         {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
         {notice && <p className="mt-4 text-sm text-emerald-600">{notice}</p>}

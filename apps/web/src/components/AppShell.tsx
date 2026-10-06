@@ -13,9 +13,12 @@ export interface NavLink {
   label: string;
   /** Falls back to a generic dot when omitted (a couple of one-off dashboards pass plain link objects). */
   icon?: NavIconName;
+  /** Links sharing a group render together under one collapsible heading; ungrouped links render flat. */
+  group?: string;
 }
 
 const SIDEBAR_COLLAPSED_KEY = 'alnajoum:sidebar-collapsed';
+const NAV_GROUPS_KEY = 'alnajoum:nav-groups';
 
 function isActivePath(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
@@ -53,6 +56,30 @@ export function AppShell({
     window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? '1' : '0');
   }, [collapsed]);
 
+  // Explicit open/closed choices per menu group. A group the visitor has never
+  // touched falls back to "open if it contains the current page".
+  const [groupChoice, setGroupChoice] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(NAV_GROUPS_KEY);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (raw) setGroupChoice(JSON.parse(raw) as Record<string, boolean>);
+    } catch {
+      /* ignore a corrupt value */
+    }
+  }, []);
+  function toggleGroup(name: string, currentlyOpen: boolean) {
+    setGroupChoice((prev) => {
+      const next = { ...prev, [name]: !currentlyOpen };
+      try {
+        window.localStorage.setItem(NAV_GROUPS_KEY, JSON.stringify(next));
+      } catch {
+        /* storage unavailable */
+      }
+      return next;
+    });
+  }
+
   // Close the mobile drawer the instant the route changes, using React's
   // documented "adjust state during render" pattern instead of an effect —
   // same fix as admin/manual-payments/page.tsx's customer-select reset.
@@ -65,41 +92,94 @@ export function AppShell({
   const sidebarWidth = collapsed ? 76 : 248;
   const agencyName = user?.companyName ?? 'Alnajoum Travel Agency';
 
+  function renderLink(link: NavLink, nested: boolean) {
+    const active = isActivePath(pathname, link.href);
+    return (
+      <Link
+        key={link.href}
+        href={link.href}
+        title={collapsed ? link.label : undefined}
+        className={`group relative flex items-center gap-3 rounded-lg py-2.5 text-sm font-medium transition-colors ${
+          nested && !collapsed ? 'pl-4 pr-3' : 'px-3'
+        } ${active ? 'text-white' : 'text-slate-300 hover:text-white'}`}
+      >
+        {active && (
+          <motion.span
+            layoutId="active-nav-pill"
+            className="absolute inset-0 rounded-lg bg-gradient-to-r from-amber-500/90 to-amber-600/90 shadow-sm"
+            transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+          />
+        )}
+        {!active && <span className="absolute inset-0 rounded-lg bg-white/0 transition-colors group-hover:bg-white/5" />}
+        <NavIcon name={link.icon ?? 'dashboard'} className="relative z-10 h-5 w-5 shrink-0" />
+        <span
+          className={`relative z-10 truncate transition-opacity duration-150 ${
+            collapsed ? 'lg:hidden lg:opacity-0' : 'opacity-100'
+          }`}
+        >
+          {link.label}
+        </span>
+      </Link>
+    );
+  }
+
+  // Preserve order: an ungrouped link stays where it was; a group appears at
+  // the position of its first member.
+  const navItems: Array<{ type: 'link'; link: NavLink } | { type: 'group'; name: string; links: NavLink[] }> = [];
+  const seenGroups = new Map<string, NavLink[]>();
+  for (const link of navLinks) {
+    if (!link.group) {
+      navItems.push({ type: 'link', link });
+    } else if (seenGroups.has(link.group)) {
+      seenGroups.get(link.group)!.push(link);
+    } else {
+      const links = [link];
+      seenGroups.set(link.group, links);
+      navItems.push({ type: 'group', name: link.group, links });
+    }
+  }
+
   const navList = (
     <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 py-2">
-      {navLinks.map((link) => {
-        const active = isActivePath(pathname, link.href);
+      {navItems.map((item) => {
+        if (item.type === 'link') return renderLink(item.link, false);
+        const containsActive = item.links.some((l) => isActivePath(pathname, l.href));
+        // The collapsed (icon-only) sidebar has no room for headings, so groups stay expanded there.
+        const open = collapsed || (groupChoice[item.name] ?? containsActive);
         return (
-          <Link
-            key={link.href}
-            href={link.href}
-            title={collapsed ? link.label : undefined}
-            className={`group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-              active ? 'text-white' : 'text-slate-300 hover:text-white'
-            }`}
-          >
-            {active && (
-              <motion.span
-                layoutId="active-nav-pill"
-                className="absolute inset-0 rounded-lg bg-gradient-to-r from-amber-500/90 to-amber-600/90 shadow-sm"
-                transition={{ type: 'spring', stiffness: 420, damping: 32 }}
-              />
+          <div key={item.name} className="mt-1">
+            {!collapsed && (
+              <button
+                type="button"
+                onClick={() => toggleGroup(item.name, open)}
+                aria-expanded={open}
+                className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400 transition-colors hover:bg-white/5 hover:text-slate-200"
+              >
+                <span className="flex items-center gap-2">
+                  {item.name}
+                  {containsActive && !open && <span className="h-1.5 w-1.5 rounded-full bg-amber-400" aria-label="Contains the current page" />}
+                </span>
+                <motion.span animate={{ rotate: open ? 90 : 0 }} transition={{ duration: 0.2 }} className="text-xs">
+                  ›
+                </motion.span>
+              </button>
             )}
-            {!active && (
-              <span className="absolute inset-0 rounded-lg bg-white/0 transition-colors group-hover:bg-white/5" />
-            )}
-            <NavIcon
-              name={link.icon ?? 'dashboard'}
-              className="relative z-10 h-5 w-5 shrink-0"
-            />
-            <span
-              className={`relative z-10 truncate transition-opacity duration-150 ${
-                collapsed ? 'lg:hidden lg:opacity-0' : 'opacity-100'
-              }`}
-            >
-              {link.label}
-            </span>
-          </Link>
+            <AnimatePresence initial={false}>
+              {open && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                  className="overflow-hidden"
+                >
+                  <div className={`flex flex-col gap-0.5 ${collapsed ? '' : 'ml-2 border-l border-white/10 pl-1'}`}>
+                    {item.links.map((l) => renderLink(l, true))}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         );
       })}
     </nav>
@@ -176,8 +256,30 @@ export function AppShell({
 
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar title={title} agencyName={agencyName} onOpenMobileMenu={() => setMobileOpen(true)} />
-        <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-          <div className="mx-auto max-w-6xl">{children}</div>
+        <main className="relative isolate min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+          <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-b from-slate-100 via-slate-50 to-white" />
+            <motion.div
+              className="absolute -right-24 -top-24 h-80 w-80 rounded-full bg-amber-300/25 blur-3xl"
+              animate={{ x: [0, -30, 0], y: [0, 20, 0] }}
+              transition={{ duration: 16, repeat: Infinity, ease: 'easeInOut' }}
+            />
+            <motion.div
+              className="absolute -left-24 top-1/2 h-72 w-72 rounded-full bg-sky-300/20 blur-3xl"
+              animate={{ x: [0, 30, 0], y: [0, -20, 0] }}
+              transition={{ duration: 19, repeat: Infinity, ease: 'easeInOut' }}
+            />
+          </div>
+          <motion.div
+            key={pathname}
+            data-area={pathname.split('/')[1]}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+            className="mx-auto max-w-6xl"
+          >
+            {children}
+          </motion.div>
         </main>
       </div>
 

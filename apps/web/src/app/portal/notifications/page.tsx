@@ -1,5 +1,6 @@
 'use client';
 
+import { PageHeader } from '@/components/portal/PageHeader';
 import { useEffect, useState } from 'react';
 import { AppShell } from '@/components/AppShell';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
@@ -45,16 +46,20 @@ export default function PortalNotificationsPage() {
       <AppShell title="Notifications" navLinks={PORTAL_NAV}>
         {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
 
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-slate-900">
-            Notifications {unreadCount > 0 && <span className="text-sm font-normal text-slate-500">({unreadCount} unread)</span>}
-          </h2>
+        <PageHeader
+          scene="globe"
+          title="Notifications"
+          subtitle={unreadCount > 0 ? `${unreadCount} unread` : 'You are all caught up'}
+        >
           {unreadCount > 0 && (
-            <button onClick={markAllRead} className="text-sm font-medium text-slate-700 hover:underline">
+            <button
+              onClick={markAllRead}
+              className="rounded-full bg-white/15 px-4 py-2 text-sm font-medium text-white backdrop-blur transition hover:bg-white/25"
+            >
               Mark all as read
             </button>
           )}
-        </div>
+        </PageHeader>
 
         <div className="mt-4 space-y-2">
           {notifications?.map((n) => (

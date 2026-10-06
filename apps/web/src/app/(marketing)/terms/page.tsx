@@ -1,3 +1,4 @@
+import { PageBanner } from '@/components/visual/Showcase';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
@@ -76,13 +77,15 @@ const SECTIONS = [
 
 export default function TermsPage() {
   return (
-    <div className="mx-auto max-w-3xl px-4 py-20 sm:px-6 lg:px-8">
+    <>
+      <PageBanner kind="city" eyebrow="Legal" title="Terms of Service" subtitle="The terms that apply when you use Alnajoum Travel Agency." />
+      <div className="mx-auto max-w-3xl px-4 py-20 sm:px-6 lg:px-8">
       <span className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-4 py-1.5 text-xs font-medium text-amber-700">
         Legal
       </span>
-      <h1 className="mt-6 text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
+      <h2 className="mt-6 text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
         Terms of Service
-      </h1>
+      </h2>
       <p className="mt-3 text-sm text-slate-500">Last updated: 14 August 2026</p>
       <p className="mt-6 text-sm text-slate-500">
         This is a starting set of terms for Alnajoum Travel and should be
@@ -104,6 +107,7 @@ export default function TermsPage() {
           </section>
         ))}
       </div>
-    </div>
+      </div>
+    </>
   );
 }

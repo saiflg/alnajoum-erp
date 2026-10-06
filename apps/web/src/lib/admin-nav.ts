@@ -1,6 +1,7 @@
 import type { NavLink } from '@/components/AppShell';
+import { assignGroups } from './nav-groups';
 
-export const ADMIN_NAV: NavLink[] = [
+const ADMIN_LINKS: NavLink[] = [
   { href: '/admin/dashboard', label: 'Dashboard', icon: 'dashboard' },
   { href: '/admin/companies', label: 'Companies', icon: 'company' },
   { href: '/admin/branches', label: 'Branches', icon: 'branch' },
@@ -62,7 +63,7 @@ export const ADMIN_NAV: NavLink[] = [
 ];
 
 /** Finance Officer lands on a narrower nav focused on invoicing/payments. */
-export const FINANCE_NAV: NavLink[] = [
+const FINANCE_LINKS: NavLink[] = [
   { href: '/finance/dashboard', label: 'Dashboard', icon: 'dashboard' },
   { href: '/admin/finance-dashboard', label: 'Finance Dashboard', icon: 'invoice' },
   { href: '/admin/chart-of-accounts', label: 'Chart of Accounts', icon: 'invoice' },
@@ -80,3 +81,20 @@ export const FINANCE_NAV: NavLink[] = [
   { href: '/admin/api-keys', label: 'API Keys', icon: 'key' },
   { href: '/admin/account', label: 'My Account', icon: 'account' },
 ];
+
+export const ADMIN_NAV: NavLink[] = assignGroups(ADMIN_LINKS, {
+  'People & CRM': ['/admin/companies', '/admin/branches', '/admin/staff', '/admin/customers', '/admin/crm-dashboard', '/admin/leads', '/admin/tasks', '/admin/support-tickets'],
+  'Flights': ['/admin/flights', '/admin/flight-pricing-rules', '/admin/flight-suppliers', '/admin/flight-provider-routing', '/admin/flight-service-fees', '/admin/flight-reports'],
+  'Suppliers & Corporate': ['/admin/suppliers', '/admin/corporate-travel'],
+  'Hotels & Rentals': ['/admin/hotels', '/admin/hotel-catalog', '/admin/hotel-reports', '/admin/travel-packages', '/admin/vehicle-rentals'],
+  'Visa': ['/admin/visa-operations', '/admin/visa-applications', '/admin/visa-country-rules', '/admin/visa-services', '/admin/visa-incentives', '/admin/visa-reports'],
+  'Hajj & Umrah': ['/admin/hajj-packages', '/admin/umrah-packages', '/admin/hajj-ops-dashboard', '/admin/hajj-groups', '/admin/umrah-groups', '/admin/hajj-ops-fleet', '/admin/hajj-ops-checkin'],
+  'Finance': ['/admin/invoices', '/admin/manual-payments', '/admin/wallets', '/admin/finance-dashboard', '/admin/chart-of-accounts', '/admin/expenses', '/admin/investments', '/admin/supplier-payables', '/admin/daily-closing', '/admin/staff-bank-verification'],
+  'System': ['/admin/notifications', '/admin/roles', '/admin/approvals', '/admin/audit-log', '/admin/feature-flags', '/admin/system-settings', '/admin/api-keys', '/admin/data-export-import', '/admin/backups', '/admin/ai-analytics', '/admin/whatsapp', '/admin/integrations'],
+});
+
+export const FINANCE_NAV: NavLink[] = assignGroups(FINANCE_LINKS, {
+  'Money': ['/admin/finance-dashboard', '/admin/chart-of-accounts', '/admin/invoices', '/admin/manual-payments', '/admin/expenses', '/admin/supplier-payables', '/admin/daily-closing', '/admin/wallets'],
+  'Reports & Payouts': ['/admin/flight-reports', '/admin/hotel-reports', '/admin/visa-incentives', '/admin/staff-bank-verification'],
+  'Account': ['/admin/notifications', '/admin/api-keys', '/admin/account'],
+});

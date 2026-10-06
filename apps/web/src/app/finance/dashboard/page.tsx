@@ -1,5 +1,6 @@
 'use client';
 
+import { PageHeader } from '@/components/portal/PageHeader';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { AppShell } from '@/components/AppShell';
@@ -31,13 +32,7 @@ export default function FinanceDashboardPage() {
   return (
     <ProtectedRoute allowedRoles={['FINANCE_OFFICER']}>
       <AppShell title="Finance Dashboard" navLinks={FINANCE_NAV}>
-        <h2 className="text-lg font-semibold text-slate-900">
-          Welcome{user ? `, ${user.email}` : ''}
-        </h2>
-        <p className="mt-2 max-w-2xl text-sm text-slate-600">
-          Reconciliation and BI reporting ship in later phases — invoicing and
-          payment collection are live today.
-        </p>
+        <PageHeader scene="globe" title={user ? `Welcome, ${user.email}` : 'Welcome'} subtitle="Reconciliation and BI reporting ship in later phases — invoicing and payment collection are live today." />
 
         <div className="mt-6 grid max-w-2xl grid-cols-2 gap-4">
           <div className="rounded-lg border border-slate-200 bg-white p-4">
