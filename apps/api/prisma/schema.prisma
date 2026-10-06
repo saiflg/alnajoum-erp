@@ -460,6 +460,12 @@ model Company {
   ratePlans RatePlan[]
   hotelAllotments HotelAllotment[]
 
+  // Phase 19 — revenue management.
+  pricingRules    PricingRule[]
+  pricingTraces   PricingTrace[]
+  pricingPolicies PricingPolicy[]
+  promotions      Promotion[]
+
   @@map("companies")
 }
 
@@ -5778,4 +5784,203 @@ model TaxRule {
 
   @@index([applicableService, isActive])
   @@map("tax_rules")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 19 — Revenue management
+//
+// Additive only. Nothing here changes how an existing booking is priced: the
+// engine (src/modules/revenue/engine) is pure, these tables hold its inputs
+// (rules, policy, promotions) and its outputs (traces). companyId is nullable
+// everywhere to mean "platform-wide default", exactly like ApprovalThresholdRule
+// and SystemSetting; a tenant's own row always beats the platform one.
+// ---------------------------------------------------------------------------
+
+enum PricingTier {
+  CONTRACT
+  PRODUCT
+  SEGMENT
+  CAMPAIGN
+  CHANNEL
+}
+
+/**
+ * The CURRENT state of one pricing rule. Every change appends an immutable
+ * PricingRuleVersion; the row here is just a pointer to the latest one, so a
+ * rule is never silently edited in place and a booking can always name the
+ * exact version that priced it.
+ */
+model PricingRule {
+  id        String   @id @default(cuid())
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  name     String
+  tier     PricingTier
+  priority Int         @default(0)
+  isActive Boolean     @default(true)
+
+  effectiveFrom DateTime?
+  effectiveTo   DateTime?
+
+  // RuleConditions / RuleAction (see engine/pricing.types.ts) as validated JSON.
+  conditions Json
+  action     Json
+
+  currentVersion Int @default(1)
+
+  createdByIdentityId String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  versions PricingRuleVersion[]
+
+  @@index([companyId, isActive])
+  @@index([tier, priority])
+  @@map("pricing_rules")
+}
+
+/** Immutable history: one row per version, holding the full rule as it was. */
+model PricingRuleVersion {
+  id     String      @id @default(cuid())
+  ruleId String
+  rule   PricingRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  version  Int
+  snapshot Json // the complete rule (name, tier, priority, window, conditions, action, isActive) at this version
+
+  changeReason        String?
+  changedByIdentityId String?
+  createdAt           DateTime @default(now())
+
+  @@unique([ruleId, version])
+  @@map("pricing_rule_versions")
+}
+
+/**
+ * Margin protection and discount ceilings for a tenant (or the platform when
+ * companyId is null). `productOverrides` maps a product code to its own
+ * { minAbsolute, minPercent, maxDiscountPercent }.
+ */
+model PricingPolicy {
+  id        String   @id @default(cuid())
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  minAbsoluteMargin  Int?
+  minPercentMargin   Float?
+  maxDiscountPercent Float?
+  productOverrides   Json?
+
+  updatedByIdentityId String?
+  updatedAt           DateTime @updatedAt
+  createdAt           DateTime @default(now())
+
+  @@unique([companyId])
+  @@map("pricing_policies")
+}
+
+/**
+ * A stored price calculation. Used both for ad-hoc "calculate and keep" calls
+ * and, when sourceType/sourceId are set, as the immutable commercial snapshot of
+ * a confirmed booking — historical bookings never change because a rule was
+ * edited later, since the numbers and the rule versions are frozen here.
+ */
+model PricingTrace {
+  id        String   @id @default(cuid())
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+
+  product String
+  // Optional link to what was priced (FlightBooking, HotelBooking, ...) — free text like WalletTransaction.invoiceId.
+  sourceType String?
+  sourceId   String?
+
+  currency      String
+  supplierCost  Int
+  customerPrice Int
+  margin        Int
+  status        String // OK | REQUIRES_OVERRIDE
+
+  breakdown    Json
+  trace        Json
+  appliedRules Json // [{ id, version }]
+  engineVersion String
+
+  overrideApprovedBy String?
+  overrideReason     String?
+
+  createdByIdentityId String?
+  calculatedAt        DateTime @default(now())
+
+  @@index([companyId, calculatedAt])
+  @@index([sourceType, sourceId])
+  @@map("pricing_traces")
+}
+
+enum PromotionMode {
+  FIXED
+  PERCENT
+}
+
+/**
+ * A promotion, optionally redeemable by a coupon code. All limits are enforced
+ * server-side; usedCount and budgetUsed are only ever changed by the atomic
+ * claim in PromotionsService.redeem (never by a plain read-modify-write).
+ */
+model Promotion {
+  id        String   @id @default(cuid())
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  name String
+  // Null = applies automatically to eligible bookings; set = customer must present this code.
+  code String?
+
+  mode  PromotionMode
+  value Int // whole currency units when FIXED, whole percent when PERCENT (kept an Int so it can never be fractional or negative by accident)
+
+  startsAt DateTime
+  endsAt   DateTime
+  isActive Boolean  @default(true)
+
+  products String[] // empty = every product
+  channels String[] // empty = every channel
+
+  minBookingAmount   Int?
+  maxDiscountAmount  Int?
+  totalUsageLimit    Int?
+  perCustomerLimit   Int?
+  budget             Int?
+
+  usedCount  Int @default(0)
+  budgetUsed Int @default(0)
+
+  createdByIdentityId String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  usages PromotionUsage[]
+
+  @@unique([companyId, code])
+  @@index([companyId, isActive])
+  @@map("promotions")
+}
+
+/** One redemption. The unique key makes redeeming the same booking twice idempotent. */
+model PromotionUsage {
+  id          String    @id @default(cuid())
+  promotionId String
+  promotion   Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+
+  customerId     String?
+  sourceType     String
+  sourceId       String
+  discountAmount Int
+
+  createdAt DateTime @default(now())
+
+  @@unique([promotionId, sourceType, sourceId])
+  @@index([promotionId, customerId])
+  @@map("promotion_usages")
 }

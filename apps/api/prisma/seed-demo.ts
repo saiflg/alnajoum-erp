@@ -4635,6 +4635,108 @@ async function seedPhase17RatePlansAndAllotments() {
   );
 }
 
+async function seedPhase19Revenue() {
+  const existing = await prisma.pricingRule.findFirst({
+    where: { name: { startsWith: '[DEMO]' } },
+  });
+  if (existing) {
+    console.log('Phase 19 demo pricing already present — skipping');
+    return;
+  }
+  const agentIdentity = await prisma.identity.findUniqueOrThrow({
+    where: { email: 'fatima.sule@demo.alnajoum.travel' },
+    include: { staff: true },
+  });
+  const companyId = agentIdentity.staff!.companyId;
+
+  await prisma.pricingPolicy.create({
+    data: {
+      companyId,
+      minAbsoluteMargin: 10_000,
+      minPercentMargin: 3,
+      maxDiscountPercent: 15,
+      productOverrides: { VISA: { minPercent: 8 } },
+    },
+  });
+
+  type Seed = {
+    name: string;
+    tier: 'CONTRACT' | 'PRODUCT' | 'SEGMENT' | 'CAMPAIGN' | 'CHANNEL';
+    priority: number;
+    conditions: Record<string, unknown>;
+    action: Record<string, unknown>;
+  };
+  const rules: Seed[] = [
+    { name: '[DEMO] Flight default markup 8%', tier: 'PRODUCT', priority: 0, conditions: { product: 'FLIGHT' }, action: { kind: 'MARKUP', mode: 'PERCENT', value: 8 } },
+    { name: '[DEMO] Lagos-Abuja markup 6%', tier: 'PRODUCT', priority: 5, conditions: { product: 'FLIGHT', origin: 'LOS', destination: 'ABV' }, action: { kind: 'MARKUP', mode: 'PERCENT', value: 6 } },
+    { name: '[DEMO] Corporate contract markup 3%', tier: 'CONTRACT', priority: 0, conditions: { product: 'FLIGHT', customerSegment: 'CORPORATE' }, action: { kind: 'MARKUP', mode: 'PERCENT', value: 3 } },
+    { name: '[DEMO] VIP segment markup 5%', tier: 'SEGMENT', priority: 0, conditions: { product: 'FLIGHT', customerSegment: 'VIP' }, action: { kind: 'MARKUP', mode: 'PERCENT', value: 5 } },
+    { name: '[DEMO] Flight booking fee', tier: 'CHANNEL', priority: 0, conditions: { product: 'FLIGHT' }, action: { kind: 'FEE', feeType: 'BOOKING', mode: 'FIXED', value: 2_500 } },
+    { name: '[DEMO] Hotel markup 12%', tier: 'PRODUCT', priority: 0, conditions: { product: 'HOTEL' }, action: { kind: 'MARKUP', mode: 'PERCENT', value: 12 } },
+    { name: '[DEMO] Hotel VAT 7.5% (added)', tier: 'PRODUCT', priority: 0, conditions: { product: 'HOTEL' }, action: { kind: 'TAX', name: 'VAT', ratePercent: 7.5, inclusive: false } },
+    { name: '[DEMO] Visa service markup 18%', tier: 'PRODUCT', priority: 0, conditions: { product: 'VISA' }, action: { kind: 'MARKUP', mode: 'PERCENT', value: 18 } },
+    { name: '[DEMO] Hajj group 5-9 markup 6%', tier: 'PRODUCT', priority: 0, conditions: { product: 'HAJJ', minPassengers: 5, maxPassengers: 9 }, action: { kind: 'MARKUP', mode: 'PERCENT', value: 6 } },
+    { name: '[DEMO] Hajj group 10+ markup 4%', tier: 'PRODUCT', priority: 0, conditions: { product: 'HAJJ', minPassengers: 10 }, action: { kind: 'MARKUP', mode: 'PERCENT', value: 4 } },
+    {
+      name: '[DEMO] Flight last-minute dynamic pricing',
+      tier: 'CAMPAIGN',
+      priority: 0,
+      conditions: { product: 'FLIGHT' },
+      action: {
+        kind: 'DYNAMIC',
+        signal: 'daysToDeparture',
+        bands: [
+          { upTo: 7, adjustPercent: 10 },
+          { upTo: 30, adjustPercent: 4 },
+        ],
+        limits: { maxMovementPercent: 12, maxMarkupPercent: 25 },
+      },
+    },
+  ];
+  for (const r of rules) {
+    const created = await prisma.pricingRule.create({
+      data: {
+        companyId,
+        name: r.name,
+        tier: r.tier,
+        priority: r.priority,
+        conditions: r.conditions as never,
+        action: r.action as never,
+        currentVersion: 1,
+      },
+    });
+    await prisma.pricingRuleVersion.create({
+      data: {
+        ruleId: created.id,
+        version: 1,
+        snapshot: { ...r, isActive: true } as never,
+        changeReason: 'Demo seed',
+      },
+    });
+  }
+
+  await prisma.promotion.create({
+    data: {
+      companyId,
+      name: '[DEMO] Welcome 10%',
+      code: 'DEMO10',
+      mode: 'PERCENT',
+      value: 10,
+      startsAt: new Date('2026-01-01'),
+      endsAt: new Date('2027-12-31'),
+      products: ['FLIGHT', 'HOTEL'],
+      maxDiscountAmount: 50_000,
+      totalUsageLimit: 100,
+      perCustomerLimit: 1,
+      minBookingAmount: 50_000,
+    },
+  });
+
+  console.log(
+    'Created Phase 19 DEMO pricing: 1 margin policy, 11 rules, 1 promotion (code DEMO10). All named "[DEMO]".',
+  );
+}
+
 async function main() {
   await seedPhase1And2();
   await seedPhase3Visa();
@@ -4648,6 +4750,7 @@ async function main() {
   await seedPhase11EnterpriseGovernance();
   await seedPhase16Suppliers();
   await seedPhase17RatePlansAndAllotments();
+  await seedPhase19Revenue();
 }
 
 main()

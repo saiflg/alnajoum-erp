@@ -44,6 +44,7 @@ import { AiModule } from './modules/ai/ai.module';
 import { WhatsAppModule } from './modules/whatsapp/whatsapp.module';
 import { SuppliersModule } from './modules/suppliers/suppliers.module';
 import { MobileModule } from './modules/mobile/mobile.module';
+import { RevenueModule } from './modules/revenue/revenue.module';
 
 @Module({
   imports: [
@@ -92,6 +93,7 @@ import { MobileModule } from './modules/mobile/mobile.module';
     WhatsAppModule,
     SuppliersModule,
     MobileModule,
+    RevenueModule,
   ],
   controllers: [AppController],
   providers: [

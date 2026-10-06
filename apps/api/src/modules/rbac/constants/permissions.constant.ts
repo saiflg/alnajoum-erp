@@ -327,6 +327,16 @@ export const PERMISSIONS = {
     APP_CONFIG_VIEW: 'mobile:app_config:view',
     APP_CONFIG_MANAGE: 'mobile:app_config:manage',
   },
+  // Phase 19 — revenue management. PRICING_VIEW exposes supplier cost and margin
+  // (internal figures), so it is staff-only; a customer never needs it because
+  // customer-facing price views strip cost and margin (see RevenueService.toCustomerView).
+  REVENUE: {
+    PRICING_VIEW: 'revenue:pricing_view', // calculate/preview prices, read stored traces
+    RULE_MANAGE: 'revenue:rule_manage', // create/edit/deactivate pricing rules
+    POLICY_MANAGE: 'revenue:policy_manage', // margin floors and discount ceilings
+    PROMOTION_MANAGE: 'revenue:promotion_manage', // promotions and coupons
+    PRICE_OVERRIDE: 'revenue:price_override', // approve a below-margin price, with a reason
+  },
 } as const;
 
 export const ALL_PERMISSION_KEYS: string[] = Object.values(PERMISSIONS).flatMap(
