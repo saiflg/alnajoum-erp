@@ -337,6 +337,15 @@ export const PERMISSIONS = {
     PROMOTION_MANAGE: 'revenue:promotion_manage', // promotions and coupons
     PRICE_OVERRIDE: 'revenue:price_override', // approve a below-margin price, with a reason
   },
+  // Phase 20 — executive analytics. FINANCE_VIEW exposes margin, cash and money
+  // owed/owing, so it is separate from EXECUTIVE_VIEW (sales and customer volumes).
+  // A caller without a company-wide role is locked to their own branch regardless.
+  ANALYTICS: {
+    EXECUTIVE_VIEW: 'analytics:executive_view',
+    FINANCE_VIEW: 'analytics:finance_view',
+    DATA_QUALITY_VIEW: 'analytics:data_quality_view',
+    DEFINITIONS_VIEW: 'analytics:definitions_view',
+  },
 } as const;
 
 export const ALL_PERMISSION_KEYS: string[] = Object.values(PERMISSIONS).flatMap(

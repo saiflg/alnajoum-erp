@@ -43,6 +43,12 @@ const LIMIT_PARAM: AnalyticsQueryParamSpec = {
  */
 export const ANALYTICS_QUERY_REGISTRY: AnalyticsQuerySpec[] = [
   {
+    name: 'executive_kpis',
+    description:
+      'Headline sales figures for flights and hotels together (booked value, number of bookings, average booking value, cancellations, active customers) over a period, using the company-standard metric definitions. Prefer this for general questions like "how are sales doing".',
+    params: [DAYS_PARAM],
+  },
+  {
     name: 'total_ticket_sales',
     description:
       'Total flight ticket sales revenue (confirmed/ticketed bookings) over a period.',

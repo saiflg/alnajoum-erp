@@ -4737,6 +4737,320 @@ async function seedPhase19Revenue() {
   );
 }
 
+/**
+ * Phase 20 — six months of time-spread history for two tenants, so period
+ * comparisons, trends, receivables ageing and data-quality checks can be
+ * exercised. Everything the earlier seeds create lands on one day, which makes
+ * every comparison meaningless. Deterministic (seeded generator): re-running
+ * after a reset gives the same numbers. Records are prefixed ANL- / TKT-ANL-.
+ *
+ * It deliberately includes a few messy rows (missing supplier cost, a USD
+ * booking, a payment on a voided invoice, a booking with no branch) because
+ * the data-quality report needs real problems to find.
+ */
+async function seedPhase20Analytics() {
+  const existing = await prisma.flightBooking.findFirst({
+    where: { bookingReference: { startsWith: 'ANL-' } },
+  });
+  if (existing) {
+    console.log('Phase 20 analytics demo history already present — skipping');
+    return;
+  }
+
+  let seed = 20_261_006;
+  const rnd = () => {
+    seed = (seed * 1_664_525 + 1_013_904_223) % 4_294_967_296;
+    return seed / 4_294_967_296;
+  };
+  const DAY = 86_400_000;
+  const now = Date.now();
+
+  const pickStatus = () => {
+    const r = rnd();
+    if (r < 0.55) return 'TICKETED' as const;
+    if (r < 0.7) return 'CONFIRMED' as const;
+    if (r < 0.82) return 'CANCELLED' as const;
+    if (r < 0.9) return 'PENDING' as const;
+    if (r < 0.95) return 'FAILED' as const;
+    return 'REFUNDED' as const;
+  };
+  const ROUTES: [string, string][] = [
+    ['LOS', 'ABV'],
+    ['LOS', 'DXB'],
+    ['ABV', 'JED'],
+    ['LOS', 'LHR'],
+    ['KAN', 'MED'],
+    ['LOS', 'ACC'],
+  ];
+
+  async function history(opts: {
+    prefix: string;
+    customerId: string;
+    branchId: string;
+    finStaffId?: string;
+    perMonth: number[]; // bookings per month, newest first
+  }) {
+    let n = 0;
+    for (let m = 0; m < opts.perMonth.length; m++) {
+      for (let i = 0; i < opts.perMonth[m]; i++) {
+        n += 1;
+        const createdAt = new Date(
+          now - (m * 30 + 1 + Math.floor(rnd() * 28)) * DAY - Math.floor(rnd() * DAY),
+        );
+        const status = pickStatus();
+        const [origin, destination] = ROUTES[Math.floor(rnd() * ROUTES.length)];
+        const cost = 40_000 + Math.floor(rnd() * 160) * 1_000;
+        const markup = Math.round(cost * (0.06 + rnd() * 0.06));
+        const hasCost = rnd() > 0.15;
+        const total = cost + markup;
+        const ref = `${opts.prefix}-${String(n).padStart(3, '0')}`;
+        const booking = await prisma.flightBooking.create({
+          data: {
+            bookingReference: ref,
+            customerId: opts.customerId,
+            provider: 'MOCK',
+            providerOfferId: `demo-${ref}`,
+            status,
+            currency: 'NGN',
+            totalAmount: total,
+            providerCost: hasCost ? cost : null,
+            markupAmount: hasCost ? markup : null,
+            tripType: 'ONE_WAY',
+            origin,
+            destination,
+            departureAt: new Date(createdAt.getTime() + 20 * DAY),
+            cabinClass: 'ECONOMY',
+            itinerary: { demo: true },
+            branchId: rnd() > 0.15 ? opts.branchId : null,
+            createdAt,
+            // Bookings have no cancelled-at column; analytics uses updatedAt as the proxy.
+            updatedAt: new Date(createdAt.getTime() + DAY),
+          },
+        });
+        if (status === 'CANCELLED' || status === 'FAILED') continue;
+        const r = rnd();
+        const invStatus =
+          status === 'PENDING' || r > 0.85
+            ? InvoiceStatus.ISSUED
+            : r > 0.7
+              ? InvoiceStatus.PARTIALLY_PAID
+              : InvoiceStatus.PAID;
+        const paid =
+          invStatus === InvoiceStatus.PAID
+            ? total
+            : invStatus === InvoiceStatus.PARTIALLY_PAID
+              ? Math.round(total * (0.4 + rnd() * 0.2))
+              : 0;
+        await prisma.invoice.create({
+          data: {
+            invoiceNumber: `INV-${ref}`,
+            customerId: opts.customerId,
+            flightBookingId: booking.id,
+            status: invStatus,
+            currency: 'NGN',
+            totalAmount: total,
+            createdAt,
+            lineItems: {
+              create: [{ description: `Flight ${ref}: ${origin} → ${destination}`, amount: total }],
+            },
+            payments:
+              paid > 0
+                ? {
+                    create: [
+                      {
+                        paymentReference: `PAY-${ref}`,
+                        amount: paid,
+                        method: PaymentMethod.BANK_TRANSFER,
+                        recordedByStaffId: opts.finStaffId,
+                        paidAt: new Date(
+                          Math.min(now, createdAt.getTime() + Math.floor(rnd() * 3) * DAY),
+                        ),
+                      },
+                    ],
+                  }
+                : undefined,
+          },
+        });
+      }
+    }
+    return n;
+  }
+
+  const aminaIdentity = await prisma.identity.findUniqueOrThrow({
+    where: { email: MARKER_EMAIL },
+    include: { customer: true },
+  });
+  const financeIdentity = await prisma.identity.findUniqueOrThrow({
+    where: { email: 'ibrahim.musa@demo.alnajoum.travel' },
+    include: { staff: true },
+  });
+  const customerA = aminaIdentity.customer!;
+  const branchA = await prisma.branch.findFirstOrThrow({
+    where: { companyId: customerA.companyId },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  let nA = await history({
+    prefix: 'ANL-A',
+    customerId: customerA.id,
+    branchId: branchA.id,
+    finStaffId: financeIdentity.staff!.id,
+    perMonth: [14, 12, 10, 8, 6, 5],
+  });
+
+  // Messy rows, on purpose.
+  nA += 1;
+  await prisma.flightBooking.create({
+    data: {
+      bookingReference: `ANL-A-${String(nA).padStart(3, '0')}`,
+      customerId: customerA.id,
+      provider: 'MOCK',
+      providerOfferId: 'demo-usd',
+      status: 'TICKETED',
+      currency: 'USD',
+      totalAmount: 900,
+      providerCost: 800,
+      tripType: 'ONE_WAY',
+      origin: 'LOS',
+      destination: 'LHR',
+      departureAt: new Date(now + 15 * DAY),
+      cabinClass: 'BUSINESS',
+      itinerary: { demo: true },
+      branchId: branchA.id,
+      createdAt: new Date(now - 3 * DAY),
+    },
+  });
+  const voided = await prisma.invoice.create({
+    data: {
+      invoiceNumber: 'INV-ANL-VOID1',
+      customerId: customerA.id,
+      status: InvoiceStatus.VOID,
+      currency: 'NGN',
+      totalAmount: 50_000,
+      createdAt: new Date(now - 12 * DAY),
+    },
+  });
+  await prisma.payment.create({
+    data: {
+      paymentReference: 'PAY-ANL-VOID1',
+      invoiceId: voided.id,
+      amount: 50_000,
+      method: PaymentMethod.CASH,
+      paidAt: new Date(now - 11 * DAY),
+    },
+  });
+
+  const category = await prisma.supportTicketCategory.findFirst();
+  if (category) {
+    for (let i = 0; i < 9; i++) {
+      const createdAt = new Date(now - (2 + i * 9) * DAY);
+      const answered = i % 4 !== 3;
+      await prisma.supportTicket.create({
+        data: {
+          ticketNumber: `TKT-ANL-${i + 1}`,
+          customerId: customerA.id,
+          subject: `Demo support request ${i + 1}`,
+          categoryId: category.id,
+          priority: 'NORMAL',
+          description: 'Demo analytics ticket',
+          status: answered ? 'RESOLVED' : 'OPEN',
+          branchId: branchA.id,
+          slaResponseDueAt: new Date(createdAt.getTime() + 240 * 60_000),
+          firstRespondedAt: answered
+            ? new Date(createdAt.getTime() + (30 + i * 25) * 60_000)
+            : null,
+          slaBreached: i % 3 === 2,
+          createdAt,
+        },
+      });
+    }
+  }
+
+  // Second tenant — used to prove one company never sees another's numbers.
+  const khadija = await prisma.identity.findUnique({
+    where: { email: 'khadija.bello@demo.zamzamhorizon.travel' },
+    include: { customer: true },
+  });
+  if (khadija?.customer) {
+    const branchB = await prisma.branch.findFirst({
+      where: { companyId: khadija.customer.companyId },
+    });
+    if (branchB) {
+      await history({
+        prefix: 'ANL-B',
+        customerId: khadija.customer.id,
+        branchId: branchB.id,
+        perMonth: [4, 4, 3, 3, 2, 2],
+      });
+    }
+  }
+  console.log(
+    'Created Phase 20 DEMO analytics history (6 months, two tenants, with deliberate data-quality problems).',
+  );
+}
+
+/**
+ * Phase 20 — a second branch with its own manager, so branch-level analytics and
+ * the "a branch manager only ever sees their own branch" rule can be exercised.
+ * Moves roughly a third of the ANL-A bookings and tickets to the new branch.
+ */
+async function seedPhase20BranchDemo() {
+  const email = 'ayo.bello@demo.alnajoum.travel';
+  if (await prisma.identity.findUnique({ where: { email } })) {
+    console.log('Phase 20 branch demo already present — skipping');
+    return;
+  }
+  const amina = await prisma.identity.findUniqueOrThrow({
+    where: { email: MARKER_EMAIL },
+    include: { customer: true },
+  });
+  const companyId = amina.customer!.companyId;
+  const abuja = await prisma.branch.create({
+    data: { companyId, name: 'Abuja Branch', code: 'ABJ', city: 'Abuja', country: 'Nigeria' },
+  });
+  const role = await prisma.role.findUniqueOrThrow({ where: { name: SYSTEM_ROLES.BRANCH_MANAGER } });
+  await prisma.identity.create({
+    data: {
+      email,
+      passwordHash: await argon2.hash(DEMO_PASSWORD),
+      type: 'STAFF',
+      status: 'ACTIVE',
+      emailVerifiedAt: new Date(),
+      staff: {
+        create: {
+          companyId,
+          branchId: abuja.id,
+          employeeCode: 'ANJ-BM20',
+          firstName: 'Ayo',
+          lastName: 'Bello',
+          jobTitle: 'Branch Manager',
+          department: 'Operations',
+        },
+      },
+      roles: { create: [{ roleId: role.id }] },
+    },
+  });
+  const bookings = await prisma.flightBooking.findMany({
+    where: { bookingReference: { startsWith: 'ANL-A-' }, branchId: { not: null } },
+    select: { id: true },
+    orderBy: { bookingReference: 'asc' },
+  });
+  await prisma.flightBooking.updateMany({
+    where: { id: { in: bookings.filter((_, i) => i % 3 === 0).map((b) => b.id) } },
+    data: { branchId: abuja.id },
+  });
+  const tickets = await prisma.supportTicket.findMany({
+    where: { ticketNumber: { startsWith: 'TKT-ANL-' } },
+    select: { id: true },
+    orderBy: { ticketNumber: 'asc' },
+  });
+  await prisma.supportTicket.updateMany({
+    where: { id: { in: tickets.filter((_, i) => i % 3 === 0).map((t) => t.id) } },
+    data: { branchId: abuja.id },
+  });
+  console.log('Created Phase 20 DEMO branch: Abuja Branch with manager ayo.bello@demo.alnajoum.travel');
+}
+
 async function main() {
   await seedPhase1And2();
   await seedPhase3Visa();
@@ -4751,6 +5065,8 @@ async function main() {
   await seedPhase16Suppliers();
   await seedPhase17RatePlansAndAllotments();
   await seedPhase19Revenue();
+  await seedPhase20Analytics();
+  await seedPhase20BranchDemo();
 }
 
 main()

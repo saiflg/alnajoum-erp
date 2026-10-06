@@ -8,6 +8,9 @@ import {
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import type { AuthContext } from '../../common/interfaces/auth-context.interface';
 import { resolveTenantFilter } from '../../common/utils/tenant.util';
+import { AnalyticsScopeService } from '../analytics/analytics-scope.service';
+import { MetricsService } from '../analytics/metrics.service';
+import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import {
   buildRegistryPrompt,
   coerceParams,
@@ -54,6 +57,8 @@ export class AiAnalyticsService {
     private readonly prisma: PrismaService,
     private readonly aiProviderRouter: AiProviderRouter,
     private readonly usageService: AiUsageService,
+    private readonly metrics: MetricsService,
+    private readonly scopes: AnalyticsScopeService,
   ) {}
 
   async ask(question: string, user: AuthContext): Promise<AskAnalyticsResult> {
@@ -99,7 +104,7 @@ export class AiAnalyticsService {
         matched: false,
         provider: completion.provider,
         summary:
-          "I couldn't match that to one of the reports I know. Try asking about ticket sales, top routes, supplier liabilities, pending incentives, visas expiring soon, branch sales, or cancelled bookings.",
+          "I couldn't match that to one of the reports I know. Try asking about overall sales, ticket sales, top routes, supplier liabilities, pending incentives, visas expiring soon, branch sales, or cancelled bookings.",
       };
     }
 
@@ -108,6 +113,7 @@ export class AiAnalyticsService {
       spec.name,
       params,
       tenantCompanyId,
+      user,
     );
 
     await this.usageService.log({
@@ -156,8 +162,11 @@ export class AiAnalyticsService {
     queryName: string,
     params: Record<string, number>,
     tenantCompanyId: string | undefined,
+    user: AuthContext,
   ): Promise<{ summary: string; data: Record<string, unknown> }> {
     switch (queryName) {
+      case 'executive_kpis':
+        return this.executiveKpis(params.days, user);
       case 'total_ticket_sales':
         return this.totalTicketSales(params.days, tenantCompanyId);
       case 'top_routes_by_revenue':
@@ -181,6 +190,52 @@ export class AiAnalyticsService {
         // against the registry by findQuerySpec() in ask() above.
         throw new Error(`Unhandled analytics query: ${queryName}`);
     }
+  }
+
+  /**
+   * Delegates to the shared metric layer (Phase 20) so the AI quotes the same
+   * figure as the executive dashboard, under the same tenant/branch scope. Needs
+   * the analytics permission in addition to the AI one.
+   */
+  private async executiveKpis(days: number, user: AuthContext) {
+    if (!user.permissions.includes(PERMISSIONS.ANALYTICS.EXECUTIVE_VIEW)) {
+      return {
+        summary: 'Executive analytics are not available to your account.',
+        data: {},
+      };
+    }
+    const scope = await this.scopes.resolve(user);
+    const base = await this.metrics.baseCurrency(scope);
+    const end = new Date();
+    const range = {
+      preset: 'CUSTOM' as const,
+      start: this.since(days),
+      end,
+      label: `Last ${days} day(s)`,
+    };
+    const f = await this.metrics.salesFigures(scope, range, base);
+    const bookedValue = f.booked_value.value ?? 0;
+    const bookings = f.bookings_count.value ?? 0;
+    const average = f.average_booking_value.value;
+    const money = (n: number) => `${base} ${n.toLocaleString()}`;
+    return {
+      summary:
+        `Over the last ${days} day(s), flights and hotels booked ${money(bookedValue)} across ${bookings} active booking(s)` +
+        (average === null ? '' : ` (average ${money(average)})`) +
+        `; ${f.cancellations.value ?? 0} booking(s) were cancelled and ${f.active_customers.value ?? 0} customer(s) were active. ` +
+        'Booked value is the price sold, not cash received.',
+      data: {
+        days,
+        currency: base,
+        scope: scope.description,
+        booked_value: bookedValue,
+        bookings_count: bookings,
+        average_booking_value: average,
+        cancellations: f.cancellations.value,
+        active_customers: f.active_customers.value,
+        definitions: 'GET /analytics/metrics',
+      },
+    };
   }
 
   private since(days: number): Date {

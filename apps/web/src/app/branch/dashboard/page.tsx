@@ -14,6 +14,7 @@ export default function BranchDashboardPage() {
         title="Branch Dashboard"
         navLinks={[
           { href: '/branch/dashboard', label: 'Dashboard' },
+          { href: '/admin/executive', label: 'Executive Analytics' },
           { href: '/admin/branches', label: 'Branches' },
           { href: '/admin/staff', label: 'Staff' },
         ]}

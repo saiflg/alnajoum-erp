@@ -3,6 +3,7 @@ import { assignGroups } from './nav-groups';
 
 const ADMIN_LINKS: NavLink[] = [
   { href: '/admin/dashboard', label: 'Dashboard', icon: 'dashboard' },
+  { href: '/admin/executive', label: 'Executive Analytics', icon: 'dashboard' },
   { href: '/admin/companies', label: 'Companies', icon: 'company' },
   { href: '/admin/branches', label: 'Branches', icon: 'branch' },
   { href: '/admin/staff', label: 'Staff', icon: 'staff' },
@@ -65,6 +66,7 @@ const ADMIN_LINKS: NavLink[] = [
 /** Finance Officer lands on a narrower nav focused on invoicing/payments. */
 const FINANCE_LINKS: NavLink[] = [
   { href: '/finance/dashboard', label: 'Dashboard', icon: 'dashboard' },
+  { href: '/admin/executive', label: 'Executive Analytics', icon: 'dashboard' },
   { href: '/admin/finance-dashboard', label: 'Finance Dashboard', icon: 'invoice' },
   { href: '/admin/chart-of-accounts', label: 'Chart of Accounts', icon: 'invoice' },
   { href: '/admin/invoices', label: 'Invoices', icon: 'invoice' },

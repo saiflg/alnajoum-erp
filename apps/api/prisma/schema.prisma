@@ -950,6 +950,8 @@ model FlightBooking {
   @@index([branchId])
   @@index([pricingRuleId])
   @@index([corporateAccountId])
+  // Phase 20 — analytics scans by date range; the audit found no date index at all.
+  @@index([status, createdAt])
   @@map("flight_bookings")
 }
 
@@ -1662,6 +1664,8 @@ model Payment {
   manualPaymentSubmission ManualPaymentSubmission?
 
   @@index([invoiceId])
+  // Phase 20 — cash-collected sums payments by paid date.
+  @@index([paidAt])
   @@map("payments")
 }
 
@@ -2969,6 +2973,9 @@ model HotelBooking {
   @@index([bookedByStaffId])
   @@index([hotelId])
   @@index([roomTypeId])
+  // Phase 20 — hotel bookings had no status, branch or date index.
+  @@index([status, createdAt])
+  @@index([branchId])
   @@map("hotel_bookings")
 }
 
@@ -4765,6 +4772,8 @@ model SupportTicket {
   @@index([status])
   @@index([assignedStaffId])
   @@index([priority])
+  // Phase 20 — ticket analytics are by creation date.
+  @@index([createdAt])
   @@map("support_tickets")
 }
 

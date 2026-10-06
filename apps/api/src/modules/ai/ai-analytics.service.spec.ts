@@ -1,6 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import type { AuthContext } from '../../common/interfaces/auth-context.interface';
+import { AnalyticsScopeService } from '../analytics/analytics-scope.service';
+import { MetricsService } from '../analytics/metrics.service';
 import { AiAnalyticsService } from './ai-analytics.service';
 import { AiUsageService } from './ai-usage.service';
 import { AiProviderRouter } from './providers/ai-provider.router';
@@ -29,6 +31,8 @@ describe('AiAnalyticsService', () => {
   let prisma: Record<string, any>;
   let aiProviderRouter: { complete: jest.Mock };
   let usageService: { enforceDailyLimit: jest.Mock; log: jest.Mock };
+  let metrics: { baseCurrency: jest.Mock; salesFigures: jest.Mock };
+  let scopes: { resolve: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
@@ -49,6 +53,24 @@ describe('AiAnalyticsService', () => {
       branch: { findMany: jest.fn().mockResolvedValue([]) },
     };
     aiProviderRouter = { complete: jest.fn() };
+    scopes = {
+      resolve: jest.fn().mockResolvedValue({
+        companyId: 'company-a',
+        branchId: undefined,
+        branchLocked: false,
+        description: 'Whole company',
+      }),
+    };
+    metrics = {
+      baseCurrency: jest.fn().mockResolvedValue('NGN'),
+      salesFigures: jest.fn().mockResolvedValue({
+        booked_value: { value: 1_500_000 },
+        bookings_count: { value: 3 },
+        average_booking_value: { value: 500_000 },
+        cancellations: { value: 1 },
+        active_customers: { value: 2 },
+      }),
+    };
     usageService = {
       enforceDailyLimit: jest.fn().mockResolvedValue(undefined),
       log: jest.fn(),
@@ -60,6 +82,8 @@ describe('AiAnalyticsService', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: AiProviderRouter, useValue: aiProviderRouter },
         { provide: AiUsageService, useValue: usageService },
+        { provide: MetricsService, useValue: metrics },
+        { provide: AnalyticsScopeService, useValue: scopes },
       ],
     }).compile();
 
@@ -262,6 +286,68 @@ describe('AiAnalyticsService', () => {
         expect.objectContaining({
           branches: [{ branch: 'Kaduna Branch', revenue: 200_000 }],
         }),
+      );
+    });
+  });
+
+  describe('executive_kpis (Phase 20)', () => {
+    const analyst: AuthContext = {
+      ...companyAdmin,
+      permissions: ['analytics:executive_view'],
+    };
+
+    beforeEach(() => {
+      aiProviderRouter.complete.mockResolvedValue({
+        text: selection('executive_kpis', { days: 30 }),
+        provider: 'mock',
+        model: 'mock-v1',
+      });
+    });
+
+    it('answers from the shared metric layer, quoting its real numbers', async () => {
+      const result = await service.ask('how are sales doing', analyst);
+
+      expect(result.matched).toBe(true);
+      expect(metrics.salesFigures).toHaveBeenCalledTimes(1);
+      expect(result.summary).toContain('NGN 1,500,000');
+      expect(result.summary).toContain('3 active booking(s)');
+      expect(result.summary).toContain('not cash received');
+      expect(result.data).toMatchObject({
+        booked_value: 1_500_000,
+        bookings_count: 3,
+        currency: 'NGN',
+      });
+    });
+
+    it('resolves scope from the caller (tenant/branch rules), not from the AI output', async () => {
+      await service.ask('how are sales doing', analyst);
+      expect(scopes.resolve).toHaveBeenCalledWith(analyst);
+    });
+
+    it('is refused without the analytics permission, and reads no data', async () => {
+      const result = await service.ask('how are sales doing', companyAdmin);
+      expect(result.summary).toContain('not available to your account');
+      expect(metrics.salesFigures).not.toHaveBeenCalled();
+      expect(scopes.resolve).not.toHaveBeenCalled();
+    });
+
+    it('ignores anything the model adds beyond the declared days parameter', async () => {
+      aiProviderRouter.complete.mockResolvedValue({
+        text: JSON.stringify({
+          query: 'executive_kpis',
+          params: {
+            days: 9999,
+            companyId: 'company-b',
+            sql: 'DROP TABLE customers',
+          },
+        }),
+        provider: 'mock',
+        model: 'mock-v1',
+      });
+      const result = await service.ask('how are sales doing', analyst);
+      expect(result.params).toEqual({ days: 365 });
+      expect(JSON.stringify(scopes.resolve.mock.calls)).not.toContain(
+        'company-b',
       );
     });
   });

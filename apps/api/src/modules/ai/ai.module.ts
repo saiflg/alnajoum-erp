@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AnalyticsModule } from '../analytics/analytics.module';
 import { IntegrationsModule } from '../integrations/integrations.module';
 import { AiAnalyticsController } from './ai-analytics.controller';
 import { AiAnalyticsService } from './ai-analytics.service';
@@ -12,7 +13,7 @@ import { OpenAiCompatibleAiProviderService } from './providers/openai-compatible
  * (admin natural-language analytics). See AiAnalyticsService's doc
  * comment for the safety model this whole module is built around. */
 @Module({
-  imports: [IntegrationsModule],
+  imports: [IntegrationsModule, AnalyticsModule],
   controllers: [AiAnalyticsController, AiUsageAdminController],
   providers: [
     AiAnalyticsService,
