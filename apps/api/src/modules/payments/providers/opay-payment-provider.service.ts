@@ -85,7 +85,8 @@ export class OpayPaymentProviderService implements PaymentProviderPort {
 
   private async getSecretKey(): Promise<string> {
     const dbConfig = await this.getDbConfig();
-    const key = dbConfig?.secretKey || this.configService.get<string>('OPAY_SECRET_KEY');
+    const key =
+      dbConfig?.secretKey || this.configService.get<string>('OPAY_SECRET_KEY');
     if (!key) {
       throw new ServiceUnavailableException(
         'PAYMENT_PROVIDER=opay but no secret key is configured. Add one at /admin/integrations, or set OPAY_SECRET_KEY.',
@@ -96,7 +97,9 @@ export class OpayPaymentProviderService implements PaymentProviderPort {
 
   private async getMerchantId(): Promise<string> {
     const dbConfig = await this.getDbConfig();
-    const id = dbConfig?.merchantId || this.configService.get<string>('OPAY_MERCHANT_ID');
+    const id =
+      dbConfig?.merchantId ||
+      this.configService.get<string>('OPAY_MERCHANT_ID');
     if (!id) {
       throw new ServiceUnavailableException(
         'PAYMENT_PROVIDER=opay but no merchant ID is configured. Add one at /admin/integrations, or set OPAY_MERCHANT_ID.',
@@ -178,6 +181,7 @@ export class OpayPaymentProviderService implements PaymentProviderPort {
     return {
       reference: body.data.reference,
       success: body.data.status === 'SUCCESS',
+      pending: !['SUCCESS', 'FAIL', 'CLOSE'].includes(String(body.data.status)),
       amount: body.data.amount.total / 100,
       currency: body.data.amount.currency,
     };

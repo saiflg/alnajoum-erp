@@ -122,7 +122,9 @@ describe('OpayPaymentProviderService', () => {
           },
           {
             provide: IntegrationsService,
-            useValue: { getCredentialConfig: jest.fn().mockResolvedValue(null) },
+            useValue: {
+              getCredentialConfig: jest.fn().mockResolvedValue(null),
+            },
           },
         ],
       }).compile();
@@ -168,6 +170,7 @@ describe('OpayPaymentProviderService', () => {
         success: true,
         amount: 30_000,
         currency: 'NGN',
+        pending: false,
       });
     });
 

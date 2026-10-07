@@ -142,6 +142,7 @@ describe('PaystackPaymentProviderService', () => {
         success: true,
         amount: 30_000,
         currency: 'NGN',
+        pending: false,
       });
     });
 

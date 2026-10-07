@@ -50,6 +50,7 @@ describe('MockPaymentProviderService', () => {
       success: true,
       amount: 0,
       currency: '',
+      simulated: true,
     });
   });
 });

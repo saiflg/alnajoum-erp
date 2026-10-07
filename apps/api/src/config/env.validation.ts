@@ -8,6 +8,7 @@ import {
   Min,
   validateSync,
 } from 'class-validator';
+import { checkProductionConfig } from '../common/security/runtime-environment';
 
 enum NodeEnv {
   Development = 'development',
@@ -164,6 +165,19 @@ export function validateEnv(config: Record<string, unknown>) {
       .map((error) => Object.values(error.constraints ?? {}).join(', '))
       .join('; ');
     throw new Error(`Environment validation failed: ${messages}`);
+  }
+
+  // Production safety gates (Phase 22): refuse to boot with default/weak secrets or mock
+  // payment/WhatsApp providers; weaker problems are logged as warnings.
+  const issues = checkProductionConfig(config);
+  const blocking = issues.filter((i) => i.level === 'error');
+  for (const w of issues.filter((i) => i.level === 'warning')) {
+    console.warn(`[config] WARNING ${w.key}: ${w.message}`);
+  }
+  if (blocking.length > 0) {
+    throw new Error(
+      `Unsafe production configuration: ${blocking.map((i) => i.message).join('; ')}`,
+    );
   }
 
   return validated;

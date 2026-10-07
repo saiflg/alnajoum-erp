@@ -25,6 +25,14 @@ export interface InitiateCheckoutResult {
 export interface VerifyCheckoutResult {
   reference: string;
   success: boolean;
+  /**
+   * True when the provider says the payment has NOT succeeded but is also not definitively
+   * over (abandoned checkout still open, processing, awaiting the customer). Such a payment
+   * must stay PENDING — marking it FAILED would permanently lose a payment that lands later.
+   */
+  pending?: boolean;
+  /** True only for the mock provider: nothing independent was verified. Never set by a real gateway. */
+  simulated?: boolean;
   /** Whole currency units, as confirmed by the provider — compared against
    * the PaymentIntent's own recorded amount before trusting it. */
   amount: number;

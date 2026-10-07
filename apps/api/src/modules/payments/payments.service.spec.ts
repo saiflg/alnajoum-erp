@@ -433,6 +433,83 @@ describe('PaymentsService', () => {
       expect(prisma.payment.create).not.toHaveBeenCalled();
     });
 
+    it('verifies with the provider that issued the intent, not the active one', async () => {
+      prisma.paymentIntent.findUnique.mockResolvedValue({
+        ...pendingIntent,
+        provider: 'paystack',
+      });
+      paymentProvider.verifyCheckout.mockResolvedValue({
+        reference: 'CHK-ABC123',
+        success: false,
+        pending: true,
+        amount: 0,
+        currency: '',
+      });
+
+      await expect(
+        service.verifyCheckout('customer-1', 'invoice-1', 'CHK-ABC123'),
+      ).rejects.toThrow(ConflictException);
+      expect(paymentProviderRouter.resolveByName).toHaveBeenCalledWith(
+        'paystack',
+      );
+    });
+
+    it('keeps the intent PENDING (not FAILED) when the provider says it is still pending', async () => {
+      prisma.paymentIntent.findUnique.mockResolvedValue(pendingIntent);
+      paymentProvider.verifyCheckout.mockResolvedValue({
+        reference: 'CHK-ABC123',
+        success: false,
+        pending: true,
+        amount: 0,
+        currency: '',
+      });
+
+      await expect(
+        service.verifyCheckout('customer-1', 'invoice-1', 'CHK-ABC123'),
+      ).rejects.toThrow(ConflictException);
+      expect(prisma.paymentIntent.update).not.toHaveBeenCalled();
+      expect(prisma.paymentIntent.updateMany).not.toHaveBeenCalled();
+      expect(prisma.payment.create).not.toHaveBeenCalled();
+    });
+
+    it('does not credit, and does not permanently fail, a real-provider success with zero amount', async () => {
+      prisma.paymentIntent.findUnique.mockResolvedValue({
+        ...pendingIntent,
+        provider: 'paystack',
+      });
+      paymentProvider.verifyCheckout.mockResolvedValue({
+        reference: 'CHK-ABC123',
+        success: true,
+        amount: 0,
+        currency: '',
+      });
+
+      await expect(
+        service.verifyCheckout('customer-1', 'invoice-1', 'CHK-ABC123'),
+      ).rejects.toThrow(ConflictException);
+      expect(prisma.paymentIntent.update).not.toHaveBeenCalled();
+      expect(prisma.paymentIntent.updateMany).not.toHaveBeenCalled();
+      expect(prisma.payment.create).not.toHaveBeenCalled();
+    });
+
+    it('does not credit a payment confirmed in the wrong currency', async () => {
+      prisma.paymentIntent.findUnique.mockResolvedValue({
+        ...pendingIntent,
+        provider: 'paystack',
+      });
+      paymentProvider.verifyCheckout.mockResolvedValue({
+        reference: 'CHK-ABC123',
+        success: true,
+        amount: 30_000,
+        currency: 'USD',
+      });
+
+      await expect(
+        service.verifyCheckout('customer-1', 'invoice-1', 'CHK-ABC123'),
+      ).rejects.toThrow(ConflictException);
+      expect(prisma.payment.create).not.toHaveBeenCalled();
+    });
+
     it('throws Conflict when the provider-confirmed amount does not match', async () => {
       prisma.paymentIntent.findUnique.mockResolvedValue(pendingIntent);
       paymentProvider.verifyCheckout.mockResolvedValue({
@@ -512,6 +589,7 @@ describe('PaymentsService', () => {
         success: true,
         amount: 0,
         currency: '',
+        simulated: true,
       });
       prisma.customer.findUnique.mockResolvedValue(null);
       invoicesService.recomputeStatus.mockResolvedValue({

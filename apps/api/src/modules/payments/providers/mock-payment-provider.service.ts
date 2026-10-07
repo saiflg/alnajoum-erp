@@ -58,6 +58,7 @@ export class MockPaymentProviderService implements PaymentProviderPort {
       success: true,
       amount: 0,
       currency: '',
+      simulated: true,
     });
   }
 }

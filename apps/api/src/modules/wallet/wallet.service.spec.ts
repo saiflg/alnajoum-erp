@@ -429,6 +429,7 @@ describe('WalletService', () => {
         success: true,
         amount: 0,
         currency: '',
+        simulated: true,
       });
       prisma.wallet.findUnique.mockResolvedValue({
         id: 'wallet-1',
@@ -463,6 +464,7 @@ describe('WalletService', () => {
         success: true,
         amount: 0,
         currency: '',
+        simulated: true,
       });
       prisma.wallet.findUnique.mockResolvedValue({
         id: 'wallet-1',
@@ -489,6 +491,58 @@ describe('WalletService', () => {
         expect.objectContaining({ type: 'DEPOSIT', amount: 20_000 }),
       );
       expect(result.balance).toBe(20_000);
+    });
+
+    describe.each([
+      [
+        'a pending provider result',
+        { success: false, pending: true, amount: 0, currency: '' },
+      ],
+      [
+        'a real-provider success with zero amount',
+        { success: true, amount: 0, currency: '' },
+      ],
+      [
+        'a real-provider success with the wrong amount',
+        { success: true, amount: 5_000, currency: 'NGN' },
+      ],
+      [
+        'a real-provider success in the wrong currency',
+        { success: true, amount: 20_000, currency: 'USD' },
+      ],
+    ])('%s', (_name, partial) => {
+      it('neither credits the wallet nor permanently fails the deposit', async () => {
+        prisma.walletTransaction.findUnique.mockResolvedValue(
+          pendingTransaction,
+        );
+        prisma.walletTransaction.findUniqueOrThrow.mockResolvedValue({
+          ...pendingTransaction,
+          wallet: {
+            customer: {
+              identityId: 'identity-1',
+              identity: { email: 'amina@example.com' },
+            },
+          },
+        });
+        paymentProvider.verifyCheckout.mockResolvedValue({
+          reference: 'WDEP-ABC123',
+          ...partial,
+        });
+        prisma.wallet.findUnique.mockResolvedValue({
+          id: 'wallet-1',
+          customerId: 'customer-1',
+          currency: 'NGN',
+        });
+        prisma.walletTransaction.aggregate.mockResolvedValue({
+          _sum: { amount: 0 },
+        });
+        prisma.walletTransaction.findMany.mockResolvedValue([]);
+
+        await service.verifyDeposit('customer-1', 'WDEP-ABC123');
+
+        expect(prisma.walletTransaction.updateMany).not.toHaveBeenCalled();
+        expect(notificationsService.sendWalletUpdate).not.toHaveBeenCalled();
+      });
     });
 
     it('is idempotent: does not re-call the provider once already COMPLETED', async () => {

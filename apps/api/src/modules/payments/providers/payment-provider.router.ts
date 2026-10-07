@@ -1,5 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { isProductionEnv } from '../../../common/security/runtime-environment';
 import { IntegrationsService } from '../../integrations/integrations.service';
 import { MockPaymentProviderService } from './mock-payment-provider.service';
 import { OpayPaymentProviderService } from './opay-payment-provider.service';
@@ -43,6 +44,13 @@ export class PaymentProviderRouter implements PaymentProviderPort {
       case 'opay':
         return this.opayProvider;
       default:
+        // The mock reports every payment as successful, so in production it must never be reachable —
+        // not as the default, not by an admin selecting it, not for an unknown provider name.
+        if (isProductionEnv(this.configService.get<string>('NODE_ENV'))) {
+          throw new ServiceUnavailableException(
+            'The mock payment provider is disabled in production. Configure a real payment provider.',
+          );
+        }
         return this.mockProvider;
     }
   }

@@ -179,12 +179,19 @@ export class WalletService {
     });
     if (transaction.status !== WalletTransactionStatus.PENDING) return;
 
-    // Defense in depth, same as PaymentsService.finalizeIntent: the mock
-    // provider reports amount 0 (nothing independently to check against),
-    // a real gateway always reports a real confirmed amount.
-    const succeeded =
-      result.success &&
-      !(result.amount > 0 && result.amount !== transaction.amount);
+    // Not paid yet: stay PENDING so a later verify can still credit it.
+    if (!result.success && result.pending) return;
+
+    // Same rule as PaymentsService.finalizeIntent. The mock reports amount 0 (it only exists
+    // outside production); a real gateway must confirm the exact amount and currency. A real
+    // provider's mismatch is not credited, and stays PENDING for manual review.
+    if (result.success && !result.simulated) {
+      const currencyOk =
+        !result.currency ||
+        result.currency.toUpperCase() === transaction.currency.toUpperCase();
+      if (result.amount !== transaction.amount || !currencyOk) return;
+    }
+    const succeeded = result.success;
 
     // Atomically claims the PENDING -> final-status transition, gated on
     // still being PENDING. This is what makes two concurrent verify calls

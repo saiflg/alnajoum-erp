@@ -200,6 +200,10 @@ export class PaymentsService {
       this.configService.get<string>('PAYMENT_PROVIDER', 'mock');
     const reference = generateCheckoutReference();
 
+    // Refuse (503) before any intent is written if this provider is not allowed to run here,
+    // e.g. the mock provider in production.
+    this.paymentProviderRouter.resolveByName(providerName);
+
     const intent = await this.prisma.paymentIntent.create({
       data: {
         invoiceId,
@@ -261,7 +265,10 @@ export class PaymentsService {
       return this.invoicesService.getInvoice(intent.invoiceId, customerId);
     }
 
-    const result = await this.paymentProvider.verifyCheckout(reference);
+    // Verify with the provider that issued this intent, not whichever is active now.
+    const result = await this.paymentProviderRouter
+      .resolveByName(intent.provider)
+      .verifyCheckout(reference);
     const outcome = await this.finalizeIntent(intent, result);
     if (!outcome.ok) {
       throw new ConflictException(
@@ -334,6 +341,15 @@ export class PaymentsService {
     }
 
     if (!result.success) {
+      // Not paid *yet* (abandoned checkout still open, processing…): keep the intent PENDING so a
+      // later charge.success webhook or reconciliation can still credit it. Only a definitive
+      // failure is final.
+      if (result.pending) {
+        return {
+          ok: false,
+          reason: 'The payment is still pending with the provider.',
+        };
+      }
       await this.prisma.paymentIntent.update({
         where: { id: intent.id },
         data: { status: PaymentIntentStatus.FAILED },
@@ -341,18 +357,25 @@ export class PaymentsService {
       return { ok: false, reason: 'The payment was not successful.' };
     }
 
-    // Defense in depth: only cross-checked when the provider actually
-    // reports an amount. The mock provider deliberately doesn't (see its
-    // own comment) — a real gateway always does.
-    if (result.amount > 0 && result.amount !== intent.amount) {
-      await this.prisma.paymentIntent.update({
-        where: { id: intent.id },
-        data: { status: PaymentIntentStatus.FAILED },
-      });
-      return {
-        ok: false,
-        reason: 'The confirmed amount did not match the expected amount.',
-      };
+    // The mock provider has nothing independent to report (amount 0); a real gateway must confirm
+    // the exact amount and currency. A mismatch is NOT credited, but the intent stays PENDING and
+    // is logged loudly — failing it permanently would lose a real payment that needs a human.
+    if (!result.simulated) {
+      const amountOk = result.amount > 0 && result.amount === intent.amount;
+      const currencyOk =
+        !result.currency ||
+        result.currency.toUpperCase() === intent.currency.toUpperCase();
+      if (!amountOk || !currencyOk) {
+        this.logger.error(
+          `Provider confirmed ${result.reference} as paid but amount/currency do not match intent ` +
+            `(expected ${intent.amount} ${intent.currency}, got ${result.amount} ${result.currency}); ` +
+            'not crediting — needs manual review.',
+        );
+        return {
+          ok: false,
+          reason: 'The confirmed amount did not match the expected amount.',
+        };
+      }
     }
 
     // Atomically claims the PENDING -> SUCCEEDED transition, gated on

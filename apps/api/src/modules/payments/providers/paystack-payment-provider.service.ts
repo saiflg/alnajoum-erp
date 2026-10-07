@@ -24,7 +24,15 @@ interface PaystackVerifyResponse {
   message: string;
   data?: {
     reference: string;
-    status: 'success' | 'failed' | 'abandoned';
+    status:
+      | 'success'
+      | 'failed'
+      | 'abandoned'
+      | 'reversed'
+      | 'ongoing'
+      | 'pending'
+      | 'processing'
+      | 'queued';
     amount: number; // kobo
     currency: string;
   };
@@ -130,6 +138,9 @@ export class PaystackPaymentProviderService implements PaymentProviderPort {
     return {
       reference: body.data.reference,
       success: body.data.status === 'success',
+      // Only an explicit failure/reversal is final. Anything else (abandoned, ongoing, pending,
+      // processing, queued…) can still become a success, so it must not be treated as failed.
+      pending: !['success', 'failed', 'reversed'].includes(body.data.status),
       amount: body.data.amount / 100,
       currency: body.data.currency,
     };
