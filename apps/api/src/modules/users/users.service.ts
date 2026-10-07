@@ -201,5 +201,10 @@ export class UsersService {
       where: { id: staff.identityId },
       data: { status: 'DEACTIVATED' },
     });
+    // Deactivation ends every session immediately.
+    await this.prisma.refreshToken.updateMany({
+      where: { identityId: staff.identityId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
   }
 }

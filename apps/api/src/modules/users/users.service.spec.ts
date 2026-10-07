@@ -147,7 +147,10 @@ describe('UsersService', () => {
     it('refuses to let a company admin create an account holding SUPER_ADMIN', async () => {
       prisma.identity.findUnique.mockResolvedValue(null);
       prisma.company.findUnique.mockResolvedValue({ id: 'company-a' });
-      prisma.role.findUnique.mockResolvedValue({ id: 'role-sa', name: 'SUPER_ADMIN' });
+      prisma.role.findUnique.mockResolvedValue({
+        id: 'role-sa',
+        name: 'SUPER_ADMIN',
+      });
 
       await expect(
         service.createStaff(
@@ -169,8 +172,13 @@ describe('UsersService', () => {
     it('refuses a role stronger than the creator holds', async () => {
       prisma.identity.findUnique.mockResolvedValue(null);
       prisma.company.findUnique.mockResolvedValue({ id: 'company-a' });
-      prisma.role.findUnique.mockResolvedValue({ id: 'role-x', name: 'CUSTOM' });
-      prisma.rolePermission.findMany.mockResolvedValue([{ permission: { key: 'company:create' } }]);
+      prisma.role.findUnique.mockResolvedValue({
+        id: 'role-x',
+        name: 'CUSTOM',
+      });
+      prisma.rolePermission.findMany.mockResolvedValue([
+        { permission: { key: 'company:create' } },
+      ]);
       prisma.permission.findMany.mockResolvedValue([{ key: 'staff:create' }]);
 
       await expect(
@@ -194,7 +202,10 @@ describe('UsersService', () => {
       prisma.identity.findUnique.mockResolvedValue(null);
       prisma.company.findUnique.mockResolvedValue({ id: 'company-a' });
       prisma.role.findUnique.mockResolvedValue({ id: 'role-1', name: 'STAFF' });
-      prisma.branch.findUnique.mockResolvedValue({ id: 'branch-b', companyId: 'company-b' });
+      prisma.branch.findUnique.mockResolvedValue({
+        id: 'branch-b',
+        companyId: 'company-b',
+      });
 
       await expect(
         service.createStaff(

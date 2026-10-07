@@ -89,7 +89,10 @@ export class FamilyMemberDocumentsService {
       action: 'document.deleted',
       entityType: 'FamilyMemberDocument',
       entityId: documentId,
-      metadata: { familyMemberId: document.familyMemberId, type: document.type },
+      metadata: {
+        familyMemberId: document.familyMemberId,
+        type: document.type,
+      },
     });
   }
 }

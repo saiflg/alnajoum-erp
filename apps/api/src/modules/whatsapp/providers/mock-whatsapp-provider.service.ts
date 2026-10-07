@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { randomUUID } from 'crypto';
+import { isProductionEnv } from '../../../common/security/runtime-environment';
 import {
   InteractiveButton,
   NormalizedInboundEvent,
@@ -100,11 +101,14 @@ export class MockWhatsAppProviderService implements WhatsAppProviderPort {
   verifyWebhookChallenge(
     query: Record<string, string>,
   ): Promise<string | null> {
+    // The mock accepts anything, so in production it accepts nothing: an unauthenticated public
+    // endpoint that trusts any caller would let anyone forge customer messages.
+    if (isProductionEnv()) return Promise.resolve(null);
     return Promise.resolve(query['hub.challenge'] ?? null);
   }
 
   verifyWebhookSignature(): Promise<boolean> {
-    return Promise.resolve(true);
+    return Promise.resolve(!isProductionEnv());
   }
 
   parseWebhookPayload(body: unknown): NormalizedInboundEvent[] {

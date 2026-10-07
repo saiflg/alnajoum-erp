@@ -99,3 +99,28 @@ describe('MockWhatsAppProviderService', () => {
     });
   });
 });
+
+describe('MockWhatsAppProviderService webhook trust (Phase 22 S-21)', () => {
+  const original = process.env.NODE_ENV;
+  afterEach(() => {
+    process.env.NODE_ENV = original;
+  });
+
+  it('accepts unsigned webhooks and echoes the challenge outside production', async () => {
+    process.env.NODE_ENV = 'development';
+    const service = new MockWhatsAppProviderService();
+    await expect(service.verifyWebhookSignature()).resolves.toBe(true);
+    await expect(
+      service.verifyWebhookChallenge({ 'hub.challenge': 'abc' }),
+    ).resolves.toBe('abc');
+  });
+
+  it('trusts nothing in production', async () => {
+    process.env.NODE_ENV = 'production';
+    const service = new MockWhatsAppProviderService();
+    await expect(service.verifyWebhookSignature()).resolves.toBe(false);
+    await expect(
+      service.verifyWebhookChallenge({ 'hub.challenge': 'abc' }),
+    ).resolves.toBeNull();
+  });
+});

@@ -336,6 +336,39 @@ describe('AuthService', () => {
         UnauthorizedException,
       );
     });
+
+    it.each(['SUSPENDED', 'DEACTIVATED'])(
+      'refuses to mint tokens for a %s account, without consuming the token',
+      async (status) => {
+        prisma.refreshToken.findUnique.mockResolvedValue({
+          id: 'rt-1',
+          revokedAt: null,
+          expiresAt: new Date(Date.now() + 100000),
+          identity: { ...baseIdentity, status },
+        });
+
+        await expect(service.refresh('tok', {})).rejects.toThrow(
+          'This account is not active',
+        );
+        expect(prisma.refreshToken.updateMany).not.toHaveBeenCalled();
+        expect(prisma.refreshToken.create).not.toHaveBeenCalled();
+      },
+    );
+
+    it('loses cleanly when a concurrent refresh already consumed the token', async () => {
+      prisma.refreshToken.findUnique.mockResolvedValue({
+        id: 'rt-1',
+        revokedAt: null,
+        expiresAt: new Date(Date.now() + 100000),
+        identity: baseIdentity,
+      });
+      prisma.refreshToken.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(service.refresh('tok', {})).rejects.toThrow(
+        UnauthorizedException,
+      );
+      expect(prisma.refreshToken.create).not.toHaveBeenCalled();
+    });
   });
 
   describe('changePassword', () => {
@@ -362,7 +395,9 @@ describe('AuthService', () => {
       await service.forgotPassword('missing@example.com', {});
 
       expect(prisma.passwordResetToken.create).not.toHaveBeenCalled();
-      expect(notificationsService.sendPasswordResetEmail).not.toHaveBeenCalled();
+      expect(
+        notificationsService.sendPasswordResetEmail,
+      ).not.toHaveBeenCalled();
     });
 
     it('creates a hashed token and emails a reset link for an existing identity', async () => {
@@ -400,7 +435,10 @@ describe('AuthService', () => {
       prisma.passwordResetToken.findUnique.mockResolvedValue(null);
 
       await expect(
-        service.resetPassword({ token: 'bogus', newPassword: 'new-password2' }, {}),
+        service.resetPassword(
+          { token: 'bogus', newPassword: 'new-password2' },
+          {},
+        ),
       ).rejects.toThrow(UnauthorizedException);
     });
 
@@ -414,7 +452,10 @@ describe('AuthService', () => {
       });
 
       await expect(
-        service.resetPassword({ token: 'used', newPassword: 'new-password2' }, {}),
+        service.resetPassword(
+          { token: 'used', newPassword: 'new-password2' },
+          {},
+        ),
       ).rejects.toThrow(UnauthorizedException);
     });
 
@@ -428,7 +469,10 @@ describe('AuthService', () => {
       });
 
       await expect(
-        service.resetPassword({ token: 'expired', newPassword: 'new-password2' }, {}),
+        service.resetPassword(
+          { token: 'expired', newPassword: 'new-password2' },
+          {},
+        ),
       ).rejects.toThrow(UnauthorizedException);
     });
 

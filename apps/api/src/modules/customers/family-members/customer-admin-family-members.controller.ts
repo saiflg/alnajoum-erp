@@ -117,7 +117,12 @@ export class CustomerAdminFamilyMembersController {
         file.mimetype,
       );
     }
-    return this.documentsService.recordUpload(memberId, file, query.type, user.sub);
+    return this.documentsService.recordUpload(
+      memberId,
+      file,
+      query.type,
+      user.sub,
+    );
   }
 
   @Get(':memberId/documents/:documentId/file')

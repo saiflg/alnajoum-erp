@@ -57,7 +57,9 @@ export class CustomersService {
         identity: { select: { email: true, phone: true, status: true } },
         documents: true,
         familyMembers: { orderBy: { createdAt: 'desc' } },
-        assignedStaff: { select: { id: true, firstName: true, lastName: true } },
+        assignedStaff: {
+          select: { id: true, firstName: true, lastName: true },
+        },
         assignedBranch: { select: { id: true, name: true } },
       },
     });
@@ -185,6 +187,11 @@ export class CustomersService {
     await this.prisma.identity.update({
       where: { id: customer.identityId },
       data: { status: 'DEACTIVATED' },
+    });
+    // Deactivation ends every session immediately.
+    await this.prisma.refreshToken.updateMany({
+      where: { identityId: customer.identityId, revokedAt: null },
+      data: { revokedAt: new Date() },
     });
     await this.auditService.record({
       identityId: actorIdentityId,

@@ -97,7 +97,11 @@ export class CustomerOwnDocumentsController {
     const customerId = await this.customersService.getCustomerIdForIdentity(
       user.sub,
     );
-    await this.documentsService.deleteDocument(documentId, customerId, user.sub);
+    await this.documentsService.deleteDocument(
+      documentId,
+      customerId,
+      user.sub,
+    );
     return { deleted: true };
   }
 }

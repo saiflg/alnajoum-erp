@@ -445,11 +445,22 @@ export class AuthService {
     if (!stored || stored.revokedAt || stored.expiresAt < new Date()) {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
+    // A suspended or deactivated account cannot mint new tokens from an old session.
+    if (
+      stored.identity.status === 'SUSPENDED' ||
+      stored.identity.status === 'DEACTIVATED'
+    ) {
+      throw new UnauthorizedException('This account is not active');
+    }
 
-    await this.prisma.refreshToken.update({
-      where: { id: stored.id },
+    // Atomic claim: of two concurrent refreshes with the same token only one gets a new pair.
+    const claim = await this.prisma.refreshToken.updateMany({
+      where: { id: stored.id, revokedAt: null },
       data: { revokedAt: new Date() },
     });
+    if (claim.count === 0) {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
 
     return this.issueTokenPair(stored.identity, meta);
   }
@@ -547,12 +558,10 @@ export class AuthService {
       include: { identity: true },
     });
 
-    if (
-      !stored ||
-      stored.usedAt ||
-      stored.expiresAt < new Date()
-    ) {
-      throw new UnauthorizedException('This reset link is invalid or has expired');
+    if (!stored || stored.usedAt || stored.expiresAt < new Date()) {
+      throw new UnauthorizedException(
+        'This reset link is invalid or has expired',
+      );
     }
 
     const passwordHash = await argon2.hash(dto.newPassword);

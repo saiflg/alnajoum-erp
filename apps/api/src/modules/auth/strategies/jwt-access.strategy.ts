@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { IdentityType } from '@prisma/client';
@@ -93,15 +93,31 @@ export class JwtAccessStrategy extends PassportStrategy(Strategy, 'jwt') {
   }
 
   async validate(payload: AccessTokenPayload): Promise<AuthContext> {
-    const [{ permissions }, companyId] = await Promise.all([
+    const [{ roles, permissions }, companyId, identity] = await Promise.all([
       this.rbacService.getEffectiveAccess(payload.sub),
       this.resolveCompanyId(payload.sub, payload.type),
+      this.prisma.identity.findUnique({
+        where: { id: payload.sub },
+        select: { status: true },
+      }),
     ]);
+    // A deactivated or suspended account loses access on its very next request, not when its
+    // (up to 15 minute) access token expires. A token for an identity that no longer exists is dead too.
+    if (
+      !identity ||
+      identity.status === 'SUSPENDED' ||
+      identity.status === 'DEACTIVATED'
+    ) {
+      throw new UnauthorizedException('This account is not active');
+    }
     if (payload.sessionId) {
       this.bumpSessionActivity(payload.sessionId);
     }
     return {
       ...payload,
+      // Roles are resolved fresh like permissions: a demoted Super Admin must not keep platform-wide
+      // tenant bypass for the rest of the token's lifetime just because the old role is signed into it.
+      roles,
       permissions,
       companyId,
       sessionId: payload.sessionId ?? null,

@@ -113,6 +113,17 @@ export function checkProductionConfig(
       'FLIGHT_PROVIDER is mock: flight bookings will not reach a real airline system.',
     );
 
+  if (!str('TRUST_PROXY_HOPS'))
+    warn(
+      'TRUST_PROXY_HOPS',
+      "TRUST_PROXY_HOPS is not set: behind a reverse proxy all clients share one rate-limit bucket and logged IPs are the proxy's. Set it to the number of proxy hops (1 behind Caddy).",
+    );
+  if (str('AUTH_THROTTLE_LIMIT'))
+    warn(
+      'AUTH_THROTTLE_LIMIT',
+      'AUTH_THROTTLE_LIMIT raises the login/reset rate limit and is meant for automated tests only.',
+    );
+
   const origin = str('PUBLIC_WEB_ORIGIN');
   if (!origin)
     err(

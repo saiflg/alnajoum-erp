@@ -58,6 +58,8 @@ services:
     environment:
       NODE_ENV: production
       PORT: 4000
+      # Caddy is the single reverse-proxy hop in front of the API.
+      TRUST_PROXY_HOPS: 1
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
       REDIS_URL: redis://redis:6379
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}

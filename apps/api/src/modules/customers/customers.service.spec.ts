@@ -19,6 +19,7 @@ describe('CustomersService', () => {
       identity: {
         update: jest.fn(),
       },
+      refreshToken: { updateMany: jest.fn() },
     };
     auditService = { record: jest.fn() };
 
@@ -53,15 +54,15 @@ describe('CustomersService', () => {
       );
     });
 
-    it('returns the customer when it belongs to the caller\'s own tenant', async () => {
+    it("returns the customer when it belongs to the caller's own tenant", async () => {
       prisma.customer.findUnique.mockResolvedValue({
         id: 'customer-1',
         companyId: 'company-a',
       });
 
-      await expect(
-        service.findOne('customer-1', 'company-a'),
-      ).resolves.toEqual(expect.objectContaining({ id: 'customer-1' }));
+      await expect(service.findOne('customer-1', 'company-a')).resolves.toEqual(
+        expect.objectContaining({ id: 'customer-1' }),
+      );
     });
 
     /**
@@ -76,14 +77,14 @@ describe('CustomersService', () => {
         companyId: 'company-b',
       });
 
-      await expect(
-        service.findOne('customer-1', 'company-a'),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.findOne('customer-1', 'company-a')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
   describe('findAll', () => {
-    it('scopes the query to the caller\'s tenant when one is given', async () => {
+    it("scopes the query to the caller's tenant when one is given", async () => {
       prisma.customer.findMany.mockResolvedValue([]);
 
       await service.findAll({}, 'company-a');
@@ -151,7 +152,10 @@ describe('CustomersService', () => {
         }),
       });
       expect(auditService.record).toHaveBeenCalledWith(
-        expect.objectContaining({ action: 'customer.updated', entityId: 'customer-1' }),
+        expect.objectContaining({
+          action: 'customer.updated',
+          entityId: 'customer-1',
+        }),
       );
     });
 
@@ -164,7 +168,9 @@ describe('CustomersService', () => {
         id: 'customer-1',
         assignedStaffId: 'staff-new',
       });
-      prisma.staff = { findUnique: jest.fn().mockResolvedValue({ id: 'staff-new' }) };
+      prisma.staff = {
+        findUnique: jest.fn().mockResolvedValue({ id: 'staff-new' }),
+      };
 
       await service.update(
         'customer-1',
@@ -197,7 +203,9 @@ describe('CustomersService', () => {
       await service.update('customer-1', { firstName: 'Amina' });
 
       expect(auditService.record).not.toHaveBeenCalledWith(
-        expect.objectContaining({ action: 'customer.staff_assignment_changed' }),
+        expect.objectContaining({
+          action: 'customer.staff_assignment_changed',
+        }),
       );
     });
   });
@@ -214,6 +222,10 @@ describe('CustomersService', () => {
       expect(prisma.identity.update).toHaveBeenCalledWith({
         where: { id: 'identity-1' },
         data: { status: 'DEACTIVATED' },
+      });
+      expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
+        where: { identityId: 'identity-1', revokedAt: null },
+        data: { revokedAt: expect.any(Date) },
       });
       expect(auditService.record).toHaveBeenCalledWith(
         expect.objectContaining({

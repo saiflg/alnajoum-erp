@@ -10,6 +10,7 @@ describe('JwtAccessStrategy', () => {
   let prisma: {
     staff: { findUnique: jest.Mock };
     customer: { findUnique: jest.Mock };
+    identity: { findUnique: jest.Mock };
   };
 
   beforeEach(() => {
@@ -27,6 +28,9 @@ describe('JwtAccessStrategy', () => {
         findUnique: jest.fn().mockResolvedValue({ companyId: 'company-1' }),
       },
       customer: { findUnique: jest.fn() },
+      identity: {
+        findUnique: jest.fn().mockResolvedValue({ status: 'ACTIVE' }),
+      },
     };
     strategy = new JwtAccessStrategy(
       configService,
@@ -115,5 +119,37 @@ describe('JwtAccessStrategy', () => {
     const result = await strategy.validate(payload);
 
     expect(result.permissions).toEqual(['flight:book', 'flight:void']);
+  });
+
+  describe('account status and fresh roles (Phase 22 S-18)', () => {
+    const payload = {
+      sub: 'identity-1',
+      type: IdentityType.STAFF,
+      roles: ['SUPER_ADMIN'],
+    };
+
+    it.each(['SUSPENDED', 'DEACTIVATED'])(
+      'rejects a valid token once the account is %s',
+      async (status) => {
+        prisma.identity.findUnique.mockResolvedValue({ status });
+        await expect(strategy.validate(payload)).rejects.toThrow(
+          'This account is not active',
+        );
+      },
+    );
+
+    it('rejects a token whose identity no longer exists', async () => {
+      prisma.identity.findUnique.mockResolvedValue(null);
+      await expect(strategy.validate(payload)).rejects.toThrow();
+    });
+
+    it('takes roles from the database, not from the signed token', async () => {
+      rbacService.getEffectiveAccess.mockResolvedValue({
+        roles: ['STAFF'],
+        permissions: [],
+      });
+      const result = await strategy.validate(payload); // token still claims SUPER_ADMIN
+      expect(result.roles).toEqual(['STAFF']);
+    });
   });
 });

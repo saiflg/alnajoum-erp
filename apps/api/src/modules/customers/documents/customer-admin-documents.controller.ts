@@ -54,7 +54,11 @@ export class CustomerAdminDocumentsController {
     @Param('customerId') customerId: string,
     @Param('documentId') documentId: string,
   ) {
-    await this.documentsService.deleteDocument(documentId, customerId, user.sub);
+    await this.documentsService.deleteDocument(
+      documentId,
+      customerId,
+      user.sub,
+    );
     return { deleted: true };
   }
 }

@@ -10,6 +10,11 @@ import {
   Res,
   UnauthorizedException,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
+import {
+  CREDENTIAL_THROTTLE,
+  REFRESH_THROTTLE,
+} from '../../common/security/throttle-limits';
 import { ConfigService } from '@nestjs/config';
 import type { Request, Response } from 'express';
 import { Public } from '../../common/decorators/public.decorator';
@@ -70,6 +75,7 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle(CREDENTIAL_THROTTLE)
   @Post('register')
   async register(
     @Body() dto: RegisterCustomerDto,
@@ -86,6 +92,7 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle(CREDENTIAL_THROTTLE)
   @Post('login')
   async login(
     @Body() dto: LoginDto,
@@ -103,6 +110,7 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle(CREDENTIAL_THROTTLE)
   @Post('2fa/login-verify')
   async twoFactorLoginVerify(
     @Body() dto: TwoFactorLoginVerifyDto,
@@ -120,6 +128,7 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle(REFRESH_THROTTLE)
   @Post('refresh')
   async refresh(
     @Body() dto: RefreshTokenDto,
@@ -176,6 +185,7 @@ export class AuthController {
   // --- Phase 18 — self-service account recovery -----------------------
 
   @Public()
+  @Throttle(CREDENTIAL_THROTTLE)
   @Post('forgot-password')
   async forgotPassword(
     @Body() dto: ForgotPasswordDto,
@@ -184,10 +194,14 @@ export class AuthController {
   ) {
     await this.authService.forgotPassword(dto.email, this.buildMeta(req, ip));
     // Deliberately uniform regardless of whether the email exists.
-    return { message: 'If an account exists for this email, a reset link has been sent.' };
+    return {
+      message:
+        'If an account exists for this email, a reset link has been sent.',
+    };
   }
 
   @Public()
+  @Throttle(CREDENTIAL_THROTTLE)
   @Post('reset-password')
   async resetPassword(
     @Body() dto: ResetPasswordDto,
