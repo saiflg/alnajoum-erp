@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { InvoiceStatus, ManualPaymentStatus } from '@prisma/client';
 import { randomBytes } from 'crypto';
+import { lockAndAssertPayable } from '../../common/db/payment-guards';
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { FinancePostingService } from '../finance/finance-posting.service';
@@ -284,6 +285,8 @@ export class ManualPaymentsService {
           'This submission has already been reviewed',
         );
       }
+      // Under the invoice lock: the balance is re-read now, not as it was when the reviewer opened it.
+      await lockAndAssertPayable(tx, submission.invoiceId, submission.amount);
       const payment = await tx.payment.create({
         data: {
           paymentReference: reference,

@@ -14,8 +14,13 @@ import {
   WalletTransactionStatus,
   WalletTransactionType,
 } from '@prisma/client';
-import { randomBytes } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 import { AuditService } from '../audit/audit.service';
+import {
+  lockAndAssertPayable,
+  lockWallets,
+  walletBalance,
+} from '../../common/db/payment-guards';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { ACCOUNT_CODES } from '../finance/constants/account-codes.constant';
 import { FinancePostingService } from '../finance/finance-posting.service';
@@ -32,6 +37,29 @@ import type { PaymentProviderPort } from '../payments/providers/payment-provider
 function generateWalletReference(prefix: string): string {
   return `${prefix}-${randomBytes(5).toString('hex').toUpperCase()}`;
 }
+
+/**
+ * With a client-supplied idempotency key the reference is derived from it (scoped to the customer),
+ * so replaying the same request yields the same unique reference instead of a second transaction.
+ */
+function idempotentReference(
+  prefix: string,
+  scope: string,
+  key: string | undefined,
+): string {
+  if (!key) return generateWalletReference(prefix);
+  const digest = createHash('sha256')
+    .update(`${scope}:${key}`)
+    .digest('hex')
+    .slice(0, 20)
+    .toUpperCase();
+  return `${prefix}-K${digest}`;
+}
+
+const isUniqueViolation = (error: unknown): boolean =>
+  typeof error === 'object' &&
+  error !== null &&
+  (error as { code?: string }).code === 'P2002';
 
 @Injectable()
 export class WalletService {
@@ -77,8 +105,26 @@ export class WalletService {
     return { wallet, balance, transactions };
   }
 
-  async listAllWallets() {
+  /** Admin callers are confined to customers of their own company (`tenant` undefined = SUPER_ADMIN). */
+  private async assertCustomerInTenant(customerId: string, tenant?: string) {
+    if (tenant === undefined) return;
+    const customer = await this.prisma.customer.findFirst({
+      where: { id: customerId, companyId: tenant },
+      select: { id: true },
+    });
+    if (!customer) throw new NotFoundException('Customer not found');
+  }
+
+  async getWalletForAdmin(customerId: string, tenant?: string) {
+    await this.assertCustomerInTenant(customerId, tenant);
+    return this.getWalletWithBalance(customerId);
+  }
+
+  async listAllWallets(tenant?: string) {
     const wallets = await this.prisma.wallet.findMany({
+      where:
+        tenant === undefined ? undefined : { customer: { companyId: tenant } },
+      take: 500,
       include: {
         customer: { select: { firstName: true, lastName: true, id: true } },
       },
@@ -296,6 +342,16 @@ export class WalletService {
     const reference = generateWalletReference('WPAY');
 
     const walletPayment = await this.prisma.$transaction(async (tx) => {
+      // Authoritative checks under the wallet and invoice locks: two simultaneous wallet payments
+      // can neither overspend the balance nor overpay the invoice.
+      await lockWallets(tx, [wallet.id]);
+      const current = await walletBalance(tx, wallet.id);
+      if (amount > current) {
+        throw new BadRequestException(
+          `Wallet balance (${current}) is less than the requested payment (${amount})`,
+        );
+      }
+      await lockAndAssertPayable(tx, invoice.id, amount);
       await tx.walletTransaction.create({
         data: {
           walletId: wallet.id,
@@ -367,22 +423,40 @@ export class WalletService {
     description: string | undefined,
     staffId: string | undefined,
     actorIdentityId: string | undefined,
+    tenant?: string,
+    idempotencyKey?: string,
   ) {
+    await this.assertCustomerInTenant(customerId, tenant);
     const wallet = await this.getOrCreateWallet(customerId);
-    const reference = generateWalletReference('WMDEP');
+    const reference = idempotentReference('WMDEP', customerId, idempotencyKey);
+    if (idempotencyKey) {
+      const replay = await this.prisma.walletTransaction.findUnique({
+        where: { reference },
+      });
+      if (replay) return this.getWalletWithBalance(customerId);
+    }
 
-    const walletTx = await this.prisma.walletTransaction.create({
-      data: {
-        walletId: wallet.id,
-        type: WalletTransactionType.DEPOSIT,
-        status: WalletTransactionStatus.COMPLETED,
-        amount,
-        currency: wallet.currency,
-        description: description ?? 'Manual wallet credit',
-        reference,
-        createdByStaffId: staffId,
-      },
-    });
+    let walletTx;
+    try {
+      walletTx = await this.prisma.walletTransaction.create({
+        data: {
+          walletId: wallet.id,
+          type: WalletTransactionType.DEPOSIT,
+          status: WalletTransactionStatus.COMPLETED,
+          amount,
+          currency: wallet.currency,
+          description: description ?? 'Manual wallet credit',
+          reference,
+          createdByStaffId: staffId,
+        },
+      });
+    } catch (error) {
+      // Two identical requests raced: the loser's reference already exists, so this is a replay.
+      if (idempotencyKey && isUniqueViolation(error)) {
+        return this.getWalletWithBalance(customerId);
+      }
+      throw error;
+    }
     await this.ledgerService.post({
       debitCode: ACCOUNT_CODES.BANK_ACCOUNTS,
       creditCode: ACCOUNT_CODES.CUSTOMER_WALLET_LIABILITY,
@@ -422,6 +496,40 @@ export class WalletService {
     return this.getWalletWithBalance(customerId);
   }
 
+  /** The balance check and the debit/credit row, together under the wallet lock. */
+  private adjustInTransaction(
+    wallet: Wallet,
+    amount: number,
+    type: WalletTransactionType,
+    description: string,
+    reference: string,
+    staffId: string | undefined,
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      if (amount < 0) {
+        await lockWallets(tx, [wallet.id]);
+        const balance = await walletBalance(tx, wallet.id);
+        if (balance + amount < 0) {
+          throw new BadRequestException(
+            `This adjustment would take the wallet balance negative (current balance: ${balance})`,
+          );
+        }
+      }
+      return tx.walletTransaction.create({
+        data: {
+          walletId: wallet.id,
+          type,
+          status: WalletTransactionStatus.COMPLETED,
+          amount,
+          currency: wallet.currency,
+          description,
+          reference,
+          createdByStaffId: staffId,
+        },
+      });
+    });
+  }
+
   /** Signed correction (refund/withdrawal/adjustment) by Finance — always audited. */
   async adjust(
     customerId: string,
@@ -430,30 +538,35 @@ export class WalletService {
     description: string,
     staffId: string | undefined,
     actorIdentityId: string | undefined,
+    tenant?: string,
+    idempotencyKey?: string,
   ) {
+    await this.assertCustomerInTenant(customerId, tenant);
     const wallet = await this.getOrCreateWallet(customerId);
-    if (amount < 0) {
-      const balance = await this.computeBalance(wallet.id);
-      if (balance + amount < 0) {
-        throw new BadRequestException(
-          `This adjustment would take the wallet balance negative (current balance: ${balance})`,
-        );
-      }
-    }
 
-    const reference = generateWalletReference('WADJ');
-    const adjustmentTx = await this.prisma.walletTransaction.create({
-      data: {
-        walletId: wallet.id,
-        type,
-        status: WalletTransactionStatus.COMPLETED,
+    const reference = idempotentReference('WADJ', customerId, idempotencyKey);
+    if (idempotencyKey) {
+      const replay = await this.prisma.walletTransaction.findUnique({
+        where: { reference },
+      });
+      if (replay) return this.getWalletWithBalance(customerId);
+    }
+    let adjustmentTx;
+    try {
+      adjustmentTx = await this.adjustInTransaction(
+        wallet,
         amount,
-        currency: wallet.currency,
+        type,
         description,
         reference,
-        createdByStaffId: staffId,
-      },
-    });
+        staffId,
+      );
+    } catch (error) {
+      if (idempotencyKey && isUniqueViolation(error)) {
+        return this.getWalletWithBalance(customerId);
+      }
+      throw error;
+    }
 
     if (type === WalletTransactionType.REFUND && amount > 0) {
       // A real company loss, not just a liability shuffle — same Refund
@@ -536,25 +649,53 @@ export class WalletService {
     description: string,
     staffId: string | undefined,
     actorIdentityId: string | undefined,
+    tenant?: string,
+    idempotencyKey?: string,
   ) {
     if (fromCustomerId === toCustomerId) {
       throw new BadRequestException(
         'Cannot transfer a wallet balance to the same customer',
       );
     }
+    // A tenant admin can move money only between wallets of customers of their own company.
+    await this.assertCustomerInTenant(fromCustomerId, tenant);
+    await this.assertCustomerInTenant(toCustomerId, tenant);
 
     const fromWallet = await this.getOrCreateWallet(fromCustomerId);
     const toWallet = await this.getOrCreateWallet(toCustomerId);
-    const fromBalance = await this.computeBalance(fromWallet.id);
-    if (amount > fromBalance) {
+    if (fromWallet.currency !== toWallet.currency) {
       throw new BadRequestException(
-        `Source wallet balance (${fromBalance}) is less than the requested transfer (${amount})`,
+        'Cannot transfer between wallets held in different currencies',
       );
     }
 
-    const batchReference = generateWalletReference('WTRF');
-    await this.prisma.$transaction([
-      this.prisma.walletTransaction.create({
+    const batchReference = idempotentReference(
+      'WTRF',
+      `${fromCustomerId}>${toCustomerId}`,
+      idempotencyKey,
+    );
+    if (idempotencyKey) {
+      const replay = await this.prisma.walletTransaction.findUnique({
+        where: { reference: `${batchReference}-OUT` },
+      });
+      if (replay) {
+        return {
+          from: await this.getWalletWithBalance(fromCustomerId),
+          to: await this.getWalletWithBalance(toCustomerId),
+        };
+      }
+    }
+    await this.prisma.$transaction(async (tx) => {
+      // Both wallets locked in a stable order; the balance is read under the lock, so the source
+      // cannot be spent twice by two simultaneous transfers or a transfer racing a payment.
+      await lockWallets(tx, [fromWallet.id, toWallet.id]);
+      const fromBalance = await walletBalance(tx, fromWallet.id);
+      if (amount > fromBalance) {
+        throw new BadRequestException(
+          `Source wallet balance (${fromBalance}) is less than the requested transfer (${amount})`,
+        );
+      }
+      await tx.walletTransaction.create({
         data: {
           walletId: fromWallet.id,
           type: WalletTransactionType.TRANSFER_OUT,
@@ -565,8 +706,8 @@ export class WalletService {
           reference: `${batchReference}-OUT`,
           createdByStaffId: staffId,
         },
-      }),
-      this.prisma.walletTransaction.create({
+      });
+      await tx.walletTransaction.create({
         data: {
           walletId: toWallet.id,
           type: WalletTransactionType.TRANSFER_IN,
@@ -577,8 +718,8 @@ export class WalletService {
           reference: `${batchReference}-IN`,
           createdByStaffId: staffId,
         },
-      }),
-    ]);
+      });
+    });
 
     const [fromCustomer, toCustomer] = await Promise.all([
       this.prisma.customer.findUnique({

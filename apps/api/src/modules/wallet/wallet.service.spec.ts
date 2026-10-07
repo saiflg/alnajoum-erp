@@ -37,8 +37,10 @@ describe('WalletService', () => {
     verifyCheckout: jest.Mock;
   };
   let configService: { get: jest.Mock };
+  let ledgerService: { post: jest.Mock };
 
   beforeEach(async () => {
+    ledgerService = { post: jest.fn() };
     prisma = {
       wallet: { findUnique: jest.fn(), create: jest.fn(), findMany: jest.fn() },
       walletTransaction: {
@@ -56,9 +58,10 @@ describe('WalletService', () => {
         update: jest.fn(),
         updateMany: jest.fn(),
       },
-      customer: { findUnique: jest.fn() },
+      customer: { findUnique: jest.fn(), findFirst: jest.fn() },
       invoice: { findUnique: jest.fn() },
       payment: { create: jest.fn() },
+      $executeRaw: jest.fn().mockResolvedValue(1),
       // Handles both $transaction call shapes: a callback (payInvoiceWithWallet)
       // and an array of already-built promises (transferBetweenWallets).
       $transaction: jest.fn(
@@ -95,7 +98,7 @@ describe('WalletService', () => {
           provide: FinancePostingService,
           useValue: { postRevenueForPayment: jest.fn(), postRefund: jest.fn() },
         },
-        { provide: LedgerService, useValue: { post: jest.fn() } },
+        { provide: LedgerService, useValue: ledgerService },
       ],
     }).compile();
 
@@ -675,6 +678,187 @@ describe('WalletService', () => {
       );
       expect(result.from.balance).toBe(50_000);
       expect(result.to.balance).toBe(50_000);
+    });
+  });
+
+  describe('admin tenant binding and idempotency (Phase 22 S-08)', () => {
+    it("refuses to credit, adjust, read or transfer for another company's customer", async () => {
+      prisma.customer.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.creditManual(
+          'cust-x',
+          100,
+          'x',
+          'staff-1',
+          'id-1',
+          'company-1',
+        ),
+      ).rejects.toThrow(NotFoundException);
+      await expect(
+        service.adjust(
+          'cust-x',
+          100,
+          WalletTransactionType.ADJUSTMENT,
+          'x',
+          'staff-1',
+          'id-1',
+          'company-1',
+        ),
+      ).rejects.toThrow(NotFoundException);
+      await expect(
+        service.getWalletForAdmin('cust-x', 'company-1'),
+      ).rejects.toThrow(NotFoundException);
+      await expect(
+        service.transferBetweenWallets(
+          'cust-a',
+          'cust-x',
+          100,
+          'x',
+          'staff-1',
+          'id-1',
+          'company-1',
+        ),
+      ).rejects.toThrow(NotFoundException);
+      expect(prisma.walletTransaction.create).not.toHaveBeenCalled();
+      expect(prisma.customer.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'cust-x', companyId: 'company-1' },
+        }),
+      );
+    });
+
+    it("lists only the caller's company wallets, bounded", async () => {
+      prisma.wallet.findMany.mockResolvedValue([]);
+      await service.listAllWallets('company-1');
+      const arg = prisma.wallet.findMany.mock.calls[0][0];
+      expect(arg.where).toEqual({ customer: { companyId: 'company-1' } });
+      expect(arg.take).toBe(500);
+    });
+
+    it('replays an identical credit request instead of crediting twice', async () => {
+      prisma.wallet.findUnique.mockResolvedValue({
+        id: 'wallet-1',
+        customerId: 'cust-1',
+        currency: 'NGN',
+      });
+      prisma.walletTransaction.findUnique.mockResolvedValue({ id: 'existing' });
+      prisma.walletTransaction.aggregate.mockResolvedValue({
+        _sum: { amount: 100 },
+      });
+      prisma.walletTransaction.findMany.mockResolvedValue([]);
+
+      await service.creditManual(
+        'cust-1',
+        100,
+        'x',
+        'staff-1',
+        'id-1',
+        undefined,
+        'key-123',
+      );
+
+      expect(prisma.walletTransaction.create).not.toHaveBeenCalled();
+      expect(ledgerService.post).not.toHaveBeenCalled();
+    });
+
+    it('treats a unique-reference collision from a racing duplicate as a replay', async () => {
+      prisma.wallet.findUnique.mockResolvedValue({
+        id: 'wallet-1',
+        customerId: 'cust-1',
+        currency: 'NGN',
+      });
+      prisma.walletTransaction.findUnique.mockResolvedValue(null);
+      prisma.walletTransaction.create.mockRejectedValue(
+        Object.assign(new Error('dup'), { code: 'P2002' }),
+      );
+      prisma.walletTransaction.aggregate.mockResolvedValue({
+        _sum: { amount: 100 },
+      });
+      prisma.walletTransaction.findMany.mockResolvedValue([]);
+
+      await expect(
+        service.creditManual(
+          'cust-1',
+          100,
+          'x',
+          'staff-1',
+          'id-1',
+          undefined,
+          'key-123',
+        ),
+      ).resolves.toBeDefined();
+      expect(ledgerService.post).not.toHaveBeenCalled();
+    });
+
+    it('derives the same reference for the same key and a different one for another key', async () => {
+      prisma.wallet.findUnique.mockResolvedValue({
+        id: 'wallet-1',
+        customerId: 'cust-1',
+        currency: 'NGN',
+      });
+      prisma.walletTransaction.findUnique.mockResolvedValue(null);
+      prisma.walletTransaction.create.mockResolvedValue({
+        id: 't',
+        description: 'd',
+      });
+      prisma.customer.findUnique.mockResolvedValue(null);
+      prisma.walletTransaction.aggregate.mockResolvedValue({
+        _sum: { amount: 0 },
+      });
+      prisma.walletTransaction.findMany.mockResolvedValue([]);
+
+      await service.creditManual('cust-1', 1, 'x', 's', 'i', undefined, 'same');
+      await service.creditManual('cust-1', 1, 'x', 's', 'i', undefined, 'same');
+      await service.creditManual(
+        'cust-1',
+        1,
+        'x',
+        's',
+        'i',
+        undefined,
+        'other',
+      );
+      const refs = prisma.walletTransaction.create.mock.calls.map(
+        (c) => c[0].data.reference,
+      );
+      expect(refs[0]).toBe(refs[1]);
+      expect(refs[2]).not.toBe(refs[0]);
+    });
+
+    it('takes the wallet lock before checking a debit, so concurrent debits cannot both pass', async () => {
+      prisma.wallet.findUnique.mockResolvedValue({
+        id: 'wallet-1',
+        customerId: 'cust-1',
+        currency: 'NGN',
+      });
+      prisma.walletTransaction.aggregate.mockResolvedValue({
+        _sum: { amount: 50 },
+      });
+
+      await expect(
+        service.adjust(
+          'cust-1',
+          -100,
+          WalletTransactionType.WITHDRAWAL,
+          'x',
+          's',
+          'i',
+        ),
+      ).rejects.toThrow(/negative/);
+      expect(prisma.$executeRaw).toHaveBeenCalled();
+      expect(prisma.walletTransaction.create).not.toHaveBeenCalled();
+    });
+
+    it('refuses a transfer between wallets of different currencies', async () => {
+      prisma.wallet.findUnique
+        .mockResolvedValueOnce({ id: 'w1', customerId: 'a', currency: 'NGN' })
+        .mockResolvedValueOnce({ id: 'w2', customerId: 'b', currency: 'USD' });
+
+      await expect(
+        service.transferBetweenWallets('a', 'b', 10, 'x', 's', 'i'),
+      ).rejects.toThrow(/different currencies/);
+      expect(prisma.walletTransaction.create).not.toHaveBeenCalled();
     });
   });
 });

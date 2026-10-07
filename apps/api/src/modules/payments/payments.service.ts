@@ -16,6 +16,11 @@ import {
   PaymentMethod,
 } from '@prisma/client';
 import { randomBytes } from 'crypto';
+import {
+  invoiceStanding,
+  lockAndAssertPayable,
+  lockInvoice,
+} from '../../common/db/payment-guards';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { FinancePostingService } from '../finance/finance-posting.service';
 import { IncentivesService } from '../incentives/incentives.service';
@@ -103,15 +108,20 @@ export class PaymentsService {
       );
     }
 
-    const payment = await this.prisma.payment.create({
-      data: {
-        paymentReference: generatePaymentReference(),
-        invoiceId,
-        amount: dto.amount,
-        method: dto.method,
-        note: dto.note,
-        recordedByStaffId: staffId,
-      },
+    // The checks above give a fast, friendly error; this is the authoritative one. Under the invoice
+    // lock the outstanding balance is re-read, so two simultaneous payments cannot both fit.
+    const payment = await this.prisma.$transaction(async (tx) => {
+      await lockAndAssertPayable(tx, invoiceId, dto.amount);
+      return tx.payment.create({
+        data: {
+          paymentReference: generatePaymentReference(),
+          invoiceId,
+          amount: dto.amount,
+          method: dto.method,
+          note: dto.note,
+          recordedByStaffId: staffId,
+        },
+      });
     });
 
     await this.financePostingService.postRevenueForPayment(payment, invoice);
@@ -390,24 +400,49 @@ export class PaymentsService {
     // but only after doing real work and surfacing as an unhandled error
     // instead of a clean, silent no-op. Only the caller whose update
     // actually changes a row (count 1) proceeds.
-    const claim = await this.prisma.paymentIntent.updateMany({
-      where: { id: intent.id, status: PaymentIntentStatus.PENDING },
-      data: { status: PaymentIntentStatus.SUCCEEDED },
+    //
+    // The claim and the Payment row are written in ONE transaction, under the invoice lock: a crash
+    // can no longer leave an intent marked SUCCEEDED with no payment recorded (the money taken and
+    // nothing to show for it), and the surplus check below sees a consistent balance.
+    const recorded = await this.prisma.$transaction(async (tx) => {
+      const claim = await tx.paymentIntent.updateMany({
+        where: { id: intent.id, status: PaymentIntentStatus.PENDING },
+        data: { status: PaymentIntentStatus.SUCCEEDED },
+      });
+      if (claim.count === 0) {
+        return null;
+      }
+      await lockInvoice(tx, intent.invoiceId);
+      const standing = await invoiceStanding(tx, intent.invoiceId);
+      const payment = await tx.payment.create({
+        data: {
+          paymentReference: intent.reference,
+          invoiceId: intent.invoiceId,
+          amount: intent.amount,
+          method: PaymentMethod.ONLINE,
+          note: `Paid online via ${intent.provider}`,
+          recordedByStaffId: null,
+        },
+      });
+      return { payment, standing };
     });
-    if (claim.count === 0) {
+    if (!recorded) {
       return { ok: true };
     }
-
-    const onlinePayment = await this.prisma.payment.create({
-      data: {
-        paymentReference: intent.reference,
-        invoiceId: intent.invoiceId,
-        amount: intent.amount,
-        method: PaymentMethod.ONLINE,
-        note: `Paid online via ${intent.provider}`,
-        recordedByStaffId: null,
-      },
-    });
+    const onlinePayment = recorded.payment;
+    // The customer has really paid, so the payment is recorded whatever happened to the invoice in
+    // the meantime (settled another way, voided). A surplus is never silently swallowed: it is logged
+    // for Finance to refund or credit to the customer's wallet. There is no automatic refund yet.
+    if (
+      recorded.standing.status === InvoiceStatus.VOID ||
+      intent.amount > Math.max(recorded.standing.outstanding, 0)
+    ) {
+      this.logger.error(
+        `Online payment ${intent.reference} (${intent.amount} ${intent.currency}) landed on invoice ` +
+          `${intent.invoiceId} which was ${recorded.standing.status} with ` +
+          `${recorded.standing.outstanding} outstanding: surplus needs refunding or wallet credit.`,
+      );
+    }
 
     const invoiceForLedger = await this.prisma.invoice.findUniqueOrThrow({
       where: { id: intent.invoiceId },

@@ -42,6 +42,7 @@ describe('ManualPaymentsService', () => {
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       payment: { create: jest.fn() },
+      $executeRaw: jest.fn().mockResolvedValue(1),
       $transaction: jest.fn((cb) => cb(prisma)),
     };
     invoicesService = { recomputeStatus: jest.fn() };
@@ -199,6 +200,11 @@ describe('ManualPaymentsService', () => {
         totalAmount: 50_000,
         payments: [],
       });
+      prisma.invoice.findUnique.mockResolvedValue({
+        status: InvoiceStatus.ISSUED,
+        totalAmount: 50_000,
+        payments: [],
+      });
       prisma.payment.create.mockResolvedValue({ id: 'payment-1' });
       invoicesService.recomputeStatus.mockResolvedValue({
         id: 'invoice-1',
@@ -269,6 +275,35 @@ describe('ManualPaymentsService', () => {
           'identity-finance',
         ),
       ).rejects.toThrow(ConflictException);
+      expect(prisma.payment.create).not.toHaveBeenCalled();
+    });
+
+    it('re-reads the balance under the invoice lock: a payment that landed since the check blocks the approval', async () => {
+      prisma.manualPaymentSubmission.findFirst.mockResolvedValue(
+        pendingSubmission,
+      );
+      // The pre-check (findUniqueOrThrow) still sees room...
+      prisma.invoice.findUniqueOrThrow.mockResolvedValue({
+        id: 'invoice-1',
+        totalAmount: 50_000,
+        status: InvoiceStatus.ISSUED,
+        payments: [],
+      });
+      // ...but by the time the lock is held, another payment has taken most of it.
+      prisma.invoice.findUnique.mockResolvedValue({
+        status: InvoiceStatus.PARTIALLY_PAID,
+        totalAmount: 50_000,
+        payments: [{ amount: 40_000 }],
+      });
+
+      await expect(
+        service.approve(
+          'sub-1',
+          'staff-finance',
+          undefined,
+          'identity-finance',
+        ),
+      ).rejects.toThrow(BadRequestException);
       expect(prisma.payment.create).not.toHaveBeenCalled();
     });
 

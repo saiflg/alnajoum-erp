@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import type { AuthContext } from '../../common/interfaces/auth-context.interface';
+import { resolveTenantFilter } from '../../common/utils/tenant.util';
 import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { UsersService } from '../users/users.service';
 import { AdjustWalletDto } from './dto/adjust-wallet.dto';
@@ -18,14 +19,17 @@ export class WalletAdminController {
 
   @Get()
   @RequirePermissions(PERMISSIONS.WALLET.READ_ALL)
-  listAll() {
-    return this.walletService.listAllWallets();
+  listAll(@CurrentUser() user: AuthContext) {
+    return this.walletService.listAllWallets(resolveTenantFilter(user));
   }
 
   /** Static route — must be registered before the dynamic ":customerId" GET below. */
   @Post('transfer')
   @RequirePermissions(PERMISSIONS.WALLET.TRANSFER)
-  async transfer(@CurrentUser() user: AuthContext, @Body() dto: TransferWalletDto) {
+  async transfer(
+    @CurrentUser() user: AuthContext,
+    @Body() dto: TransferWalletDto,
+  ) {
     const staffId = await this.usersService.getStaffIdForIdentity(user.sub);
     return this.walletService.transferBetweenWallets(
       dto.fromCustomerId,
@@ -34,13 +38,21 @@ export class WalletAdminController {
       dto.description,
       staffId ?? undefined,
       user.sub,
+      resolveTenantFilter(user),
+      dto.idempotencyKey,
     );
   }
 
   @Get(':customerId')
   @RequirePermissions(PERMISSIONS.WALLET.READ_ALL)
-  getOne(@Param('customerId') customerId: string) {
-    return this.walletService.getWalletWithBalance(customerId);
+  getOne(
+    @CurrentUser() user: AuthContext,
+    @Param('customerId') customerId: string,
+  ) {
+    return this.walletService.getWalletForAdmin(
+      customerId,
+      resolveTenantFilter(user),
+    );
   }
 
   @Post(':customerId/credit')
@@ -57,6 +69,8 @@ export class WalletAdminController {
       dto.description,
       staffId ?? undefined,
       user.sub,
+      resolveTenantFilter(user),
+      dto.idempotencyKey,
     );
   }
 
@@ -75,6 +89,8 @@ export class WalletAdminController {
       dto.description,
       staffId ?? undefined,
       user.sub,
+      resolveTenantFilter(user),
+      dto.idempotencyKey,
     );
   }
 }

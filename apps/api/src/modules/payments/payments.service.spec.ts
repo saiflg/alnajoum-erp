@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -48,7 +49,20 @@ describe('PaymentsService', () => {
         updateMany: jest.fn(),
       },
       customer: { findUnique: jest.fn() },
-    };
+    } as typeof prisma;
+    // Interactive-transaction plumbing used by the concurrency guards (src/common/db/payment-guards).
+    (prisma as Record<string, unknown>).$executeRaw = jest
+      .fn()
+      .mockResolvedValue(1);
+    (prisma as Record<string, unknown>).$transaction = jest.fn(
+      (cb: (tx: unknown) => Promise<unknown>) => cb(prisma),
+    );
+    // Default standing for the guard's re-read inside the transaction; tests override as needed.
+    prisma.invoice.findUnique.mockResolvedValue({
+      status: 'ISSUED',
+      totalAmount: 1_000_000,
+      payments: [],
+    });
     invoicesService = {
       recomputeStatus: jest.fn(),
       getInvoice: jest.fn(),
@@ -93,6 +107,34 @@ describe('PaymentsService', () => {
   });
 
   describe('recordPayment', () => {
+    it('re-checks the balance under the invoice lock, so two simultaneous payments cannot both fit', async () => {
+      // Both requests pass the pre-check against an unpaid invoice...
+      prisma.invoice.findUnique
+        .mockResolvedValueOnce({
+          id: 'invoice-1',
+          status: InvoiceStatus.ISSUED,
+          totalAmount: 50_000,
+          payments: [],
+        })
+        // ...but the second one, once it holds the lock, sees the first payment already counted.
+        .mockResolvedValueOnce({
+          status: InvoiceStatus.PARTIALLY_PAID,
+          totalAmount: 50_000,
+          payments: [{ amount: 40_000 }],
+        });
+
+      await expect(
+        service.recordPayment('invoice-1', {
+          amount: 30_000,
+          method: PaymentMethod.CASH,
+        }),
+      ).rejects.toThrow(/exceeds the outstanding balance \(10000\)/);
+      expect(prisma.payment.create).not.toHaveBeenCalled();
+      expect(
+        (prisma as Record<string, unknown>).$executeRaw,
+      ).toHaveBeenCalled();
+    });
+
     it('throws NotFound when the invoice does not exist', async () => {
       prisma.invoice.findUnique.mockResolvedValue(null);
 
@@ -523,6 +565,74 @@ describe('PaymentsService', () => {
         service.verifyCheckout('customer-1', 'invoice-1', 'CHK-ABC123'),
       ).rejects.toThrow(ConflictException);
       expect(prisma.payment.create).not.toHaveBeenCalled();
+    });
+
+    it('still records money the gateway really took when the invoice was settled meanwhile, and flags the surplus', async () => {
+      const error = jest.spyOn(Logger.prototype, 'error').mockImplementation();
+      prisma.paymentIntent.findUnique.mockResolvedValue(pendingIntent);
+      paymentProvider.verifyCheckout.mockResolvedValue({
+        reference: 'CHK-ABC123',
+        success: true,
+        amount: 30_000,
+        currency: 'NGN',
+      });
+      prisma.paymentIntent.updateMany.mockResolvedValue({ count: 1 });
+      // Paid in full by someone else in the meantime.
+      prisma.invoice.findUnique.mockResolvedValue({
+        status: InvoiceStatus.PAID,
+        totalAmount: 30_000,
+        payments: [{ amount: 30_000 }],
+      });
+      prisma.payment.create.mockResolvedValue({ id: 'p-1' });
+      prisma.invoice.findUniqueOrThrow.mockResolvedValue({ id: 'invoice-1' });
+      prisma.customer.findUnique.mockResolvedValue(null);
+      invoicesService.recomputeStatus.mockResolvedValue({
+        id: 'invoice-1',
+        invoiceNumber: 'INV-1',
+        totalAmount: 30_000,
+        currency: 'NGN',
+        payments: [{ amount: 30_000 }, { amount: 30_000 }],
+      });
+      invoicesService.getInvoice.mockResolvedValue({ id: 'invoice-1' });
+
+      await service.verifyCheckout('customer-1', 'invoice-1', 'CHK-ABC123');
+
+      expect(prisma.payment.create).toHaveBeenCalled();
+      expect(error).toHaveBeenCalledWith(
+        expect.stringContaining('surplus needs refunding'),
+      );
+      error.mockRestore();
+    });
+
+    it('writes the intent claim and the payment in one transaction under the invoice lock', async () => {
+      prisma.paymentIntent.findUnique.mockResolvedValue(pendingIntent);
+      paymentProvider.verifyCheckout.mockResolvedValue({
+        reference: 'CHK-ABC123',
+        success: true,
+        amount: 30_000,
+        currency: 'NGN',
+      });
+      prisma.paymentIntent.updateMany.mockResolvedValue({ count: 1 });
+      prisma.payment.create.mockResolvedValue({ id: 'p-1' });
+      prisma.invoice.findUniqueOrThrow.mockResolvedValue({ id: 'invoice-1' });
+      prisma.customer.findUnique.mockResolvedValue(null);
+      invoicesService.recomputeStatus.mockResolvedValue({
+        id: 'invoice-1',
+        invoiceNumber: 'INV-1',
+        totalAmount: 30_000,
+        currency: 'NGN',
+        payments: [{ amount: 30_000 }],
+      });
+      invoicesService.getInvoice.mockResolvedValue({ id: 'invoice-1' });
+      const tx = prisma as unknown as {
+        $transaction: jest.Mock;
+        $executeRaw: jest.Mock;
+      };
+
+      await service.verifyCheckout('customer-1', 'invoice-1', 'CHK-ABC123');
+
+      expect(tx.$transaction).toHaveBeenCalledTimes(1);
+      expect(tx.$executeRaw).toHaveBeenCalled();
     });
 
     it('records an ONLINE payment, recomputes status, and emails a receipt on success', async () => {

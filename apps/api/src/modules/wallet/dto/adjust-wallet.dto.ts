@@ -1,5 +1,13 @@
 import { WalletTransactionType } from '@prisma/client';
-import { IsEnum, IsInt, IsString, Max, MaxLength, Min } from 'class-validator';
+import {
+  IsEnum,
+  IsInt,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+  IsOptional,
+} from 'class-validator';
 
 const ADJUSTABLE_TYPES = [
   WalletTransactionType.ADJUSTMENT,
@@ -20,4 +28,10 @@ export class AdjustWalletDto {
   @IsString()
   @MaxLength(255)
   description: string;
+
+  /** Send the same key when retrying a request; the second attempt then returns the first result instead of repeating it. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  idempotencyKey?: string;
 }
