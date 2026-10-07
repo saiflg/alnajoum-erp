@@ -71,6 +71,25 @@ export function checkProductionConfig(
       'JWT_ACCESS_SECRET and JWT_REFRESH_SECRET must be different',
     );
 
+  const keys = str('DATA_ENCRYPTION_KEYS');
+  if (!keys) {
+    err(
+      'DATA_ENCRYPTION_KEYS',
+      'DATA_ENCRYPTION_KEYS is required in production (stored integration secrets are encrypted with it). Generate one: openssl rand -base64 32, then set DATA_ENCRYPTION_KEYS=2026a:<that value>',
+    );
+  } else if (
+    !keys
+      .split(',')
+      .every((p) =>
+        /^[A-Za-z0-9_-]{1,32}:[A-Za-z0-9+/=_-]{43,}$/.test(p.trim()),
+      )
+  ) {
+    err(
+      'DATA_ENCRYPTION_KEYS',
+      'DATA_ENCRYPTION_KEYS must look like id:base64(32 bytes)[,id2:base64...]',
+    );
+  }
+
   const mock = (k: string): boolean =>
     (str(k) || 'mock').toLowerCase() === 'mock';
   if (mock('PAYMENT_PROVIDER'))

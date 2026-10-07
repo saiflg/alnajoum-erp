@@ -1,10 +1,13 @@
 import { Body, Controller, Get, Param, Patch } from '@nestjs/common';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
+import { Roles } from '../../common/decorators/roles.decorator';
 import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { TemplatesService } from './templates.service';
 
 /** Spec #16/#22 — administrators editing message templates. */
+// Templates are shared by every tenant, so editing them is a platform operation.
 @Controller('notifications/templates')
+@Roles('SUPER_ADMIN')
 @RequirePermissions(PERMISSIONS.INTEGRATIONS.MANAGE)
 export class TemplatesController {
   constructor(private readonly templatesService: TemplatesService) {}

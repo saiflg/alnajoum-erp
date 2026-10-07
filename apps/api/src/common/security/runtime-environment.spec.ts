@@ -4,6 +4,7 @@ const good = {
   NODE_ENV: 'production',
   JWT_ACCESS_SECRET: 'a3f9c1d27b5e48f0a1b2c3d4e5f60718293a4b5c6d7e8f90',
   JWT_REFRESH_SECRET: '0f1e2d3c4b5a69788796a5b4c3d2e1f00112233445566778',
+  DATA_ENCRYPTION_KEYS: '2026a:7nQd0yVJ3m1c2G5kPzXw8bT4uLrHsAe6oFiYtC9vKxM=',
   PAYMENT_PROVIDER: 'paystack',
   WHATSAPP_PROVIDER: 'meta',
   NOTIFICATION_PROVIDER: 'smtp',
@@ -69,6 +70,15 @@ describe('checkProductionConfig', () => {
     expect(
       errorsOf({ ...good, JWT_REFRESH_SECRET: good.JWT_ACCESS_SECRET }),
     ).toContain('JWT_REFRESH_SECRET');
+  });
+
+  it('requires a well-formed data encryption key', () => {
+    expect(errorsOf({ ...good, DATA_ENCRYPTION_KEYS: undefined })).toContain(
+      'DATA_ENCRYPTION_KEYS',
+    );
+    expect(errorsOf({ ...good, DATA_ENCRYPTION_KEYS: 'short' })).toContain(
+      'DATA_ENCRYPTION_KEYS',
+    );
   });
 
   it('requires an origin, warns when it is not https, rejects the dev DB password', () => {

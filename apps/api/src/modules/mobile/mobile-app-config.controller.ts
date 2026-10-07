@@ -3,6 +3,7 @@ import { MobilePlatform } from '@prisma/client';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
+import { Roles } from '../../common/decorators/roles.decorator';
 import type { AuthContext } from '../../common/interfaces/auth-context.interface';
 import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { UpsertMobileAppConfigDto } from './dto/upsert-mobile-app-config.dto';
@@ -27,7 +28,9 @@ export class MobileAppConfigController {
     return this.configService.listAll();
   }
 
+  // One config row per platform for the whole product (forced-update / maintenance mode): platform-level.
   @Put('admin/:platform')
+  @Roles('SUPER_ADMIN')
   @RequirePermissions(PERMISSIONS.MOBILE.APP_CONFIG_MANAGE)
   upsert(
     @CurrentUser() user: AuthContext,

@@ -2,6 +2,7 @@ import { Body, Controller, Get, Patch } from '@nestjs/common';
 import { IsInt, IsOptional, Min } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
+import { Roles } from '../../common/decorators/roles.decorator';
 import type { AuthContext } from '../../common/interfaces/auth-context.interface';
 import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { FinanceSettingsService } from './finance-settings.service';
@@ -28,7 +29,9 @@ export class FinanceSettingsController {
     return this.service.get();
   }
 
+  // Finance settings are a single global row (accounts, rates), not per company.
   @Patch()
+  @Roles('SUPER_ADMIN')
   update(
     @CurrentUser() user: AuthContext,
     @Body() dto: UpdateFinanceSettingsDto,
