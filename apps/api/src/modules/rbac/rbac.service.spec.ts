@@ -22,7 +22,13 @@ describe('RbacService', () => {
         delete: jest.fn(),
       },
       permission: { findMany: jest.fn() },
-      rolePermission: { deleteMany: jest.fn(), createMany: jest.fn() },
+      rolePermission: {
+        deleteMany: jest.fn(),
+        createMany: jest.fn(),
+        findMany: jest.fn(),
+      },
+      identity: { findFirst: jest.fn() },
+      branch: { findFirst: jest.fn() },
       identityRole: {
         findMany: jest.fn(),
         upsert: jest.fn(),
@@ -175,20 +181,125 @@ describe('RbacService', () => {
       expect(prisma.identityRole.upsert).toHaveBeenCalled();
     });
 
-    it("allows granting an ordinary role regardless of the acting caller's own roles", async () => {
+    describe('as a tenant admin (Phase 22 S-06/S-07)', () => {
+      const actor = {
+        sub: 'actor-1',
+        roles: ['COMPANY_ADMIN'],
+        companyId: 'company-1',
+      };
+
+      beforeEach(() => {
+        prisma.role.findUnique.mockResolvedValue({
+          id: 'role-1',
+          name: 'STAFF',
+        });
+        prisma.identity.findFirst.mockResolvedValue({ id: 'identity-1' });
+        prisma.rolePermission.findMany.mockResolvedValue([
+          { permission: { key: 'customer:read' } },
+        ]);
+        prisma.permission.findMany.mockResolvedValue([
+          { key: 'customer:read' },
+          { key: 'customer:update' },
+        ]);
+        prisma.identityRole.upsert.mockResolvedValue({});
+      });
+
+      it('grants an ordinary role the caller already has the permissions for, recorded against their company', async () => {
+        await service.assignRoleToIdentity(
+          'identity-1',
+          { roleId: 'role-1', companyId: 'company-OTHER' },
+          actor,
+        );
+
+        const args = prisma.identityRole.upsert.mock.calls[0][0] as {
+          create: { companyId: string };
+          update: { companyId: string };
+        };
+        expect(args.create.companyId).toBe('company-1');
+        expect(args.update.companyId).toBe('company-1');
+      });
+
+      it("will not touch an identity outside the caller's company", async () => {
+        prisma.identity.findFirst.mockResolvedValue(null);
+
+        await expect(
+          service.assignRoleToIdentity(
+            'identity-x',
+            { roleId: 'role-1' },
+            actor,
+          ),
+        ).rejects.toThrow(NotFoundException);
+        expect(prisma.identityRole.upsert).not.toHaveBeenCalled();
+        expect(prisma.identity.findFirst.mock.calls[0][0].where).toEqual({
+          id: 'identity-x',
+          OR: [
+            { customer: { companyId: 'company-1' } },
+            { staff: { companyId: 'company-1' } },
+          ],
+        });
+      });
+
+      it('refuses a role carrying permissions the caller does not hold (privilege ceiling)', async () => {
+        prisma.rolePermission.findMany.mockResolvedValue([
+          { permission: { key: 'customer:read' } },
+          { permission: { key: 'company:create' } },
+        ]);
+
+        await expect(
+          service.assignRoleToIdentity(
+            'identity-1',
+            { roleId: 'role-1' },
+            actor,
+          ),
+        ).rejects.toThrow(/company:create/);
+        expect(prisma.identityRole.upsert).not.toHaveBeenCalled();
+      });
+
+      it('refuses a branch that belongs to another company', async () => {
+        prisma.branch.findFirst.mockResolvedValue(null);
+
+        await expect(
+          service.assignRoleToIdentity(
+            'identity-1',
+            { roleId: 'role-1', branchId: 'branch-x' },
+            actor,
+          ),
+        ).rejects.toThrow(NotFoundException);
+      });
+
+      it('a caller with no company is confined to nothing, not everything', async () => {
+        prisma.identity.findFirst.mockResolvedValue(null);
+
+        await expect(
+          service.assignRoleToIdentity(
+            'identity-1',
+            { roleId: 'role-1' },
+            { ...actor, companyId: null },
+          ),
+        ).rejects.toThrow(NotFoundException);
+        expect(
+          JSON.stringify(prisma.identity.findFirst.mock.calls[0][0]),
+        ).toContain('__no_tenant__');
+      });
+    });
+
+    it('lets a SUPER_ADMIN grant any role to any identity without tenant or ceiling checks', async () => {
       prisma.role.findUnique.mockResolvedValue({
         id: 'role-1',
-        name: 'STAFF',
+        name: 'COMPANY_ADMIN',
       });
       prisma.identityRole.upsert.mockResolvedValue({});
 
       await service.assignRoleToIdentity(
         'identity-1',
-        { roleId: 'role-1' },
-        { sub: 'actor-1', roles: ['BRANCH_MANAGER'] },
+        { roleId: 'role-1', companyId: 'company-9' },
+        { sub: 'root', roles: ['SUPER_ADMIN'] },
       );
 
-      expect(prisma.identityRole.upsert).toHaveBeenCalled();
+      expect(prisma.identity.findFirst).not.toHaveBeenCalled();
+      expect(prisma.identityRole.upsert.mock.calls[0][0].create.companyId).toBe(
+        'company-9',
+      );
     });
   });
 
@@ -208,16 +319,32 @@ describe('RbacService', () => {
       expect(prisma.identityRole.delete).not.toHaveBeenCalled();
     });
 
-    it('allows removing an ordinary role', async () => {
+    it("allows removing an ordinary role from an identity in the caller's own company", async () => {
       prisma.role.findUnique.mockResolvedValue({ id: 'role-1', name: 'STAFF' });
+      prisma.identity.findFirst.mockResolvedValue({ id: 'identity-1' });
       prisma.identityRole.delete.mockResolvedValue({});
 
       await service.removeRoleFromIdentity('identity-1', 'role-1', {
         sub: 'actor-1',
         roles: ['COMPANY_ADMIN'],
+        companyId: 'company-1',
       });
 
       expect(prisma.identityRole.delete).toHaveBeenCalled();
+    });
+
+    it('will not strip a role from an identity in another company', async () => {
+      prisma.role.findUnique.mockResolvedValue({ id: 'role-1', name: 'STAFF' });
+      prisma.identity.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.removeRoleFromIdentity('identity-x', 'role-1', {
+          sub: 'actor-1',
+          roles: ['COMPANY_ADMIN'],
+          companyId: 'company-1',
+        }),
+      ).rejects.toThrow(NotFoundException);
+      expect(prisma.identityRole.delete).not.toHaveBeenCalled();
     });
   });
 });

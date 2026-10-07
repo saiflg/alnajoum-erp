@@ -8,6 +8,7 @@ import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { SYSTEM_ROLES } from './constants/default-roles.constant';
 import { AssignRoleDto } from './dto/assign-role.dto';
+import { assertRoleGrantable } from './role-grant.policy';
 import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
 
@@ -114,7 +115,7 @@ export class RbacService {
   async assignRoleToIdentity(
     identityId: string,
     dto: AssignRoleDto,
-    actingUser?: { sub: string; roles: string[] },
+    actingUser?: { sub: string; roles: string[]; companyId?: string | null },
   ) {
     const role = await this.prisma.role.findUnique({
       where: { id: dto.roleId },
@@ -139,6 +140,25 @@ export class RbacService {
       );
     }
 
+    // A caller who is not a SUPER_ADMIN is confined to their own company: the target identity must
+    // belong to it (another company's identity is a 404), the grant is recorded against that company
+    // whatever the request says, any branch must belong to it, and the role must not exceed the
+    // caller's own permissions. `actingUser` is undefined only for internal/seed callers.
+    let companyId = dto.companyId;
+    if (actingUser && !actingUser.roles.includes(SYSTEM_ROLES.SUPER_ADMIN)) {
+      const tenant = actingUser.companyId ?? '__no_tenant__';
+      await this.assertIdentityInCompany(identityId, tenant);
+      await assertRoleGrantable(this.prisma, actingUser, role);
+      companyId = tenant;
+      if (dto.branchId) {
+        const branch = await this.prisma.branch.findFirst({
+          where: { id: dto.branchId, companyId: tenant },
+          select: { id: true },
+        });
+        if (!branch) throw new NotFoundException('Branch not found');
+      }
+    }
+
     await this.auditService.record({
       identityId: actingUser?.sub,
       action: 'security.role_changed',
@@ -152,20 +172,32 @@ export class RbacService {
       create: {
         identityId,
         roleId: dto.roleId,
-        companyId: dto.companyId,
+        companyId,
         branchId: dto.branchId,
       },
       update: {
-        companyId: dto.companyId,
+        companyId,
         branchId: dto.branchId,
       },
     });
   }
 
+  /** An identity belongs to a company through its customer or staff profile. */
+  private async assertIdentityInCompany(identityId: string, companyId: string) {
+    const identity = await this.prisma.identity.findFirst({
+      where: {
+        id: identityId,
+        OR: [{ customer: { companyId } }, { staff: { companyId } }],
+      },
+      select: { id: true },
+    });
+    if (!identity) throw new NotFoundException('Identity not found');
+  }
+
   async removeRoleFromIdentity(
     identityId: string,
     roleId: string,
-    actingUser?: { sub: string; roles: string[] },
+    actingUser?: { sub: string; roles: string[]; companyId?: string | null },
   ) {
     const role = await this.prisma.role.findUnique({ where: { id: roleId } });
     if (
@@ -174,6 +206,12 @@ export class RbacService {
     ) {
       throw new ForbiddenException(
         'Only an existing Super Admin can remove the Super Admin role.',
+      );
+    }
+    if (actingUser && !actingUser.roles.includes(SYSTEM_ROLES.SUPER_ADMIN)) {
+      await this.assertIdentityInCompany(
+        identityId,
+        actingUser.companyId ?? '__no_tenant__',
       );
     }
 

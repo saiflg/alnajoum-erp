@@ -11,8 +11,12 @@ export class CompanyService {
     return this.prisma.company.create({ data: dto });
   }
 
-  findAll() {
-    return this.prisma.company.findMany({ orderBy: { createdAt: 'desc' } });
+  /** `tenant` undefined = SUPER_ADMIN (every company); otherwise only the caller's own. */
+  findAll(tenant?: string) {
+    return this.prisma.company.findMany({
+      where: tenant === undefined ? undefined : { id: tenant },
+      orderBy: { createdAt: 'desc' },
+    });
   }
 
   /**
@@ -36,7 +40,11 @@ export class CompanyService {
     return company.id;
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, tenant?: string) {
+    // Another tenant's company is indistinguishable from a missing one.
+    if (tenant !== undefined && tenant !== id) {
+      throw new NotFoundException('Company not found');
+    }
     const company = await this.prisma.company.findUnique({
       where: { id },
       include: { branches: true },
@@ -47,8 +55,8 @@ export class CompanyService {
     return company;
   }
 
-  async update(id: string, dto: UpdateCompanyDto) {
-    await this.findOne(id);
+  async update(id: string, dto: UpdateCompanyDto, tenant?: string) {
+    await this.findOne(id, tenant);
     return this.prisma.company.update({ where: { id }, data: dto });
   }
 

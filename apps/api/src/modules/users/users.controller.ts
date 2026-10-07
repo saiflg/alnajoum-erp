@@ -73,7 +73,10 @@ export class UsersController {
   @Post()
   @RequirePermissions(PERMISSIONS.STAFF.CREATE)
   create(@CurrentUser() user: AuthContext, @Body() dto: CreateStaffDto) {
-    return this.usersService.createStaff(dto, resolveTenantFilter(user));
+    return this.usersService.createStaff(dto, resolveTenantFilter(user), {
+      sub: user.sub,
+      roles: user.roles,
+    });
   }
 
   @Get()

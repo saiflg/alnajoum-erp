@@ -8,7 +8,10 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
+import type { AuthContext } from '../../common/interfaces/auth-context.interface';
+import { resolveTenantFilter } from '../../common/utils/tenant.util';
 import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { BranchService } from './branch.service';
 import { CreateBranchDto } from './dto/create-branch.dto';
@@ -20,31 +23,38 @@ export class BranchController {
 
   @Post()
   @RequirePermissions(PERMISSIONS.BRANCH.CREATE)
-  create(@Body() dto: CreateBranchDto) {
-    return this.branchService.create(dto);
+  create(@CurrentUser() user: AuthContext, @Body() dto: CreateBranchDto) {
+    return this.branchService.create(dto, resolveTenantFilter(user));
   }
 
   @Get()
   @RequirePermissions(PERMISSIONS.BRANCH.READ)
-  findAll(@Query('companyId') companyId?: string) {
-    return this.branchService.findAll(companyId);
+  findAll(
+    @CurrentUser() user: AuthContext,
+    @Query('companyId') companyId?: string,
+  ) {
+    return this.branchService.findAll(companyId, resolveTenantFilter(user));
   }
 
   @Get(':id')
   @RequirePermissions(PERMISSIONS.BRANCH.READ)
-  findOne(@Param('id') id: string) {
-    return this.branchService.findOne(id);
+  findOne(@CurrentUser() user: AuthContext, @Param('id') id: string) {
+    return this.branchService.findOne(id, resolveTenantFilter(user));
   }
 
   @Patch(':id')
   @RequirePermissions(PERMISSIONS.BRANCH.UPDATE)
-  update(@Param('id') id: string, @Body() dto: UpdateBranchDto) {
-    return this.branchService.update(id, dto);
+  update(
+    @CurrentUser() user: AuthContext,
+    @Param('id') id: string,
+    @Body() dto: UpdateBranchDto,
+  ) {
+    return this.branchService.update(id, dto, resolveTenantFilter(user));
   }
 
   @Delete(':id')
   @RequirePermissions(PERMISSIONS.BRANCH.DELETE)
-  remove(@Param('id') id: string) {
-    return this.branchService.remove(id);
+  remove(@CurrentUser() user: AuthContext, @Param('id') id: string) {
+    return this.branchService.remove(id, resolveTenantFilter(user));
   }
 }

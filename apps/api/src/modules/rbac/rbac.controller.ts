@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
+import { Roles } from '../../common/decorators/roles.decorator';
 import type { AuthContext } from '../../common/interfaces/auth-context.interface';
 import { PERMISSIONS } from './constants/permissions.constant';
 import { AssignRoleDto } from './dto/assign-role.dto';
@@ -33,18 +34,21 @@ export class RbacController {
   }
 
   @Post('roles')
+  @Roles('SUPER_ADMIN') // roles are global, so defining them is a platform operation
   @RequirePermissions(PERMISSIONS.ROLE.CREATE)
   createRole(@Body() dto: CreateRoleDto) {
     return this.rbacService.createRole(dto);
   }
 
   @Patch('roles/:roleId')
+  @Roles('SUPER_ADMIN') // roles are global, so defining them is a platform operation
   @RequirePermissions(PERMISSIONS.ROLE.UPDATE)
   updateRole(@Param('roleId') roleId: string, @Body() dto: UpdateRoleDto) {
     return this.rbacService.updateRole(roleId, dto);
   }
 
   @Delete('roles/:roleId')
+  @Roles('SUPER_ADMIN') // roles are global, so defining them is a platform operation
   @RequirePermissions(PERMISSIONS.ROLE.DELETE)
   deleteRole(@Param('roleId') roleId: string) {
     return this.rbacService.deleteRole(roleId);
@@ -60,6 +64,7 @@ export class RbacController {
     return this.rbacService.assignRoleToIdentity(identityId, dto, {
       sub: user.sub,
       roles: user.roles,
+      companyId: user.companyId,
     });
   }
 
@@ -73,6 +78,7 @@ export class RbacController {
     return this.rbacService.removeRoleFromIdentity(identityId, roleId, {
       sub: user.sub,
       roles: user.roles,
+      companyId: user.companyId,
     });
   }
 }

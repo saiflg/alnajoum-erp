@@ -13,6 +13,8 @@ describe('UsersService', () => {
       identity: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn() },
       company: { findUnique: jest.fn() },
       role: { findUnique: jest.fn() },
+      rolePermission: { findMany: jest.fn().mockResolvedValue([]) },
+      permission: { findMany: jest.fn().mockResolvedValue([]) },
       branch: { findUnique: jest.fn() },
       staff: {
         findUnique: jest.fn(),
@@ -136,9 +138,100 @@ describe('UsersService', () => {
           roleId: 'role-1',
         },
         'company-a',
+        { sub: 'actor-1', roles: ['COMPANY_ADMIN'] },
       );
 
       expect(prisma.identity.create).toHaveBeenCalled();
+    });
+
+    it('refuses to let a company admin create an account holding SUPER_ADMIN', async () => {
+      prisma.identity.findUnique.mockResolvedValue(null);
+      prisma.company.findUnique.mockResolvedValue({ id: 'company-a' });
+      prisma.role.findUnique.mockResolvedValue({ id: 'role-sa', name: 'SUPER_ADMIN' });
+
+      await expect(
+        service.createStaff(
+          {
+            email: 'a@example.com',
+            firstName: 'A',
+            lastName: 'B',
+            companyId: 'company-a',
+            employeeCode: 'EMP1',
+            roleId: 'role-sa',
+          },
+          'company-a',
+          { sub: 'actor-1', roles: ['COMPANY_ADMIN'] },
+        ),
+      ).rejects.toThrow(ForbiddenException);
+      expect(prisma.identity.create).not.toHaveBeenCalled();
+    });
+
+    it('refuses a role stronger than the creator holds', async () => {
+      prisma.identity.findUnique.mockResolvedValue(null);
+      prisma.company.findUnique.mockResolvedValue({ id: 'company-a' });
+      prisma.role.findUnique.mockResolvedValue({ id: 'role-x', name: 'CUSTOM' });
+      prisma.rolePermission.findMany.mockResolvedValue([{ permission: { key: 'company:create' } }]);
+      prisma.permission.findMany.mockResolvedValue([{ key: 'staff:create' }]);
+
+      await expect(
+        service.createStaff(
+          {
+            email: 'a@example.com',
+            firstName: 'A',
+            lastName: 'B',
+            companyId: 'company-a',
+            employeeCode: 'EMP1',
+            roleId: 'role-x',
+          },
+          'company-a',
+          { sub: 'actor-1', roles: ['COMPANY_ADMIN'] },
+        ),
+      ).rejects.toThrow(ForbiddenException);
+      expect(prisma.identity.create).not.toHaveBeenCalled();
+    });
+
+    it('refuses a branch that belongs to a different company than the new account', async () => {
+      prisma.identity.findUnique.mockResolvedValue(null);
+      prisma.company.findUnique.mockResolvedValue({ id: 'company-a' });
+      prisma.role.findUnique.mockResolvedValue({ id: 'role-1', name: 'STAFF' });
+      prisma.branch.findUnique.mockResolvedValue({ id: 'branch-b', companyId: 'company-b' });
+
+      await expect(
+        service.createStaff(
+          {
+            email: 'a@example.com',
+            firstName: 'A',
+            lastName: 'B',
+            companyId: 'company-a',
+            branchId: 'branch-b',
+            employeeCode: 'EMP1',
+            roleId: 'role-1',
+          },
+          'company-a',
+          { sub: 'actor-1', roles: ['COMPANY_ADMIN'] },
+        ),
+      ).rejects.toThrow(NotFoundException);
+      expect(prisma.identity.create).not.toHaveBeenCalled();
+    });
+
+    it('refuses a tenant-scoped call that does not say who is creating the account', async () => {
+      prisma.identity.findUnique.mockResolvedValue(null);
+      prisma.company.findUnique.mockResolvedValue({ id: 'company-a' });
+      prisma.role.findUnique.mockResolvedValue({ id: 'role-1', name: 'STAFF' });
+
+      await expect(
+        service.createStaff(
+          {
+            email: 'a@example.com',
+            firstName: 'A',
+            lastName: 'B',
+            companyId: 'company-a',
+            employeeCode: 'EMP1',
+            roleId: 'role-1',
+          },
+          'company-a',
+        ),
+      ).rejects.toThrow(ForbiddenException);
     });
 
     it('allows SUPER_ADMIN (no tenant filter) to create staff for any company', async () => {

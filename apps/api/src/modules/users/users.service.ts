@@ -8,6 +8,7 @@ import { IdentityType } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
+import { assertRoleGrantable } from '../rbac/role-grant.policy';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CreateStaffDto } from './dto/create-staff.dto';
 import { UpdateStaffDto } from './dto/update-staff.dto';
@@ -33,7 +34,11 @@ export class UsersService {
    * controller; undefined only for SUPER_ADMIN (who legitimately creates
    * staff for any tenant), enforced literally for everyone else.
    */
-  async createStaff(dto: CreateStaffDto, tenantCompanyId?: string) {
+  async createStaff(
+    dto: CreateStaffDto,
+    tenantCompanyId?: string,
+    actingUser?: { sub: string; roles: string[] },
+  ) {
     if (tenantCompanyId !== undefined && dto.companyId !== tenantCompanyId) {
       throw new ForbiddenException(
         'You can only create staff within your own company.',
@@ -54,11 +59,25 @@ export class UsersService {
     if (!company) throw new NotFoundException('Company not found');
     if (!role) throw new NotFoundException('Role not found');
 
+    // The new account's role is a grant like any other: a non-SUPER_ADMIN creator may not hand out
+    // SUPER_ADMIN or any role stronger than their own. A tenant-scoped call with no acting user is
+    // refused rather than trusted.
+    if (tenantCompanyId !== undefined && !actingUser) {
+      throw new ForbiddenException(
+        'Cannot determine who is creating this account.',
+      );
+    }
+    if (actingUser) {
+      await assertRoleGrantable(this.prisma, actingUser, role);
+    }
+
     if (dto.branchId) {
       const branch = await this.prisma.branch.findUnique({
         where: { id: dto.branchId },
       });
-      if (!branch) throw new NotFoundException('Branch not found');
+      if (!branch || branch.companyId !== dto.companyId) {
+        throw new NotFoundException('Branch not found');
+      }
     }
 
     const temporaryPassword = generateTemporaryPassword();
