@@ -346,6 +346,20 @@ export const PERMISSIONS = {
     DATA_QUALITY_VIEW: 'analytics:data_quality_view',
     DEFINITIONS_VIEW: 'analytics:definitions_view',
   },
+  // Phase 21 — workflow automation. SEND_MESSAGES is separate so a workflow author cannot make an
+  // automation send customer messages unless they could be trusted to send them by hand.
+  WORKFLOW: {
+    VIEW: 'workflow:view',
+    CREATE: 'workflow:create',
+    EDIT: 'workflow:edit',
+    TEST: 'workflow:test', // test mode and dry runs
+    ACTIVATE: 'workflow:activate',
+    PAUSE: 'workflow:pause', // pause / disable / archive
+    VIEW_EXECUTIONS: 'workflow:view_executions',
+    RETRY_EXECUTION: 'workflow:retry_execution', // also dead-letter retry / resolve
+    CANCEL_EXECUTION: 'workflow:cancel_execution',
+    SEND_MESSAGES: 'workflow:send_messages',
+  },
 } as const;
 
 export const ALL_PERMISSION_KEYS: string[] = Object.values(PERMISSIONS).flatMap(

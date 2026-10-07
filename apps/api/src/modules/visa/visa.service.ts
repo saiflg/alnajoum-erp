@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import {
   InvoiceStatus,
@@ -16,6 +17,7 @@ import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { InvoicesService } from '../payments/invoices.service';
+import { WorkflowEventBus } from '../workflows/events/workflow-event-bus.service';
 import { SubmitVisaApplicationDto } from './dto/submit-visa-application.dto';
 import { VisaIncentivesService } from './visa-incentives.service';
 
@@ -65,6 +67,8 @@ export class VisaService {
     private readonly notificationsService: NotificationsService,
     private readonly auditService: AuditService,
     private readonly visaIncentivesService: VisaIncentivesService,
+    // Phase 21 — optional so automation being absent can never break visa processing.
+    @Optional() private readonly events?: WorkflowEventBus,
   ) {}
 
   private async resolveApplicant(customerId: string, familyMemberId?: string) {
@@ -525,5 +529,20 @@ export class VisaService {
         staffNote: application.staffNote,
       },
     );
+
+    // Phase 21 — every status change reaches this point, so it is the one place to announce it.
+    // Ids and status only: no passport data, no staff notes, no contact details.
+    await this.events?.publishSafe({
+      type: 'visa.status_changed',
+      source: 'visa',
+      companyId: application.customer.companyId,
+      entityType: 'VisaApplication',
+      entityId: application.id,
+      payload: {
+        visa: { id: application.id, status: application.status },
+        customer: { id: application.customerId },
+      },
+      dedupeKey: `visa.status_changed:${application.id}:${application.status}:${application.updatedAt.getTime()}`,
+    });
   }
 }

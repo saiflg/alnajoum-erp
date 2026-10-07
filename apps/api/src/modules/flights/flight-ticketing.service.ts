@@ -4,6 +4,7 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import {
   FlightBookingStatus,
@@ -13,6 +14,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { WorkflowEventBus } from '../workflows/events/workflow-event-bus.service';
 import { FlightIncentivesService } from './flight-incentives.service';
 import { FLIGHT_PROVIDER } from './providers/flight-provider.port';
 import type {
@@ -40,6 +42,8 @@ export class FlightTicketingService {
     private readonly notificationsService: NotificationsService,
     private readonly flightIncentivesService: FlightIncentivesService,
     private readonly providerLog: ProviderTransactionLogService,
+    // Phase 21 — optional so automation being absent can never break ticketing.
+    @Optional() private readonly events?: WorkflowEventBus,
   ) {}
 
   async issueTicket(bookingId: string, staffId: string) {
@@ -153,6 +157,32 @@ export class FlightTicketingService {
         `Your ticket is issued — ${booking.bookingReference}`,
         `Your flight ${booking.origin} → ${booking.destination} is now ticketed. PNR: ${result.pnr}. You can download your e-ticket from your portal.`,
       );
+
+      // Phase 21 — tell the automation engine, after everything above succeeded. Ids and
+      // booking facts only; never the PNR, passenger documents or contact details.
+      await this.events?.publishSafe({
+        type: 'flight.ticket_issued',
+        source: 'flights',
+        companyId: customer.companyId,
+        branchId: booking.branchId,
+        actorIdentityId: undefined,
+        entityType: 'FlightBooking',
+        entityId: booking.id,
+        payload: {
+          booking: {
+            id: booking.id,
+            reference: booking.bookingReference,
+            totalAmount: booking.totalAmount,
+            currency: booking.currency,
+            origin: booking.origin,
+            destination: booking.destination,
+            departureAt: booking.departureAt.toISOString(),
+          },
+          customer: { id: customer.id },
+        },
+        // One ticketing per booking: a re-run of this code path never publishes it twice.
+        dedupeKey: `flight.ticket_issued:${booking.id}`,
+      });
     }
 
     return updatedBooking;

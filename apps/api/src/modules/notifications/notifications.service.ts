@@ -91,6 +91,7 @@ export class NotificationsService {
     subject: string,
     textBody: string,
     identityId?: string,
+    related?: { type: string; id: string },
   ): Promise<void> {
     try {
       // Spec #18/#19: an identity that opted out of email for a
@@ -119,6 +120,8 @@ export class NotificationsService {
             : NotificationStatus.FAILED,
           errorMessage: result.error,
           identityId,
+          relatedType: related?.type,
+          relatedId: related?.id,
         },
       });
     } catch (error) {
@@ -144,6 +147,7 @@ export class NotificationsService {
     subject: string,
     body: string,
     identityId?: string,
+    related?: { type: string; id: string },
   ): Promise<void> {
     if (!to) return;
     try {
@@ -178,6 +182,8 @@ export class NotificationsService {
             : NotificationStatus.FAILED,
           errorMessage: result.error,
           identityId,
+          relatedType: related?.type,
+          relatedId: related?.id,
         },
       });
     } catch (error) {
@@ -202,6 +208,7 @@ export class NotificationsService {
     title: string,
     body: string,
     data?: Record<string, string>,
+    related?: { type: string; id: string },
   ): Promise<void> {
     try {
       if (
@@ -213,7 +220,8 @@ export class NotificationsService {
       ) {
         return;
       }
-      const devices = await this.mobileDevicesService.listForIdentity(identityId);
+      const devices =
+        await this.mobileDevicesService.listForIdentity(identityId);
       const targets = devices.filter((d) => !d.revokedAt && d.pushToken);
       if (targets.length === 0) return;
 
@@ -236,16 +244,22 @@ export class NotificationsService {
           recipient: identityId,
           subject: title,
           body,
-          status: succeeded ? NotificationStatus.SENT : NotificationStatus.FAILED,
+          status: succeeded
+            ? NotificationStatus.SENT
+            : NotificationStatus.FAILED,
           errorMessage: succeeded
             ? undefined
             : results.find((r) => r.error)?.error,
           identityId,
+          relatedType: related?.type,
+          relatedId: related?.id,
         },
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.logger.error(`Failed to send/record ${type} push notification: ${message}`);
+      this.logger.error(
+        `Failed to send/record ${type} push notification: ${message}`,
+      );
     }
   }
 
@@ -656,6 +670,78 @@ export class NotificationsService {
     await this.send(type, email, subject, body, identityId);
   }
 
+  /**
+   * Phase 21 — the typed, idempotent send the workflow engine uses. One message per
+   * (idempotencyKey, channel): a retry, a replayed event or a human re-run of the same
+   * workflow step finds the earlier row and does not send again. Preferences and
+   * opt-outs are honoured exactly as for every other notification. SMS/e-mail/push
+   * only — WhatsApp goes through the WhatsApp module (consent, windows, templates).
+   */
+  async sendWorkflowMessage(args: {
+    channel: 'EMAIL' | 'SMS' | 'PUSH';
+    to?: string | null;
+    identityId?: string;
+    subject: string;
+    body: string;
+    idempotencyKey: string;
+    data?: Record<string, string>;
+  }): Promise<{ sent: boolean; reason?: string }> {
+    const channel =
+      args.channel === 'EMAIL'
+        ? NotificationChannel.EMAIL
+        : args.channel === 'SMS'
+          ? NotificationChannel.SMS
+          : NotificationChannel.PUSH;
+    const related = { type: 'WORKFLOW_STEP', id: args.idempotencyKey };
+    const find = () =>
+      this.prisma.notification.findFirst({
+        where: { relatedType: related.type, relatedId: related.id, channel },
+        select: { status: true, errorMessage: true },
+      });
+
+    if (await find()) return { sent: false, reason: 'already_sent' };
+
+    if (args.channel === 'EMAIL') {
+      if (!args.to) return { sent: false, reason: 'no_recipient' };
+      await this.send(
+        NotificationType.WORKFLOW_MESSAGE,
+        args.to,
+        args.subject,
+        args.body,
+        args.identityId,
+        related,
+      );
+    } else if (args.channel === 'SMS') {
+      if (!args.to) return { sent: false, reason: 'no_recipient' };
+      await this.sendText(
+        'SMS',
+        NotificationType.WORKFLOW_MESSAGE,
+        args.to,
+        args.subject,
+        args.body,
+        args.identityId,
+        related,
+      );
+    } else {
+      if (!args.identityId) return { sent: false, reason: 'no_recipient' };
+      await this.sendPush(
+        NotificationType.WORKFLOW_MESSAGE,
+        args.identityId,
+        args.subject,
+        args.body,
+        args.data,
+        related,
+      );
+    }
+
+    // The private senders never throw and write one row per attempt, so the row tells us what happened.
+    const row = await find();
+    if (!row)
+      return { sent: false, reason: 'blocked_by_preferences_or_unreachable' };
+    if (row.status === NotificationStatus.FAILED)
+      return { sent: false, reason: row.errorMessage ?? 'provider_failed' };
+    return { sent: true };
+  }
   /** Free-form email for cases with no dedicated NotificationType (e.g. finance payout-failure alerts) — recorded as CONTACT_MESSAGE for audit purposes since that's the closest existing catch-all. */
   async sendGeneric(
     email: string,

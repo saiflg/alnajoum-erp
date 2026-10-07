@@ -203,7 +203,9 @@ describe('NotificationsService', () => {
       );
       expect(prisma.notification.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ type: NotificationType.PASSWORD_RESET }),
+          data: expect.objectContaining({
+            type: NotificationType.PASSWORD_RESET,
+          }),
         }),
       );
     });
@@ -345,7 +347,12 @@ describe('NotificationsService', () => {
       mobileDevicesService.listForIdentity.mockResolvedValue([
         { id: 'd1', pushToken: 'tok-1', pushProvider: 'EXPO', revokedAt: null },
         { id: 'd2', pushToken: null, pushProvider: null, revokedAt: null },
-        { id: 'd3', pushToken: 'tok-3', pushProvider: 'EXPO', revokedAt: new Date() },
+        {
+          id: 'd3',
+          pushToken: 'tok-3',
+          pushProvider: 'EXPO',
+          revokedAt: new Date(),
+        },
       ]);
       pushProvider.sendPush.mockResolvedValue({ success: true });
 
@@ -364,7 +371,10 @@ describe('NotificationsService', () => {
       ]);
       pushProvider.sendPush
         .mockResolvedValueOnce({ success: true })
-        .mockResolvedValueOnce({ success: false, error: 'FCM is not configured for this deployment' });
+        .mockResolvedValueOnce({
+          success: false,
+          error: 'FCM is not configured for this deployment',
+        });
 
       await service.sendBookingConfirmationPush('identity-1', 'HTL-ABC123');
 

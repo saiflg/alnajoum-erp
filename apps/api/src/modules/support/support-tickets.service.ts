@@ -2,6 +2,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import {
   TicketMessageAuthorType,
@@ -12,6 +13,7 @@ import { randomBytes } from 'crypto';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { WorkflowEventBus } from '../workflows/events/workflow-event-bus.service';
 import { CreateTicketDto } from './dto/create-ticket.dto';
 import { SupportConfigService } from './support-config.service';
 
@@ -34,6 +36,8 @@ export class SupportTicketsService {
     private readonly auditService: AuditService,
     private readonly notificationsService: NotificationsService,
     private readonly configService: SupportConfigService,
+    // Phase 21 — optional so automation being absent can never break support.
+    @Optional() private readonly events?: WorkflowEventBus,
   ) {}
 
   async create(customerId: string, dto: CreateTicketDto) {
@@ -78,6 +82,36 @@ export class SupportTicketsService {
       entityId: ticket.id,
       metadata: { customerId, priority },
     });
+
+    // Phase 21 — announce it to the automation engine (ids and priority only, never the message text).
+    if (this.events) {
+      try {
+        const customer = await this.prisma.customer.findUnique({
+          where: { id: customerId },
+          select: { companyId: true },
+        });
+        if (customer) {
+          await this.events.publishSafe({
+            type: 'support_ticket.created',
+            source: 'support',
+            companyId: customer.companyId,
+            entityType: 'SupportTicket',
+            entityId: ticket.id,
+            payload: {
+              ticket: {
+                id: ticket.id,
+                number: ticket.ticketNumber,
+                priority: ticket.priority,
+              },
+              customer: { id: customerId },
+            },
+            dedupeKey: `support_ticket.created:${ticket.id}`,
+          });
+        }
+      } catch {
+        // automation must never break ticket creation
+      }
+    }
 
     return ticket;
   }

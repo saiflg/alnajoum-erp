@@ -5051,6 +5051,192 @@ async function seedPhase20BranchDemo() {
   console.log('Created Phase 20 DEMO branch: Abuja Branch with manager ayo.bello@demo.alnajoum.travel');
 }
 
+/**
+ * Phase 21 — demo workflows. Every name starts with "[DEMO]" and they are flagged isDemo.
+ *
+ * Seeded as TESTING (validated, version locked) rather than ACTIVE, so nothing reacts to live
+ * events until a person reviews and activates one. Each uses only a trigger that a real service
+ * publishes and actions that really exist. The brief lists ten examples; the other examples
+ * need things that do not exist yet (installment plans, agents, supplier events, payout events,
+ * a customer-inactivity signal) and are listed in docs/workflows.md rather than faked.
+ */
+async function seedPhase21Workflows() {
+  const existing = await prisma.workflowDefinition.findFirst({ where: { isDemo: true } });
+  if (existing) {
+    console.log('Phase 21 demo workflows already present — skipping');
+    return;
+  }
+  const owner = await prisma.identity.findUniqueOrThrow({
+    where: { email: 'ibrahim.musa@demo.alnajoum.travel' },
+    include: { staff: true },
+  });
+  const companyId = owner.staff!.companyId;
+
+  const translations = (en: string, ha: string, ar: string, subject: [string, string, string]) => ({
+    en: { subject: subject[0], body: en },
+    ha: { subject: subject[1], body: ha },
+    ar: { subject: subject[2], body: ar },
+  });
+
+  type Node = { id: string; type: string; name?: string; config?: Record<string, unknown> };
+  type Edge = { from: string; to: string; label?: string };
+  const demos: { name: string; description: string; graph: { nodes: Node[]; edges: Edge[] } }[] = [
+    {
+      name: '[DEMO] Flight ticket issued — confirm to the customer',
+      description: 'When a ticket is issued: add it to the customer timeline, then send the confirmation by email, in the customer\'s language (English, Hausa or Arabic).',
+      graph: {
+        nodes: [
+          { id: 'start', type: 'TRIGGER', name: 'Ticket issued', config: { event: 'flight.ticket_issued' } },
+          { id: 'timeline', type: 'ACTION', name: 'Add to timeline', config: { action: 'crm.timeline', description: 'Ticket issued for {{booking.reference}} ({{booking.origin}} → {{booking.destination}})' } },
+          {
+            id: 'mail', type: 'ACTION', name: 'Email the customer',
+            config: {
+              action: 'notify.email',
+              translations: translations(
+                'Your ticket for {{booking.origin}} → {{booking.destination}} is issued. Booking {{booking.reference}}. You can download it from your portal.',
+                'An bayar da tikitin ku na {{booking.origin}} → {{booking.destination}}. Lambar ajiya: {{booking.reference}}. Za ku iya sauke shi daga shafinku.',
+                'تم إصدار تذكرتك من {{booking.origin}} إلى {{booking.destination}}. رقم الحجز {{booking.reference}}. يمكنك تنزيلها من حسابك.',
+                ['Your ticket is issued — {{booking.reference}}', 'An bayar da tikitin ku — {{booking.reference}}', 'تم إصدار تذكرتك — {{booking.reference}}'],
+              ),
+            },
+          },
+          { id: 'done', type: 'END' },
+        ],
+        edges: [{ from: 'start', to: 'timeline' }, { from: 'timeline', to: 'mail' }, { from: 'mail', to: 'done' }],
+      },
+    },
+    {
+      name: '[DEMO] Payment received — note it on the customer timeline',
+      description: 'When an online payment is confirmed by the provider, add a line to the customer timeline.',
+      graph: {
+        nodes: [
+          { id: 'start', type: 'TRIGGER', config: { event: 'payment.succeeded' } },
+          { id: 'timeline', type: 'ACTION', config: { action: 'crm.timeline', description: 'Payment of {{payment.currency}} {{payment.amount}} received' } },
+          { id: 'done', type: 'END' },
+        ],
+        edges: [{ from: 'start', to: 'timeline' }, { from: 'timeline', to: 'done' }],
+      },
+    },
+    {
+      name: '[DEMO] Visa status changed — tell the customer',
+      description: 'Only for the statuses a customer cares about (approved, completed, additional information needed, rejected).',
+      graph: {
+        nodes: [
+          { id: 'start', type: 'TRIGGER', config: { event: 'visa.status_changed', condition: { field: 'visa.status', op: 'in', value: ['APPROVED', 'COMPLETED', 'ADDITIONAL_INFO_REQUIRED', 'ADDITIONAL_DOCUMENTS_REQUIRED', 'REJECTED'] } } },
+          {
+            id: 'mail', type: 'ACTION', name: 'Email the customer',
+            config: {
+              action: 'notify.email',
+              translations: translations(
+                'Your visa application is now: {{visa.status}}. Open your portal for details.',
+                'Matsayin takardar bizar ku yanzu: {{visa.status}}. Duba shafinku don cikakken bayani.',
+                'أصبحت حالة طلب التأشيرة: {{visa.status}}. افتح حسابك لمعرفة التفاصيل.',
+                ['Visa application update', 'Sabunta game da bizar ku', 'تحديث بشأن طلب التأشيرة'],
+              ),
+            },
+          },
+          { id: 'done', type: 'END' },
+        ],
+        edges: [{ from: 'start', to: 'mail' }, { from: 'mail', to: 'done' }],
+      },
+    },
+    {
+      name: '[DEMO] Hotel stay completed — thank the customer',
+      description: 'After a stay is completed, wait a day and then send a thank-you and a request for feedback.',
+      graph: {
+        nodes: [
+          { id: 'start', type: 'TRIGGER', config: { event: 'hotel.booking_completed' } },
+          { id: 'wait', type: 'DELAY', name: 'Wait one day', config: { durationMs: 86_400_000 } },
+          { id: 'mail', type: 'ACTION', config: { action: 'notify.email', subject: 'How was your stay?', body: 'Thank you for booking {{booking.reference}} with Alnajoum. We would love your feedback.' } },
+          { id: 'done', type: 'END' },
+        ],
+        edges: [{ from: 'start', to: 'wait' }, { from: 'wait', to: 'mail' }, { from: 'mail', to: 'done' }],
+      },
+    },
+    {
+      name: '[DEMO] High-priority support ticket — escalate',
+      description: 'For HIGH and CRITICAL tickets: create an urgent task for a branch manager now, and escalate again to a finance officer if nobody has resolved it.',
+      graph: {
+        nodes: [
+          { id: 'start', type: 'TRIGGER', config: { event: 'support_ticket.created', condition: { field: 'ticket.priority', op: 'in', value: ['HIGH', 'CRITICAL'] } } },
+          { id: 'task', type: 'ACTION', name: 'Urgent task for the manager', config: { action: 'task.create', title: 'URGENT ticket {{ticket.number}} needs attention', relatedType: 'SUPPORT_TICKET', priority: 'URGENT', dueInHours: 4, assignTo: { mode: 'ROLE', role: 'BRANCH_MANAGER' } } },
+          {
+            id: 'esc', type: 'ESCALATION', name: 'Escalate if still open',
+            config: { steps: [{ afterMs: 7_200_000, action: 'task.create', config: { title: 'Ticket {{ticket.number}} is still unresolved after 2 hours', relatedType: 'SUPPORT_TICKET', priority: 'URGENT', assignTo: { mode: 'ROLE', role: 'FINANCE_OFFICER' } } }] },
+          },
+          { id: 'done', type: 'END' },
+        ],
+        edges: [{ from: 'start', to: 'task' }, { from: 'task', to: 'esc' }, { from: 'esc', to: 'done' }],
+      },
+    },
+    {
+      name: '[DEMO] New high-priority lead — assign a follow-up',
+      description: 'When a high-priority lead is created, create a follow-up task for a branch manager.',
+      graph: {
+        nodes: [
+          { id: 'start', type: 'TRIGGER', config: { event: 'lead.created', condition: { field: 'lead.priority', op: 'in', value: ['HIGH', 'URGENT'] } } },
+          { id: 'task', type: 'ACTION', config: { action: 'task.create', title: 'Follow up high-priority lead {{lead.number}}', relatedType: 'LEAD', priority: 'HIGH', dueInHours: 24, assignTo: { mode: 'ROLE', role: 'BRANCH_MANAGER' } } },
+          { id: 'done', type: 'END' },
+        ],
+        edges: [{ from: 'start', to: 'task' }, { from: 'task', to: 'done' }],
+      },
+    },
+    {
+      name: '[DEMO] Weekly operations note (scheduled)',
+      description: 'Every Monday at 08:00 (Lagos), write a marker to the audit log. A template for scheduled workflows.',
+      graph: {
+        nodes: [
+          { id: 'start', type: 'TRIGGER', config: { schedule: { frequency: 'WEEKLY', dayOfWeek: 1, hour: 8 } } },
+          { id: 'note', type: 'ACTION', config: { action: 'audit.note', note: 'Weekly operations check ran for the window starting {{schedule.window}}' } },
+          { id: 'done', type: 'END' },
+        ],
+        edges: [{ from: 'start', to: 'note' }, { from: 'note', to: 'done' }],
+      },
+    },
+  ];
+
+  for (const d of demos) {
+    await prisma.workflowDefinition.create({
+      data: {
+        companyId,
+        name: d.name,
+        description: d.description,
+        isDemo: true,
+        status: 'TESTING',
+        ownerIdentityId: owner.id,
+        createdByIdentityId: owner.id,
+        updatedByIdentityId: owner.id,
+        versions: { create: { version: 1, graph: d.graph as never, isLocked: true, lockedAt: new Date(), createdByIdentityId: owner.id, changeReason: 'Demo workflow' } },
+      },
+    });
+  }
+  console.log(`Created ${demos.length} Phase 21 DEMO workflows (status TESTING — review and activate to use). All named "[DEMO]".`);
+}
+
+/** A company administrator for the main demo company, so workflow administration can be exercised (only the second tenant had one). */
+async function seedPhase21CompanyAdmin() {
+  const email = 'chidi.eze@demo.alnajoum.travel';
+  if (await prisma.identity.findUnique({ where: { email } })) {
+    console.log('Phase 21 company admin already present — skipping');
+    return;
+  }
+  const amina = await prisma.identity.findUniqueOrThrow({ where: { email: MARKER_EMAIL }, include: { customer: true } });
+  const companyId = amina.customer!.companyId;
+  const branch = await prisma.branch.findFirstOrThrow({ where: { companyId }, orderBy: { createdAt: 'asc' } });
+  const role = await prisma.role.findUniqueOrThrow({ where: { name: SYSTEM_ROLES.COMPANY_ADMIN } });
+  await prisma.identity.create({
+    data: {
+      email,
+      passwordHash: await argon2.hash(DEMO_PASSWORD),
+      type: 'STAFF',
+      status: 'ACTIVE',
+      emailVerifiedAt: new Date(),
+      staff: { create: { companyId, branchId: branch.id, employeeCode: 'ANJ-CA21', firstName: 'Chidi', lastName: 'Eze', jobTitle: 'Company Administrator', department: 'Management' } },
+      roles: { create: [{ roleId: role.id }] },
+    },
+  });
+  console.log('Created Phase 21 DEMO company admin: chidi.eze@demo.alnajoum.travel');
+}
 async function main() {
   await seedPhase1And2();
   await seedPhase3Visa();
@@ -5067,6 +5253,8 @@ async function main() {
   await seedPhase19Revenue();
   await seedPhase20Analytics();
   await seedPhase20BranchDemo();
+  await seedPhase21Workflows();
+  await seedPhase21CompanyAdmin();
 }
 
 main()

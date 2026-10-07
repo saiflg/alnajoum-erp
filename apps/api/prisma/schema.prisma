@@ -466,6 +466,9 @@ model Company {
   pricingPolicies PricingPolicy[]
   promotions      Promotion[]
 
+  // Phase 21 — workflow automation.
+  workflowDefinitions WorkflowDefinition[]
+
   @@map("companies")
 }
 
@@ -1731,6 +1734,8 @@ enum NotificationType {
   INCENTIVE_PAID
   // Phase 18 — self-service password reset.
   PASSWORD_RESET
+  // Phase 21 - messages sent by the workflow engine.
+  WORKFLOW_MESSAGE
 }
 
 enum NotificationStatus {
@@ -5992,4 +5997,266 @@ model PromotionUsage {
   @@unique([promotionId, sourceType, sourceId])
   @@index([promotionId, customerId])
   @@map("promotion_usages")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 21 — workflow automation engine.
+//
+// Every table that holds tenant data carries `companyId` from the start (the
+// Phase 20 audit found several older tables that never did). A workflow is a
+// definition plus immutable numbered versions; an execution is pinned to the
+// version it started under, so editing or activating a new version never
+// changes the meaning of one already running.
+// ---------------------------------------------------------------------------
+
+enum WorkflowStatus {
+  DRAFT
+  TESTING
+  ACTIVE
+  PAUSED
+  DISABLED
+  ARCHIVED
+}
+
+enum WorkflowExecutionStatus {
+  RUNNING
+  WAITING
+  COMPLETED
+  FAILED
+  CANCELLED
+  DEAD_LETTERED
+}
+
+enum WorkflowExecutionMode {
+  LIVE
+  TEST
+}
+
+enum WorkflowStepStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+  SKIPPED
+  WAITING
+  RETRYING
+}
+
+enum WorkflowDeadLetterStatus {
+  OPEN
+  RETRIED
+  CANCELLED
+  RESOLVED
+}
+
+enum WorkflowEventStatus {
+  PENDING
+  PROCESSED
+  FAILED
+}
+
+model WorkflowDefinition {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  // Optional branch scope: a branch-scoped workflow only reacts to that branch's events.
+  branchId  String?
+
+  name        String
+  description String?
+  status      WorkflowStatus @default(DRAFT)
+  // True for the seeded examples, so they are never mistaken for real configuration.
+  isDemo      Boolean        @default(false)
+
+  // Denormalised from the ACTIVE version so event matching is a single indexed lookup.
+  triggerEvent    String?
+  activeVersionId String?
+  latestVersion   Int     @default(1)
+
+  ownerIdentityId     String?
+  createdByIdentityId String?
+  updatedByIdentityId String?
+
+  // For schedule-triggered workflows: the last window already fired (never fired twice for one window).
+  scheduleLastFiredAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  versions   WorkflowVersion[]
+  executions WorkflowExecution[]
+
+  @@unique([companyId, name])
+  @@index([companyId, status])
+  @@index([triggerEvent, status])
+  @@map("workflow_definitions")
+}
+
+model WorkflowVersion {
+  id         String             @id @default(cuid())
+  workflowId String
+  workflow   WorkflowDefinition @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  version    Int
+
+  // The graph (nodes + edges) as data — never code. Validated before it can be activated.
+  graph        Json
+  triggerEvent String?
+  retryPolicy  Json?
+  // The last validation result, so the UI can show why a version cannot be activated.
+  validation   Json?
+
+  // Set when the version is tested or activated. A locked version is immutable:
+  // further changes create the next version instead.
+  isLocked Boolean   @default(false)
+  lockedAt DateTime?
+
+  changeReason        String?
+  createdByIdentityId String?
+  createdAt           DateTime @default(now())
+
+  @@unique([workflowId, version])
+  @@index([workflowId])
+  @@map("workflow_versions")
+}
+
+// The durable event log / outbox. `dedupeKey` makes publishing idempotent: the
+// same business fact published twice (a retry, a replay) is one event.
+model WorkflowEvent {
+  id              String              @id @default(cuid())
+  type            String
+  source          String
+  companyId       String?
+  branchId        String?
+  actorIdentityId String?
+  correlationId   String
+  entityType      String?
+  entityId        String?
+  payload         Json
+  schemaVersion   Int                 @default(1)
+  // Loop protection: the workflows/events that led to this one.
+  chain           Json
+  dedupeKey       String?             @unique
+  status          WorkflowEventStatus @default(PENDING)
+  processedAt     DateTime?
+  error           String?
+  occurredAt      DateTime            @default(now())
+  createdAt       DateTime            @default(now())
+
+  @@index([status, createdAt])
+  @@index([type, createdAt])
+  @@index([companyId, createdAt])
+  @@index([entityType, entityId])
+  @@index([correlationId])
+  @@map("workflow_events")
+}
+
+model WorkflowExecution {
+  id         String             @id @default(cuid())
+  workflowId String
+  workflow   WorkflowDefinition @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  // Pinned for life: an execution always runs the version it started under.
+  versionId  String
+  versionNo  Int
+
+  companyId String
+  branchId  String?
+  eventId   String?
+  // One execution per workflow per event. A replayed event hits this unique key.
+  executionKey String @unique
+
+  mode   WorkflowExecutionMode   @default(LIVE)
+  status WorkflowExecutionStatus @default(RUNNING)
+
+  currentNodeId String?
+  // The trigger payload plus every step's output so far (what conditions and templates read).
+  context       Json
+  // What a WAITING execution is waiting for (approval id, event type, deadline…).
+  waitingFor    Json?
+  // When the scheduler should next look at this execution (delays, wait timeouts, retries).
+  nextRunAt     DateTime?
+
+  chain         Json
+  correlationId String
+  entityType    String?
+  entityId      String?
+
+  startedByIdentityId String?
+  error               String?
+  startedAt           DateTime  @default(now())
+  finishedAt          DateTime?
+  updatedAt           DateTime  @updatedAt
+
+  steps       WorkflowExecutionStep[]
+  deadLetters WorkflowDeadLetter[]
+
+  @@index([companyId, status])
+  @@index([status, nextRunAt])
+  @@index([workflowId, startedAt])
+  @@index([entityType, entityId])
+  @@index([correlationId])
+  @@map("workflow_executions")
+}
+
+model WorkflowExecutionStep {
+  id          String            @id @default(cuid())
+  executionId String
+  execution   WorkflowExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+
+  nodeId   String
+  nodeType String
+  status   WorkflowStepStatus @default(RUNNING)
+  attempts Int                @default(0)
+
+  input  Json?
+  output Json?
+  // Condition trace for CONDITION steps.
+  trace  Json?
+  error  String?
+  // Passed to the action so a retry or a human re-run cannot do the thing twice.
+  idempotencyKey String
+  // True when a mock ran instead of the real action (test mode).
+  mocked         Boolean @default(false)
+
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+
+  @@unique([executionId, nodeId])
+  @@index([executionId])
+  @@map("workflow_execution_steps")
+}
+
+model WorkflowDeadLetter {
+  id          String            @id @default(cuid())
+  executionId String
+  execution   WorkflowExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  stepId      String?
+  nodeId      String?
+  workflowId  String
+  companyId   String
+
+  reason        String
+  error         String?
+  retryCount    Int                      @default(0)
+  status        WorkflowDeadLetterStatus @default(OPEN)
+  correlationId String
+
+  resolvedByIdentityId String?
+  resolutionNote       String?
+  resolvedAt           DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([companyId, status])
+  @@index([executionId])
+  @@map("workflow_dead_letters")
+}
+
+// Fixed-window counters for automation rate limits (messages/minute, executions…),
+// one row per (tenant, limit) key, updated atomically.
+model WorkflowRateCounter {
+  key         String   @id
+  windowStart DateTime
+  count       Int
+
+  @@map("workflow_rate_counters")
 }

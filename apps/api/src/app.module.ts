@@ -45,6 +45,8 @@ import { WhatsAppModule } from './modules/whatsapp/whatsapp.module';
 import { SuppliersModule } from './modules/suppliers/suppliers.module';
 import { MobileModule } from './modules/mobile/mobile.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
+import { WorkflowEventsModule } from './modules/workflows/events/workflow-events.module';
+import { WorkflowsModule } from './modules/workflows/workflows.module';
 import { RevenueModule } from './modules/revenue/revenue.module';
 
 @Module({
@@ -96,6 +98,8 @@ import { RevenueModule } from './modules/revenue/revenue.module';
     MobileModule,
     RevenueModule,
     AnalyticsModule,
+    WorkflowEventsModule,
+    WorkflowsModule,
   ],
   controllers: [AppController],
   providers: [

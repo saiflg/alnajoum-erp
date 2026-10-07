@@ -3,10 +3,12 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { HotelBookingStatus, InvoiceStatus } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { WorkflowEventBus } from '../workflows/events/workflow-event-bus.service';
 import { HotelIncentivesService } from './hotel-incentives.service';
 
 /**
@@ -22,6 +24,8 @@ export class HotelCompletionService {
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
     private readonly incentivesService: HotelIncentivesService,
+    // Phase 21 — optional so automation being absent can never break hotel completion.
+    @Optional() private readonly events?: WorkflowEventBus,
   ) {}
 
   async complete(bookingId: string, staffId: string) {
@@ -68,6 +72,27 @@ export class HotelCompletionService {
         `Your hotel voucher is ready — ${booking.bookingReference}`,
         `Your stay at ${booking.hotelName} is confirmed and your voucher is ready to download from your portal.`,
       );
+
+      // Phase 21 — announce it to the automation engine (ids and booking facts only).
+      await this.events?.publishSafe({
+        type: 'hotel.booking_completed',
+        source: 'hotels',
+        companyId: customer.companyId,
+        branchId: booking.branchId,
+        actorIdentityId: undefined,
+        entityType: 'HotelBooking',
+        entityId: booking.id,
+        payload: {
+          booking: {
+            id: booking.id,
+            reference: booking.bookingReference,
+            totalAmount: booking.totalAmount,
+            currency: booking.currency,
+          },
+          customer: { id: customer.id },
+        },
+        dedupeKey: `hotel.booking_completed:${booking.id}`,
+      });
     }
 
     return updated;

@@ -3,6 +3,7 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { Customer, LeadStatus, IdentityType } from '@prisma/client';
 import * as argon2 from 'argon2';
@@ -12,6 +13,7 @@ import { AuditService } from '../audit/audit.service';
 import { CompanyService } from '../company/company.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { SYSTEM_ROLES } from '../rbac/constants/default-roles.constant';
+import { WorkflowEventBus } from '../workflows/events/workflow-event-bus.service';
 import { CreateLeadDto } from './dto/create-lead.dto';
 import { UpdateLeadDto } from './dto/update-lead.dto';
 
@@ -43,6 +45,8 @@ export class LeadsService {
     private readonly auditService: AuditService,
     private readonly notificationsService: NotificationsService,
     private readonly companyService: CompanyService,
+    // Phase 21 — optional so automation being absent can never break lead handling.
+    @Optional() private readonly events?: WorkflowEventBus,
   ) {}
 
   /** Phase 11 — a converting lead's own branch (when assigned) determines
@@ -122,6 +126,57 @@ export class LeadsService {
       entityId: lead.id,
       metadata: { source: dto.source, createdByStaffId },
     });
+
+    // Phase 21 — announce it to the automation engine. A lead has no company column, so the
+    // tenant comes from its branch, its assigned staff, or the staff member who created it; if
+    // none of those identify a company the event is not published (never guessed).
+    if (this.events) {
+      try {
+        const [branch, assigned, creator] = await Promise.all([
+          lead.assignedBranchId
+            ? this.prisma.branch.findUnique({
+                where: { id: lead.assignedBranchId },
+                select: { companyId: true },
+              })
+            : null,
+          lead.assignedStaffId
+            ? this.prisma.staff.findUnique({
+                where: { id: lead.assignedStaffId },
+                select: { companyId: true },
+              })
+            : null,
+          createdByStaffId
+            ? this.prisma.staff.findUnique({
+                where: { id: createdByStaffId },
+                select: { companyId: true },
+              })
+            : null,
+        ]);
+        const companyId =
+          branch?.companyId ?? assigned?.companyId ?? creator?.companyId;
+        if (companyId) {
+          await this.events.publishSafe({
+            type: 'lead.created',
+            source: 'crm',
+            companyId,
+            branchId: lead.assignedBranchId,
+            entityType: 'Lead',
+            entityId: lead.id,
+            payload: {
+              lead: {
+                id: lead.id,
+                number: lead.leadNumber,
+                source: lead.source,
+                priority: lead.priority,
+              },
+            },
+            dedupeKey: `lead.created:${lead.id}`,
+          });
+        }
+      } catch {
+        // automation must never break lead creation
+      }
+    }
 
     return lead;
   }
