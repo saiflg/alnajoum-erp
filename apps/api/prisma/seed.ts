@@ -9,12 +9,13 @@ import {
   DEFAULT_ROLE_DEFINITIONS,
   SYSTEM_ROLES,
 } from '../src/modules/rbac/constants/default-roles.constant';
+import {
+  KNOWN_DEFAULT_PASSWORDS,
+  resolveBootstrapCredentials,
+} from '../src/common/security/bootstrap-credentials';
 import { ALL_PERMISSION_KEYS } from '../src/modules/rbac/constants/permissions.constant';
 
 const prisma = new PrismaClient();
-
-const BOOTSTRAP_ADMIN_EMAIL = 'admin@alnajoum.travel';
-const BOOTSTRAP_ADMIN_PASSWORD = 'Alnajoum@2026';
 
 async function seedPermissions() {
   for (const key of ALL_PERMISSION_KEYS) {
@@ -60,10 +61,22 @@ async function seedRoles() {
 }
 
 async function seedBootstrapCompany() {
+  // Throws (so the seed fails loudly) when production has no real credentials configured.
+  const credentials = resolveBootstrapCredentials();
   const existingAdmin = await prisma.identity.findUnique({
-    where: { email: BOOTSTRAP_ADMIN_EMAIL },
+    where: { email: credentials.email },
   });
   if (existingAdmin) {
+    // An admin that still has a published password is a standing hole in production.
+    if (process.env.NODE_ENV === 'production') {
+      for (const known of KNOWN_DEFAULT_PASSWORDS) {
+        if (await argon2.verify(existingAdmin.passwordHash, known)) {
+          throw new Error(
+            `The Super Admin ${existingAdmin.email} still has a published default password. Change it before deploying.`,
+          );
+        }
+      }
+    }
     console.log('Bootstrap Super Admin already exists — skipping');
     return;
   }
@@ -98,11 +111,11 @@ async function seedBootstrapCompany() {
     where: { name: SYSTEM_ROLES.SUPER_ADMIN },
   });
 
-  const passwordHash = await argon2.hash(BOOTSTRAP_ADMIN_PASSWORD);
+  const passwordHash = await argon2.hash(credentials.password);
 
   const identity = await prisma.identity.create({
     data: {
-      email: BOOTSTRAP_ADMIN_EMAIL,
+      email: credentials.email,
       passwordHash,
       type: 'STAFF',
       status: 'ACTIVE',
@@ -121,12 +134,14 @@ async function seedBootstrapCompany() {
     },
   });
 
-  console.log('--------------------------------------------------------');
-  console.log('Bootstrap Super Admin created:');
-  console.log(`  email:    ${identity.email}`);
-  console.log(`  password: ${BOOTSTRAP_ADMIN_PASSWORD}`);
-  console.log('  Change this password immediately after first login.');
-  console.log('--------------------------------------------------------');
+  // The password is never printed. In development it is the documented fixture; elsewhere it is the
+  // value the operator supplied in BOOTSTRAP_ADMIN_PASSWORD.
+  console.log(`Bootstrap Super Admin created: ${identity.email}`);
+  console.log(
+    credentials.source === 'development-default'
+      ? '  Password: the development default (see README). Not for any shared environment.'
+      : '  Password: the value of BOOTSTRAP_ADMIN_PASSWORD.',
+  );
 }
 
 async function main() {

@@ -75,7 +75,7 @@ if [ ! -f .env.prod ]; then
     -e "s|^PUBLIC_ORIGIN=.*|PUBLIC_ORIGIN=$PUBLIC_ORIGIN|" \
     -e "s|^SITE_ADDRESS=.*|SITE_ADDRESS=$SITE_ADDRESS|" \
     -e "s|^JWT_ACCESS_SECRET=.*|JWT_ACCESS_SECRET=$(openssl rand -hex 48)|" \
-    -e "s|^JWT_REFRESH_SECRET=.*|JWT_REFRESH_SECRET=$(openssl rand -hex 48)|" \
+    -e "s|^JWT_REFRESH_SECRET=.*|JWT_REFRESH_SECRET=$(openssl rand -hex 48)|"     -e "s|^DATA_ENCRYPTION_KEYS=.*|DATA_ENCRYPTION_KEYS=$(date +%Y)a:$(openssl rand -base64 32)|"     -e "s|^BOOTSTRAP_ADMIN_EMAIL=.*|BOOTSTRAP_ADMIN_EMAIL=${ADMIN_EMAIL:?set ADMIN_EMAIL to the real administrator address}|"     -e "s|^BOOTSTRAP_ADMIN_PASSWORD=.*|BOOTSTRAP_ADMIN_PASSWORD=$(openssl rand -base64 18 | tr '/+' '_-')|" \
     .env.prod
   chmod 600 .env.prod
 else
@@ -103,5 +103,8 @@ echo
 echo "==> Done. Container status:"
 $COMPOSE ps
 echo
-echo "Open $(grep '^PUBLIC_ORIGIN=' .env.prod | cut -d= -f2-) and sign in as admin@alnajoum.travel."
-echo "That is the well-known seed password from the repo — change it immediately."
+echo "Open $(grep '^PUBLIC_ORIGIN=' .env.prod | cut -d= -f2-) and sign in as $(grep '^BOOTSTRAP_ADMIN_EMAIL=' .env.prod | cut -d= -f2-)."
+echo "The one-time password is BOOTSTRAP_ADMIN_PASSWORD in .env.prod (chmod 600, never printed here)."
+echo "Change it after first login. Also set PAYMENT_PROVIDER credentials in .env.prod: the API will not start"
+echo "in production on the mock payment provider."
+echo "Back up DATA_ENCRYPTION_KEYS from .env.prod somewhere off this server."
