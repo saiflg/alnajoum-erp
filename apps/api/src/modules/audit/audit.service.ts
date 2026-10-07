@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 
@@ -57,10 +57,26 @@ export class AuditService {
     });
   }
 
-  async listForEntity(entityType: string, entityId: string) {
+  /**
+   * One entity's history. Both identifiers are required (an absent filter used to mean "every row of
+   * every tenant"), and non-SUPER_ADMIN callers only ever see rows of their own company.
+   */
+  async listForEntity(
+    entityType: string,
+    entityId: string,
+    tenantCompanyId?: string,
+  ) {
+    if (!entityType || !entityId) {
+      throw new BadRequestException('entityType and entityId are required');
+    }
     return this.prisma.auditLog.findMany({
-      where: { entityType, entityId },
+      where: {
+        entityType,
+        entityId,
+        ...(tenantCompanyId !== undefined && { companyId: tenantCompanyId }),
+      },
       orderBy: { createdAt: 'desc' },
+      take: 200,
     });
   }
 

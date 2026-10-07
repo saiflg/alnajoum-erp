@@ -82,3 +82,43 @@ describe('AuditService', () => {
     });
   });
 });
+
+describe('AuditService.listForEntity (Phase 22 S-03)', () => {
+  const make = () => {
+    const prisma = { auditLog: { findMany: jest.fn().mockResolvedValue([]) } };
+    return { prisma, service: new AuditService(prisma as never) };
+  };
+
+  it('refuses a lookup without both identifiers instead of returning every row', async () => {
+    const { service, prisma } = make();
+    await expect(
+      service.listForEntity(undefined as never, undefined as never),
+    ).rejects.toThrow('entityType and entityId are required');
+    await expect(service.listForEntity('Invoice', '')).rejects.toThrow();
+    expect(prisma.auditLog.findMany).not.toHaveBeenCalled();
+  });
+
+  it('restricts a tenant caller to their own company and bounds the result', async () => {
+    const { service, prisma } = make();
+    await service.listForEntity('Invoice', 'inv-1', 'company-1');
+    expect(prisma.auditLog.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          entityType: 'Invoice',
+          entityId: 'inv-1',
+          companyId: 'company-1',
+        },
+        take: 200,
+      }),
+    );
+  });
+
+  it('SUPER_ADMIN (no tenant filter) sees all companies for that entity', async () => {
+    const { service, prisma } = make();
+    await service.listForEntity('Invoice', 'inv-1', undefined);
+    expect(prisma.auditLog.findMany.mock.calls[0][0].where).toEqual({
+      entityType: 'Invoice',
+      entityId: 'inv-1',
+    });
+  });
+});

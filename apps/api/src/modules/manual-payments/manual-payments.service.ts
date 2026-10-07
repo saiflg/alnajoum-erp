@@ -19,6 +19,14 @@ function generatePaymentReference(): string {
   return `MPAY-${randomBytes(4).toString('hex').toUpperCase()}`;
 }
 
+/**
+ * A submission belongs to the tenant of its customer. `tenant === undefined` means the caller is a
+ * SUPER_ADMIN (see resolveTenantFilter); every other caller is restricted to their own company, and a
+ * cross-tenant id is indistinguishable from a missing one (404, not 403).
+ */
+const inTenant = (tenant?: string) =>
+  tenant === undefined ? {} : { customer: { companyId: tenant } };
+
 @Injectable()
 export class ManualPaymentsService {
   constructor(
@@ -42,7 +50,15 @@ export class ManualPaymentsService {
     dto: SubmitManualPaymentDto,
     staffId: string | undefined,
     actorIdentityId: string | undefined,
+    tenant?: string,
   ) {
+    if (tenant !== undefined) {
+      const customer = await this.prisma.customer.findFirst({
+        where: { id: customerId, companyId: tenant },
+        select: { id: true },
+      });
+      if (!customer) throw new NotFoundException('Customer not found');
+    }
     const invoice = await this.prisma.invoice.findUnique({
       where: { id: dto.invoiceId },
       include: { payments: true },
@@ -103,16 +119,21 @@ export class ManualPaymentsService {
     return submission;
   }
 
-  async attachReceipt(id: string, storedFileName: string) {
+  async attachReceipt(id: string, storedFileName: string, tenant?: string) {
+    await this.getOne(id, tenant);
     return this.prisma.manualPaymentSubmission.update({
       where: { id },
       data: { receiptDocumentPath: storedFileName },
     });
   }
 
-  listPending() {
+  listPending(tenant?: string) {
     return this.prisma.manualPaymentSubmission.findMany({
-      where: { status: ManualPaymentStatus.PENDING_VERIFICATION },
+      where: {
+        status: ManualPaymentStatus.PENDING_VERIFICATION,
+        ...inTenant(tenant),
+      },
+      take: 500,
       include: {
         invoice: { select: { invoiceNumber: true } },
         customer: { select: { firstName: true, lastName: true } },
@@ -122,9 +143,13 @@ export class ManualPaymentsService {
     });
   }
 
-  listAll(filters: { customerId?: string; status?: ManualPaymentStatus }) {
+  listAll(
+    filters: { customerId?: string; status?: ManualPaymentStatus },
+    tenant?: string,
+  ) {
     return this.prisma.manualPaymentSubmission.findMany({
-      where: filters,
+      where: { ...filters, ...inTenant(tenant) },
+      take: 500,
       include: {
         invoice: { select: { invoiceNumber: true } },
         customer: { select: { firstName: true, lastName: true } },
@@ -135,15 +160,77 @@ export class ManualPaymentsService {
     });
   }
 
-  async getOne(id: string) {
-    const submission = await this.prisma.manualPaymentSubmission.findUnique({
-      where: { id },
-      include: { invoice: true, customer: { include: { identity: true } } },
+  async getOne(id: string, tenant?: string) {
+    const submission = await this.prisma.manualPaymentSubmission.findFirst({
+      where: { id, ...inTenant(tenant) },
+      include: {
+        invoice: true,
+        // Never the whole Identity row: it carries the password hash and 2FA secret.
+        customer: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            identityId: true,
+            identity: { select: { email: true } },
+          },
+        },
+      },
     });
     if (!submission) {
       throw new NotFoundException('Manual payment submission not found');
     }
     return submission;
+  }
+
+  /** Segregation of duties: the person who recorded the claim cannot be the one who verifies it. */
+  private assertNotOwnSubmission(
+    submittedByStaffId: string | null,
+    reviewerStaffId: string | undefined,
+  ) {
+    if (
+      submittedByStaffId &&
+      reviewerStaffId &&
+      submittedByStaffId === reviewerStaffId
+    ) {
+      throw new ForbiddenException(
+        'You cannot review a payment submission that you recorded yourself',
+      );
+    }
+  }
+
+  /** Atomic PENDING_VERIFICATION -> reviewed transition (reject / clarification). */
+  private async claimReview(
+    submission: {
+      status: ManualPaymentStatus;
+      submittedByStaffId: string | null;
+    },
+    id: string,
+    status: ManualPaymentStatus,
+    staffId: string | undefined,
+    note: string | undefined,
+  ) {
+    if (submission.status !== ManualPaymentStatus.PENDING_VERIFICATION) {
+      throw new ConflictException(
+        `This submission has already been ${submission.status.toLowerCase().replace('_', ' ')}`,
+      );
+    }
+    this.assertNotOwnSubmission(submission.submittedByStaffId, staffId);
+    const claim = await this.prisma.manualPaymentSubmission.updateMany({
+      where: { id, status: ManualPaymentStatus.PENDING_VERIFICATION },
+      data: {
+        status,
+        reviewedByStaffId: staffId,
+        reviewNote: note,
+        reviewedAt: new Date(),
+      },
+    });
+    if (claim.count === 0) {
+      throw new ConflictException('This submission has already been reviewed');
+    }
+    return this.prisma.manualPaymentSubmission.findUniqueOrThrow({
+      where: { id },
+    });
   }
 
   /** Approving is the one action that creates the real, ledger-affecting Payment row. */
@@ -152,18 +239,25 @@ export class ManualPaymentsService {
     staffId: string | undefined,
     note: string | undefined,
     actorIdentityId: string | undefined,
+    tenant?: string,
   ) {
-    const submission = await this.getOne(id);
+    const submission = await this.getOne(id, tenant);
     if (submission.status !== ManualPaymentStatus.PENDING_VERIFICATION) {
       throw new ConflictException(
         `This submission has already been ${submission.status.toLowerCase().replace('_', ' ')}`,
       );
     }
+    this.assertNotOwnSubmission(submission.submittedByStaffId, staffId);
 
     const invoice = await this.prisma.invoice.findUniqueOrThrow({
       where: { id: submission.invoiceId },
       include: { payments: true },
     });
+    if (invoice.status === InvoiceStatus.VOID) {
+      throw new ConflictException(
+        'Cannot approve a payment for a voided invoice',
+      );
+    }
     const totalPaid = invoice.payments.reduce((sum, p) => sum + p.amount, 0);
     const outstanding = invoice.totalAmount - totalPaid;
     if (submission.amount > outstanding) {
@@ -174,6 +268,22 @@ export class ManualPaymentsService {
 
     const reference = generatePaymentReference();
     const createdPayment = await this.prisma.$transaction(async (tx) => {
+      // Atomic claim: only one concurrent approve can move PENDING_VERIFICATION -> APPROVED, so two
+      // reviewers (or a double click) can never create two payments for one submission.
+      const claim = await tx.manualPaymentSubmission.updateMany({
+        where: { id, status: ManualPaymentStatus.PENDING_VERIFICATION },
+        data: {
+          status: ManualPaymentStatus.APPROVED,
+          reviewedByStaffId: staffId,
+          reviewNote: note,
+          reviewedAt: new Date(),
+        },
+      });
+      if (claim.count === 0) {
+        throw new ConflictException(
+          'This submission has already been reviewed',
+        );
+      }
       const payment = await tx.payment.create({
         data: {
           paymentReference: reference,
@@ -186,13 +296,7 @@ export class ManualPaymentsService {
       });
       await tx.manualPaymentSubmission.update({
         where: { id },
-        data: {
-          status: ManualPaymentStatus.APPROVED,
-          reviewedByStaffId: staffId,
-          reviewNote: note,
-          reviewedAt: new Date(),
-          paymentId: payment.id,
-        },
+        data: { paymentId: payment.id },
       });
       return payment;
     });
@@ -239,23 +343,16 @@ export class ManualPaymentsService {
     staffId: string | undefined,
     note: string | undefined,
     actorIdentityId: string | undefined,
+    tenant?: string,
   ) {
-    const submission = await this.getOne(id);
-    if (submission.status !== ManualPaymentStatus.PENDING_VERIFICATION) {
-      throw new ConflictException(
-        `This submission has already been ${submission.status.toLowerCase().replace('_', ' ')}`,
-      );
-    }
-
-    const updated = await this.prisma.manualPaymentSubmission.update({
-      where: { id },
-      data: {
-        status: ManualPaymentStatus.REJECTED,
-        reviewedByStaffId: staffId,
-        reviewNote: note,
-        reviewedAt: new Date(),
-      },
-    });
+    const submission = await this.getOne(id, tenant);
+    const updated = await this.claimReview(
+      submission,
+      id,
+      ManualPaymentStatus.REJECTED,
+      staffId,
+      note,
+    );
 
     await this.notificationsService.sendManualPaymentStatus(
       submission.customer.identity.email,
@@ -285,23 +382,16 @@ export class ManualPaymentsService {
     staffId: string | undefined,
     note: string,
     actorIdentityId: string | undefined,
+    tenant?: string,
   ) {
-    const submission = await this.getOne(id);
-    if (submission.status !== ManualPaymentStatus.PENDING_VERIFICATION) {
-      throw new ConflictException(
-        `This submission has already been ${submission.status.toLowerCase().replace('_', ' ')}`,
-      );
-    }
-
-    const updated = await this.prisma.manualPaymentSubmission.update({
-      where: { id },
-      data: {
-        status: ManualPaymentStatus.CLARIFICATION_REQUESTED,
-        reviewedByStaffId: staffId,
-        reviewNote: note,
-        reviewedAt: new Date(),
-      },
-    });
+    const submission = await this.getOne(id, tenant);
+    const updated = await this.claimReview(
+      submission,
+      id,
+      ManualPaymentStatus.CLARIFICATION_REQUESTED,
+      staffId,
+      note,
+    );
 
     await this.notificationsService.sendManualPaymentStatus(
       submission.customer.identity.email,

@@ -12,10 +12,9 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { ManualPaymentStatus } from '@prisma/client';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
-import {
-  createDocumentMulterOptions,
-} from '../../common/documents/document-storage.util';
+import { createDocumentMulterOptions } from '../../common/documents/document-storage.util';
 import type { AuthContext } from '../../common/interfaces/auth-context.interface';
+import { resolveTenantFilter } from '../../common/utils/tenant.util';
 import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { UsersService } from '../users/users.service';
 import { ReviewManualPaymentDto } from './dto/review-manual-payment.dto';
@@ -49,38 +48,50 @@ export class ManualPaymentsController {
       dto,
       staffId ?? undefined,
       user.sub,
+      resolveTenantFilter(user),
     );
   }
 
   @Post(':id/receipt')
   @RequirePermissions(PERMISSIONS.MANUAL_PAYMENT.SUBMIT)
-  @UseInterceptors(FileInterceptor('file', createDocumentMulterOptions(NAMESPACE)))
+  @UseInterceptors(
+    FileInterceptor('file', createDocumentMulterOptions(NAMESPACE)),
+  )
   async attachReceipt(
+    @CurrentUser() user: AuthContext,
     @Param('id') id: string,
     @UploadedFile() file: Express.Multer.File,
   ) {
-    return this.manualPaymentsService.attachReceipt(id, file.filename);
+    return this.manualPaymentsService.attachReceipt(
+      id,
+      file.filename,
+      resolveTenantFilter(user),
+    );
   }
 
   @Get('pending')
   @RequirePermissions(PERMISSIONS.MANUAL_PAYMENT.REVIEW)
-  listPending() {
-    return this.manualPaymentsService.listPending();
+  listPending(@CurrentUser() user: AuthContext) {
+    return this.manualPaymentsService.listPending(resolveTenantFilter(user));
   }
 
   @Get()
   @RequirePermissions(PERMISSIONS.MANUAL_PAYMENT.REVIEW)
   listAll(
+    @CurrentUser() user: AuthContext,
     @Query('customerId') customerId?: string,
     @Query('status') status?: ManualPaymentStatus,
   ) {
-    return this.manualPaymentsService.listAll({ customerId, status });
+    return this.manualPaymentsService.listAll(
+      { customerId, status },
+      resolveTenantFilter(user),
+    );
   }
 
   @Get(':id')
   @RequirePermissions(PERMISSIONS.MANUAL_PAYMENT.REVIEW)
-  getOne(@Param('id') id: string) {
-    return this.manualPaymentsService.getOne(id);
+  getOne(@CurrentUser() user: AuthContext, @Param('id') id: string) {
+    return this.manualPaymentsService.getOne(id, resolveTenantFilter(user));
   }
 
   @Post(':id/approve')
@@ -96,6 +107,7 @@ export class ManualPaymentsController {
       staffId ?? undefined,
       dto.note,
       user.sub,
+      resolveTenantFilter(user),
     );
   }
 
@@ -112,6 +124,7 @@ export class ManualPaymentsController {
       staffId ?? undefined,
       dto.note,
       user.sub,
+      resolveTenantFilter(user),
     );
   }
 
@@ -128,6 +141,7 @@ export class ManualPaymentsController {
       staffId ?? undefined,
       dto.note ?? 'Please provide additional details.',
       user.sub,
+      resolveTenantFilter(user),
     );
   }
 }

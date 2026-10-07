@@ -9,8 +9,20 @@ import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { MobileDevicesService } from '../mobile/mobile-devices.service';
 import { PUSH_NOTIFICATION_PROVIDER } from '../mobile/providers/push-notification-provider.port';
 import { NotificationPreferencesService } from './notification-preferences.service';
-import { NotificationsService } from './notifications.service';
+import type { AuthContext } from '../../common/interfaces/auth-context.interface';
+import { NotificationsService, REDACTED_BODY } from './notifications.service';
 import { NOTIFICATION_PROVIDER } from './providers/notification-provider.port';
+
+const superAdmin = {
+  sub: 'u0',
+  roles: ['SUPER_ADMIN'],
+  companyId: null,
+} as unknown as AuthContext;
+const companyAdmin = {
+  sub: 'u1',
+  roles: ['COMPANY_ADMIN'],
+  companyId: 'company-1',
+} as unknown as AuthContext;
 
 describe('NotificationsService', () => {
   let service: NotificationsService;
@@ -148,12 +160,60 @@ describe('NotificationsService', () => {
   it('lists notifications with optional filters', async () => {
     prisma.notification.findMany.mockResolvedValue([]);
 
-    await service.listAll({ status: NotificationStatus.FAILED });
+    await service.listAll(superAdmin, { status: NotificationStatus.FAILED });
 
     expect(prisma.notification.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { status: NotificationStatus.FAILED },
       }),
+    );
+  });
+
+  it('limits a tenant caller to notifications for identities of their own company, bounded', async () => {
+    prisma.notification.findMany.mockResolvedValue([]);
+
+    await service.listAll(companyAdmin, {}, 10_000);
+
+    const arg = prisma.notification.findMany.mock.calls[0][0];
+    expect(arg.where.identity).toEqual({
+      OR: [
+        { customer: { companyId: 'company-1' } },
+        { staff: { companyId: 'company-1' } },
+      ],
+    });
+    expect(arg.take).toBe(500);
+  });
+
+  it('a caller with no company matches nothing rather than everything', async () => {
+    prisma.notification.findMany.mockResolvedValue([]);
+
+    await service.listAll({ ...companyAdmin, companyId: null }, {});
+
+    const arg = prisma.notification.findMany.mock.calls[0][0];
+    expect(JSON.stringify(arg.where)).toContain('__no_tenant__');
+  });
+
+  it('never stores the temporary password or the reset link, though it is still sent', async () => {
+    provider.sendEmail.mockResolvedValue({ success: true });
+
+    await service.sendStaffTempPassword('s@example.com', 'Fola', 'Tmp123!');
+    await service.sendPasswordResetEmail(
+      'a@example.com',
+      'identity-1',
+      'http://localhost:3000/reset-password?token=abc123',
+    );
+
+    const stored = prisma.notification.create.mock.calls.map(
+      (c) => c[0].data.body as string,
+    );
+    expect(stored).toHaveLength(2);
+    for (const body of stored) {
+      expect(body).toBe(REDACTED_BODY);
+      expect(body).not.toContain('Tmp123!');
+      expect(body).not.toContain('abc123');
+    }
+    expect(provider.sendEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ textBody: expect.stringContaining('Tmp123!') }),
     );
   });
 

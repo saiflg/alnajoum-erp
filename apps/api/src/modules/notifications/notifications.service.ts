@@ -5,6 +5,8 @@ import {
   NotificationStatus,
   NotificationType,
 } from '@prisma/client';
+import type { AuthContext } from '../../common/interfaces/auth-context.interface';
+import { resolveTenantFilter } from '../../common/utils/tenant.util';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { MobileDevicesService } from '../mobile/mobile-devices.service';
 import { PUSH_NOTIFICATION_PROVIDER } from '../mobile/providers/push-notification-provider.port';
@@ -65,6 +67,14 @@ interface ManualPaymentStatusDetails {
   reviewNote?: string;
 }
 
+/** Notification types whose body contains a usable credential. */
+export const SECRET_BEARING_TYPES: ReadonlySet<NotificationType> = new Set([
+  NotificationType.STAFF_TEMP_PASSWORD,
+  NotificationType.PASSWORD_RESET,
+]);
+export const REDACTED_BODY =
+  '[Content withheld: this message contained a one-time credential and is not stored.]';
+
 @Injectable()
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
@@ -114,7 +124,9 @@ export class NotificationsService {
           channel: NotificationChannel.EMAIL,
           recipient: to,
           subject,
-          body: textBody,
+          // One-time credentials (reset links, temporary passwords) are sent but never stored: the
+          // send log is readable by staff, and a stored reset link is an account takeover.
+          body: SECRET_BEARING_TYPES.has(type) ? REDACTED_BODY : textBody,
           status: result.success
             ? NotificationStatus.SENT
             : NotificationStatus.FAILED,
@@ -783,10 +795,33 @@ export class NotificationsService {
     );
   }
 
-  listAll(filters: { type?: NotificationType; status?: NotificationStatus }) {
+  /**
+   * Admin send log. SUPER_ADMIN sees everything; any other caller sees only notifications addressed
+   * to identities of their own company (customer or staff). Notifications with no identity (e.g. the
+   * public contact form) belong to the platform, so tenants never see them. Bounded, newest first.
+   */
+  listAll(
+    user: AuthContext,
+    filters: { type?: NotificationType; status?: NotificationStatus },
+    limit = 200,
+  ) {
+    const tenant = resolveTenantFilter(user);
     return this.prisma.notification.findMany({
-      where: filters,
+      where: {
+        ...filters,
+        ...(tenant
+          ? {
+              identity: {
+                OR: [
+                  { customer: { companyId: tenant } },
+                  { staff: { companyId: tenant } },
+                ],
+              },
+            }
+          : {}),
+      },
       orderBy: { createdAt: 'desc' },
+      take: Math.min(Math.max(limit, 1), 500),
     });
   }
 

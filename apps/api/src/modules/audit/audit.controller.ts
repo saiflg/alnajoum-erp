@@ -13,10 +13,15 @@ export class AuditController {
   @Get()
   @RequirePermissions(PERMISSIONS.AUDIT.READ)
   list(
+    @CurrentUser() user: AuthContext,
     @Query('entityType') entityType: string,
     @Query('entityId') entityId: string,
   ) {
-    return this.auditService.listForEntity(entityType, entityId);
+    return this.auditService.listForEntity(
+      entityType,
+      entityId,
+      resolveTenantFilter(user),
+    );
   }
 
   /** Phase 11 spec #26 — the general admin audit-search endpoint, distinct

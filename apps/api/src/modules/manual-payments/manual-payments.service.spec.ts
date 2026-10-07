@@ -1,6 +1,15 @@
-import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { InvoiceStatus, ManualPaymentStatus, PaymentMethod } from '@prisma/client';
+import {
+  InvoiceStatus,
+  ManualPaymentStatus,
+  PaymentMethod,
+} from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { FinancePostingService } from '../finance/finance-posting.service';
@@ -23,10 +32,14 @@ describe('ManualPaymentsService', () => {
   beforeEach(async () => {
     prisma = {
       invoice: { findUnique: jest.fn(), findUniqueOrThrow: jest.fn() },
+      customer: { findFirst: jest.fn() },
       manualPaymentSubmission: {
         create: jest.fn(),
-        findUnique: jest.fn(),
+        findFirst: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([]),
+        findUniqueOrThrow: jest.fn(),
         update: jest.fn(),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       payment: { create: jest.fn() },
       $transaction: jest.fn((cb) => cb(prisma)),
@@ -90,7 +103,9 @@ describe('ManualPaymentsService', () => {
         }),
       );
       expect(prisma.payment.create).not.toHaveBeenCalled();
-      expect(notificationsService.notifyManualPaymentSubmitted).toHaveBeenCalledWith({
+      expect(
+        notificationsService.notifyManualPaymentSubmitted,
+      ).toHaveBeenCalledWith({
         invoiceNumber: 'INV-ABC123',
         amount: 20_000,
         currency: 'NGN',
@@ -110,7 +125,12 @@ describe('ManualPaymentsService', () => {
       await expect(
         service.submit(
           'customer-1',
-          { customerId: 'customer-1', invoiceId: 'invoice-1', amount: 10_000, method: PaymentMethod.CASH },
+          {
+            customerId: 'customer-1',
+            invoiceId: 'invoice-1',
+            amount: 10_000,
+            method: PaymentMethod.CASH,
+          },
           'staff-1',
           'identity-1',
         ),
@@ -129,11 +149,14 @@ describe('ManualPaymentsService', () => {
       submittedByStaffId: 'staff-front',
       status: ManualPaymentStatus.PENDING_VERIFICATION,
       invoice: { invoiceNumber: 'INV-ABCD1234', currency: 'NGN' },
-      customer: { identityId: 'identity-1', identity: { email: 'amina@example.com' } },
+      customer: {
+        identityId: 'identity-1',
+        identity: { email: 'amina@example.com' },
+      },
     };
 
     it('rejects approving a submission that is not PENDING_VERIFICATION', async () => {
-      prisma.manualPaymentSubmission.findUnique.mockResolvedValue({
+      prisma.manualPaymentSubmission.findFirst.mockResolvedValue({
         ...pendingSubmission,
         status: ManualPaymentStatus.APPROVED,
       });
@@ -145,7 +168,9 @@ describe('ManualPaymentsService', () => {
     });
 
     it('re-checks the outstanding balance at approval time (it may have shrunk since submission)', async () => {
-      prisma.manualPaymentSubmission.findUnique.mockResolvedValue(pendingSubmission);
+      prisma.manualPaymentSubmission.findFirst.mockResolvedValue(
+        pendingSubmission,
+      );
       prisma.invoice.findUniqueOrThrow.mockResolvedValue({
         id: 'invoice-1',
         totalAmount: 50_000,
@@ -153,13 +178,20 @@ describe('ManualPaymentsService', () => {
       });
 
       await expect(
-        service.approve('sub-1', 'staff-finance', undefined, 'identity-finance'),
+        service.approve(
+          'sub-1',
+          'staff-finance',
+          undefined,
+          'identity-finance',
+        ),
       ).rejects.toThrow(BadRequestException);
       expect(prisma.payment.create).not.toHaveBeenCalled();
     });
 
     it('creates the Payment row, links it back, recomputes the invoice, and applies incentives', async () => {
-      prisma.manualPaymentSubmission.findUnique.mockResolvedValue(pendingSubmission);
+      prisma.manualPaymentSubmission.findFirst.mockResolvedValue(
+        pendingSubmission,
+      );
       prisma.invoice.findUniqueOrThrow.mockResolvedValue({
         id: 'invoice-1',
         invoiceNumber: 'INV-ABCD1234',
@@ -173,7 +205,12 @@ describe('ManualPaymentsService', () => {
         status: InvoiceStatus.PARTIALLY_PAID,
       });
 
-      const result = await service.approve('sub-1', 'staff-finance', 'looks good', 'identity-finance');
+      const result = await service.approve(
+        'sub-1',
+        'staff-finance',
+        'looks good',
+        'identity-finance',
+      );
 
       expect(prisma.payment.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -185,44 +222,124 @@ describe('ManualPaymentsService', () => {
           }),
         }),
       );
-      expect(prisma.manualPaymentSubmission.update).toHaveBeenCalledWith(
+      expect(prisma.manualPaymentSubmission.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
+          where: {
+            id: 'sub-1',
+            status: ManualPaymentStatus.PENDING_VERIFICATION,
+          },
           data: expect.objectContaining({
             status: ManualPaymentStatus.APPROVED,
             reviewedByStaffId: 'staff-finance',
-            paymentId: 'payment-1',
           }),
         }),
+      );
+      expect(prisma.manualPaymentSubmission.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { paymentId: 'payment-1' } }),
       );
       expect(notificationsService.sendManualPaymentStatus).toHaveBeenCalledWith(
         'amina@example.com',
         'identity-1',
         expect.objectContaining({ status: 'APPROVED' }),
       );
-      expect(incentivesService.applyForInvoicePayment).toHaveBeenCalledWith('invoice-1', 20_000);
+      expect(incentivesService.applyForInvoicePayment).toHaveBeenCalledWith(
+        'invoice-1',
+        20_000,
+      );
       expect(result.status).toBe(InvoiceStatus.PARTIALLY_PAID);
+    });
+
+    it('creates no payment when a concurrent reviewer already claimed the submission', async () => {
+      prisma.manualPaymentSubmission.findFirst.mockResolvedValue(
+        pendingSubmission,
+      );
+      prisma.invoice.findUniqueOrThrow.mockResolvedValue({
+        id: 'invoice-1',
+        totalAmount: 50_000,
+        status: InvoiceStatus.ISSUED,
+        payments: [],
+      });
+      prisma.manualPaymentSubmission.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        service.approve(
+          'sub-1',
+          'staff-finance',
+          undefined,
+          'identity-finance',
+        ),
+      ).rejects.toThrow(ConflictException);
+      expect(prisma.payment.create).not.toHaveBeenCalled();
+    });
+
+    it('refuses to let the staff member who recorded the payment also approve it', async () => {
+      prisma.manualPaymentSubmission.findFirst.mockResolvedValue(
+        pendingSubmission,
+      );
+
+      await expect(
+        service.approve('sub-1', 'staff-front', undefined, 'identity-front'),
+      ).rejects.toThrow(ForbiddenException);
+      expect(prisma.payment.create).not.toHaveBeenCalled();
+    });
+
+    it('refuses to approve a payment against a voided invoice', async () => {
+      prisma.manualPaymentSubmission.findFirst.mockResolvedValue(
+        pendingSubmission,
+      );
+      prisma.invoice.findUniqueOrThrow.mockResolvedValue({
+        id: 'invoice-1',
+        status: InvoiceStatus.VOID,
+        totalAmount: 50_000,
+        payments: [],
+      });
+
+      await expect(
+        service.approve(
+          'sub-1',
+          'staff-finance',
+          undefined,
+          'identity-finance',
+        ),
+      ).rejects.toThrow(ConflictException);
+      expect(prisma.payment.create).not.toHaveBeenCalled();
     });
   });
 
   describe('reject', () => {
+    const pending = {
+      id: 'sub-1',
+      status: ManualPaymentStatus.PENDING_VERIFICATION,
+      invoiceId: 'invoice-1',
+      amount: 20_000,
+      submittedByStaffId: 'staff-front',
+      invoice: { invoiceNumber: 'INV-ABCD1234', currency: 'NGN' },
+      customer: {
+        identityId: 'identity-1',
+        identity: { email: 'amina@example.com' },
+      },
+    };
+
     it('never creates a Payment row and records the rejection reason', async () => {
-      prisma.manualPaymentSubmission.findUnique.mockResolvedValue({
-        id: 'sub-1',
-        status: ManualPaymentStatus.PENDING_VERIFICATION,
-        invoiceId: 'invoice-1',
-        amount: 20_000,
-        invoice: { invoiceNumber: 'INV-ABCD1234', currency: 'NGN' },
-        customer: { identityId: 'identity-1', identity: { email: 'amina@example.com' } },
-      });
-      prisma.manualPaymentSubmission.update.mockResolvedValue({
+      prisma.manualPaymentSubmission.findFirst.mockResolvedValue(pending);
+      prisma.manualPaymentSubmission.findUniqueOrThrow.mockResolvedValue({
         status: ManualPaymentStatus.REJECTED,
       });
 
-      await service.reject('sub-1', 'staff-finance', 'receipt illegible', 'identity-finance');
+      await service.reject(
+        'sub-1',
+        'staff-finance',
+        'receipt illegible',
+        'identity-finance',
+      );
 
       expect(prisma.payment.create).not.toHaveBeenCalled();
-      expect(prisma.manualPaymentSubmission.update).toHaveBeenCalledWith(
+      expect(prisma.manualPaymentSubmission.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
+          where: {
+            id: 'sub-1',
+            status: ManualPaymentStatus.PENDING_VERIFICATION,
+          },
           data: expect.objectContaining({
             status: ManualPaymentStatus.REJECTED,
             reviewNote: 'receipt illegible',
@@ -230,13 +347,111 @@ describe('ManualPaymentsService', () => {
         }),
       );
     });
+
+    it('loses cleanly when another reviewer already decided it', async () => {
+      prisma.manualPaymentSubmission.findFirst.mockResolvedValue(pending);
+      prisma.manualPaymentSubmission.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        service.reject('sub-1', 'staff-finance', 'x', 'identity-finance'),
+      ).rejects.toThrow(ConflictException);
+      expect(
+        notificationsService.sendManualPaymentStatus,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('does not let the recorder reject their own submission either', async () => {
+      prisma.manualPaymentSubmission.findFirst.mockResolvedValue(pending);
+
+      await expect(
+        service.reject('sub-1', 'staff-front', 'x', 'identity-front'),
+      ).rejects.toThrow(ForbiddenException);
+    });
   });
 
   describe('getOne', () => {
     it('throws NotFound for an unknown id', async () => {
-      prisma.manualPaymentSubmission.findUnique.mockResolvedValue(null);
+      prisma.manualPaymentSubmission.findFirst.mockResolvedValue(null);
 
-      await expect(service.getOne('missing')).rejects.toThrow(NotFoundException);
+      await expect(service.getOne('missing')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it("is bound to the caller's company, so another tenant's id is NotFound", async () => {
+      prisma.manualPaymentSubmission.findFirst.mockResolvedValue(null);
+
+      await expect(service.getOne('sub-9', 'company-1')).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(prisma.manualPaymentSubmission.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'sub-9', customer: { companyId: 'company-1' } },
+        }),
+      );
+    });
+
+    it("never selects the customer's whole identity row (password hash, 2FA secret)", async () => {
+      prisma.manualPaymentSubmission.findFirst.mockResolvedValue({
+        id: 'sub-1',
+      });
+
+      await service.getOne('sub-1');
+
+      const include =
+        prisma.manualPaymentSubmission.findFirst.mock.calls[0][0].include;
+      expect(include.customer.include).toBeUndefined();
+      expect(include.customer.select.identity).toEqual({
+        select: { email: true },
+      });
+    });
+
+    it('SUPER_ADMIN (no tenant) is not restricted', async () => {
+      prisma.manualPaymentSubmission.findFirst.mockResolvedValue({
+        id: 'sub-1',
+      });
+      await service.getOne('sub-1', undefined);
+      expect(
+        prisma.manualPaymentSubmission.findFirst.mock.calls[0][0].where,
+      ).toEqual({ id: 'sub-1' });
+    });
+  });
+
+  describe('tenant isolation', () => {
+    it('submit refuses a customer from another company', async () => {
+      prisma.customer.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.submit(
+          'customer-x',
+          {
+            customerId: 'customer-x',
+            invoiceId: 'invoice-1',
+            amount: 1,
+            method: PaymentMethod.CASH,
+          },
+          'staff-1',
+          'identity-1',
+          'company-1',
+        ),
+      ).rejects.toThrow(NotFoundException);
+      expect(prisma.manualPaymentSubmission.create).not.toHaveBeenCalled();
+    });
+
+    it("lists are bound to the caller's company", async () => {
+      await service.listPending('company-1');
+      await service.listAll({}, 'company-1');
+      for (const call of prisma.manualPaymentSubmission.findMany.mock.calls) {
+        expect(call[0].where.customer).toEqual({ companyId: 'company-1' });
+      }
+    });
+
+    it("attachReceipt refuses another tenant's submission", async () => {
+      prisma.manualPaymentSubmission.findFirst.mockResolvedValue(null);
+      await expect(
+        service.attachReceipt('sub-9', 'f.png', 'company-1'),
+      ).rejects.toThrow(NotFoundException);
+      expect(prisma.manualPaymentSubmission.update).not.toHaveBeenCalled();
     });
   });
 });
