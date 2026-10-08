@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { CampaignStatus } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 
+import { tenantWhere } from '../../common/tenancy/tenant-guard.service';
 /** Spec #28 — leads generated tracked via Lead.campaignId (set at creation, see LeadsController.create). */
 @Injectable()
 export class CampaignsService {
@@ -27,9 +28,10 @@ export class CampaignsService {
     });
   }
 
-  listAll(filters: { status?: CampaignStatus }) {
+  listAll(filters: { status?: CampaignStatus }, tenant?: string) {
     return this.prisma.campaign.findMany({
-      where: filters,
+      where: { ...filters, ...tenantWhere('campaign', tenant) },
+      take: 500,
       include: { _count: { select: { leads: true } } },
       orderBy: { startDate: 'desc' },
     });

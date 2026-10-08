@@ -15,6 +15,7 @@ import { FlightReissueService } from './flight-reissue.service';
 import { FlightTicketingService } from './flight-ticketing.service';
 import { FlightsService } from './flights.service';
 
+import { TenantScoped } from '../../common/tenancy/tenant-scoped.decorator';
 @Controller('flights/bookings')
 export class FlightBookingsAdminController {
   constructor(
@@ -25,6 +26,7 @@ export class FlightBookingsAdminController {
     private readonly reissueService: FlightReissueService,
   ) {}
 
+  @TenantScoped({ kind: 'customer', param: 'customerId', source: 'body' })
   @Post()
   @RequirePermissions(PERMISSIONS.FLIGHT.BOOK)
   async create(
@@ -43,6 +45,7 @@ export class FlightBookingsAdminController {
     );
   }
 
+  @TenantScoped({ kind: 'customer', param: 'customerId', source: 'body' })
   @Post('manual')
   @RequirePermissions(PERMISSIONS.FLIGHT.MANUAL_BOOKING)
   async createManual(
@@ -53,6 +56,7 @@ export class FlightBookingsAdminController {
     return this.flightsService.createManualBooking(dto, staffId ?? '');
   }
 
+  @TenantScoped('flightBooking')
   @Post(':id/approve-manual')
   @RequirePermissions(PERMISSIONS.FLIGHT.MANUAL_BOOKING_APPROVE)
   async approveManual(
@@ -76,6 +80,7 @@ export class FlightBookingsAdminController {
     );
   }
 
+  @TenantScoped('flightBooking')
   @Get(':id')
   @RequirePermissions(PERMISSIONS.FLIGHT.READ)
   findOne(@CurrentUser() user: AuthContext, @Param('id') id: string) {
@@ -86,12 +91,14 @@ export class FlightBookingsAdminController {
     );
   }
 
+  @TenantScoped('flightBooking')
   @Post(':id/cancel')
   @RequirePermissions(PERMISSIONS.FLIGHT.CANCEL)
   cancel(@Param('id') id: string) {
     return this.flightsService.cancelBooking(id);
   }
 
+  @TenantScoped('flightBooking')
   @Post(':id/ticket')
   @RequirePermissions(PERMISSIONS.FLIGHT.TICKET_ISSUE)
   async issueTicket(@CurrentUser() user: AuthContext, @Param('id') id: string) {
@@ -99,12 +106,14 @@ export class FlightBookingsAdminController {
     return this.ticketingService.issueTicket(id, staffId ?? '');
   }
 
+  @TenantScoped('flightBooking')
   @Get(':id/refund-preview')
   @RequirePermissions(PERMISSIONS.FLIGHT.REFUND)
   previewRefund(@Param('id') id: string) {
     return this.refundsService.previewRefund(id);
   }
 
+  @TenantScoped('flightBooking')
   @Post(':id/refund')
   @RequirePermissions(PERMISSIONS.FLIGHT.REFUND)
   async requestRefund(
@@ -120,6 +129,7 @@ export class FlightBookingsAdminController {
     });
   }
 
+  @TenantScoped('flightBooking')
   @Post(':id/reissue')
   @RequirePermissions(PERMISSIONS.FLIGHT.REISSUE)
   async requestReissue(
@@ -135,6 +145,7 @@ export class FlightBookingsAdminController {
     );
   }
 
+  @TenantScoped({ kind: 'flightReissue', param: 'reissueId' })
   @Post('reissues/:reissueId/complete')
   @RequirePermissions(PERMISSIONS.FLIGHT.REISSUE)
   async completeReissue(
@@ -150,12 +161,14 @@ export class FlightBookingsAdminController {
     );
   }
 
+  @TenantScoped('flightBooking')
   @Get(':id/reissues')
   @RequirePermissions(PERMISSIONS.FLIGHT.READ)
   listReissues(@Param('id') id: string) {
     return this.reissueService.listAll({ bookingId: id });
   }
 
+  @TenantScoped('flightBooking')
   @Get(':id/refunds')
   @RequirePermissions(PERMISSIONS.FLIGHT.READ)
   listRefunds(@Param('id') id: string) {

@@ -27,9 +27,10 @@ export class HajjGroupsService {
     private readonly auditService: AuditService,
   ) {}
 
-  async create(dto: CreateHajjGroupDto) {
+  async create(dto: CreateHajjGroupDto, companyId?: string) {
     const group = await this.prisma.hajjGroup.create({
       data: {
+        companyId,
         groupNumber: generateGroupNumber(),
         name: dto.name,
         packageId: dto.packageId,
@@ -51,9 +52,12 @@ export class HajjGroupsService {
     return group;
   }
 
-  listAll(filters: { status?: TravelGroupStatus; packageId?: string }) {
+  listAll(
+    filters: { status?: TravelGroupStatus; packageId?: string },
+    tenant?: string,
+  ) {
     return this.prisma.hajjGroup.findMany({
-      where: filters,
+      where: { ...filters, ...(tenant !== undefined && { companyId: tenant }) },
       include: {
         package: { select: { name: true } },
         coordinatorStaff: { select: { firstName: true, lastName: true } },

@@ -124,7 +124,9 @@ describe('VisaIncentivesService', () => {
       findFirst: jest.Mock;
       create: jest.Mock;
       findUnique: jest.Mock;
+      findUniqueOrThrow: jest.Mock;
       update: jest.Mock;
+      updateMany: jest.Mock;
     };
     staff: { findUnique: jest.Mock };
   };
@@ -151,7 +153,9 @@ describe('VisaIncentivesService', () => {
         findFirst: jest.fn().mockResolvedValue(null),
         create: jest.fn(),
         findUnique: jest.fn(),
+        findUniqueOrThrow: jest.fn(),
         update: jest.fn(),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       staff: { findUnique: jest.fn() },
     };
@@ -336,15 +340,15 @@ describe('VisaIncentivesService', () => {
     });
 
     it('approves a PENDING incentive and notifies the staff member', async () => {
-      prisma.staffIncentive.update.mockResolvedValue({
+      prisma.staffIncentive.findUniqueOrThrow.mockResolvedValue({
         ...pendingIncentive,
         status: IncentiveStatus.APPROVED,
       });
 
       await service.approve('inc-1', 'approver-1');
 
-      expect(prisma.staffIncentive.update).toHaveBeenCalledWith({
-        where: { id: 'inc-1' },
+      expect(prisma.staffIncentive.updateMany).toHaveBeenCalledWith({
+        where: { id: 'inc-1', status: IncentiveStatus.PENDING },
         data: expect.objectContaining({
           status: IncentiveStatus.APPROVED,
           approvedByStaffId: 'approver-1',
@@ -354,6 +358,20 @@ describe('VisaIncentivesService', () => {
         'staff@example.com',
         'staff-identity-1',
         expect.objectContaining({ status: 'APPROVED' }),
+      );
+    });
+
+    it('refuses to let a staff member approve an incentive payable to themselves', async () => {
+      await expect(service.approve('inc-1', 'staff-1')).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(prisma.staffIncentive.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('loses cleanly when another approver decided it first', async () => {
+      prisma.staffIncentive.updateMany.mockResolvedValue({ count: 0 });
+      await expect(service.approve('inc-1', 'approver-1')).rejects.toThrow(
+        ConflictException,
       );
     });
 
@@ -377,7 +395,7 @@ describe('VisaIncentivesService', () => {
       await expect(
         highValueService.approve('inc-1', 'approver-1', []),
       ).rejects.toThrow(ForbiddenException);
-      expect(prisma.staffIncentive.update).not.toHaveBeenCalled();
+      expect(prisma.staffIncentive.updateMany).not.toHaveBeenCalled();
     });
 
     it('spec #14: allows approval above tier 1 when the actor holds FINANCE.APPROVE_HIGH_VALUE', async () => {
@@ -386,7 +404,7 @@ describe('VisaIncentivesService', () => {
         payoutApprovalTier2Max: 500_000,
       });
       prisma.staffIncentive.findUnique.mockResolvedValue(pendingIncentive);
-      prisma.staffIncentive.update.mockResolvedValue({
+      prisma.staffIncentive.findUniqueOrThrow.mockResolvedValue({
         ...pendingIncentive,
         status: IncentiveStatus.APPROVED,
       });
@@ -395,7 +413,7 @@ describe('VisaIncentivesService', () => {
         'finance:approve_high_value',
       ]);
 
-      expect(prisma.staffIncentive.update).toHaveBeenCalled();
+      expect(prisma.staffIncentive.updateMany).toHaveBeenCalled();
     });
 
     it('rejects a PENDING incentive with a reason', async () => {

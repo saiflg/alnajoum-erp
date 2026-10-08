@@ -18,6 +18,8 @@ import { VerifyGuarantorDto } from './dto/verify-guarantor.dto';
 import { GuarantorsService } from './guarantors.service';
 import { RequireFeature } from '../../common/decorators/require-feature.decorator';
 
+import { TenantScoped } from '../../common/tenancy/tenant-scoped.decorator';
+import { resolveTenantFilter } from '../../common/utils/tenant.util';
 @RequireFeature('ENABLE_VISA')
 @Controller('visa/guarantors')
 export class GuarantorsAdminController {
@@ -29,12 +31,17 @@ export class GuarantorsAdminController {
   @Get()
   @RequirePermissions(PERMISSIONS.VISA.VIEW)
   list(
+    @CurrentUser() user: AuthContext,
     @Query('verificationStatus') verificationStatus?: VerificationStatus,
     @Query('approvalStatus') approvalStatus?: ApprovalStatus,
   ) {
-    return this.guarantorsService.list({ verificationStatus, approvalStatus });
+    return this.guarantorsService.list(
+      { verificationStatus, approvalStatus },
+      resolveTenantFilter(user),
+    );
   }
 
+  @TenantScoped('guarantor')
   @Get(':id')
   @RequirePermissions(PERMISSIONS.VISA.VIEW)
   get(@Param('id') id: string) {
@@ -51,6 +58,7 @@ export class GuarantorsAdminController {
     return this.guarantorsService.attachToApplication(applicationId, dto);
   }
 
+  @TenantScoped('guarantor')
   @Post(':id/verify')
   @RequirePermissions(PERMISSIONS.VISA.GUARANTOR_VERIFY)
   async verify(

@@ -21,6 +21,7 @@ import { ReviewManualPaymentDto } from './dto/review-manual-payment.dto';
 import { SubmitManualPaymentDto } from './dto/submit-manual-payment.dto';
 import { ManualPaymentsService } from './manual-payments.service';
 
+import { TenantScoped } from '../../common/tenancy/tenant-scoped.decorator';
 const NAMESPACE = 'manual-payment-receipts';
 
 /**
@@ -36,6 +37,7 @@ export class ManualPaymentsController {
     private readonly usersService: UsersService,
   ) {}
 
+  @TenantScoped({ kind: 'customer', param: 'customerId', source: 'body' })
   @Post()
   @RequirePermissions(PERMISSIONS.MANUAL_PAYMENT.SUBMIT)
   async submit(

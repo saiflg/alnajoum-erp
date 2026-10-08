@@ -15,6 +15,7 @@ import { CreateTaxRuleDto } from './dto/create-tax-rule.dto';
 import { UpdateTaxRuleDto } from './dto/update-tax-rule.dto';
 import { TaxRulesService } from './tax-rules.service';
 
+import { Roles } from '../../common/decorators/roles.decorator';
 @Controller('tax-rules')
 export class TaxRulesController {
   constructor(private readonly service: TaxRulesService) {}
@@ -41,12 +42,14 @@ export class TaxRulesController {
     return this.service.get(id);
   }
 
+  @Roles('SUPER_ADMIN')
   @Post()
   @RequirePermissions(PERMISSIONS.TAX.MANAGE)
   create(@CurrentUser() user: AuthContext, @Body() dto: CreateTaxRuleDto) {
     return this.service.create(dto, user.sub);
   }
 
+  @Roles('SUPER_ADMIN')
   @Patch(':id')
   @RequirePermissions(PERMISSIONS.TAX.MANAGE)
   update(

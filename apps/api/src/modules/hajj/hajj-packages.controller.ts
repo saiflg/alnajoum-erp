@@ -19,6 +19,7 @@ import { UpdateHajjPackageDto } from './dto/update-hajj-package.dto';
 import { HajjPackagesService } from './hajj-packages.service';
 import { RequireFeature } from '../../common/decorators/require-feature.decorator';
 
+import { Roles } from '../../common/decorators/roles.decorator';
 @RequireFeature('ENABLE_HAJJ')
 @Controller('hajj/packages')
 export class HajjPackagesController {
@@ -43,12 +44,14 @@ export class HajjPackagesController {
     return this.packagesService.findOne(id, true);
   }
 
+  @Roles('SUPER_ADMIN')
   @Post()
   @RequirePermissions(PERMISSIONS.HAJJ_PACKAGE.CREATE)
   create(@CurrentUser() user: AuthContext, @Body() dto: CreateHajjPackageDto) {
     return this.packagesService.create(dto, user.sub);
   }
 
+  @Roles('SUPER_ADMIN')
   @Patch(':id')
   @RequirePermissions(PERMISSIONS.HAJJ_PACKAGE.UPDATE)
   update(
@@ -59,6 +62,7 @@ export class HajjPackagesController {
     return this.packagesService.update(id, dto, user.sub);
   }
 
+  @Roles('SUPER_ADMIN')
   @Delete(':id')
   @RequirePermissions(PERMISSIONS.HAJJ_PACKAGE.DELETE)
   async remove(@Param('id') id: string) {

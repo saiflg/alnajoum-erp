@@ -17,43 +17,62 @@ import {
 } from './dto/create-group.dto';
 import { UmrahGroupsService } from './umrah-groups.service';
 
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import type { AuthContext } from '../../common/interfaces/auth-context.interface';
+import { resolveTenantFilter } from '../../common/utils/tenant.util';
+import { TenantScoped } from '../../common/tenancy/tenant-scoped.decorator';
 @Controller('hajj-ops/umrah-groups')
 export class UmrahGroupsController {
   constructor(private readonly service: UmrahGroupsService) {}
 
   @Post()
+  @TenantScoped({ kind: 'staff', param: 'coordinatorStaffId', source: 'body' })
   @RequirePermissions(PERMISSIONS.HAJJ_OPS.GROUP_MANAGE)
-  create(@Body() dto: CreateUmrahGroupDto) {
-    return this.service.create(dto);
+  create(@CurrentUser() user: AuthContext, @Body() dto: CreateUmrahGroupDto) {
+    return this.service.create(dto, user.companyId ?? undefined);
   }
 
   @Get()
   @RequirePermissions(PERMISSIONS.HAJJ_OPS.GROUP_VIEW)
   listAll(
+    @CurrentUser() user: AuthContext,
     @Query('status') status?: TravelGroupStatus,
     @Query('packageId') packageId?: string,
   ) {
-    return this.service.listAll({ status, packageId });
+    return this.service.listAll(
+      { status, packageId },
+      resolveTenantFilter(user),
+    );
   }
 
+  @TenantScoped('umrahGroup')
   @Get(':id')
   @RequirePermissions(PERMISSIONS.HAJJ_OPS.GROUP_VIEW)
   get(@Param('id') id: string) {
     return this.service.get(id);
   }
 
+  @TenantScoped('umrahGroup')
   @Patch(':id/status')
   @RequirePermissions(PERMISSIONS.HAJJ_OPS.GROUP_MANAGE)
   updateStatus(@Param('id') id: string, @Body() dto: UpdateGroupStatusDto) {
     return this.service.updateStatus(id, dto.status);
   }
 
+  @TenantScoped('umrahGroup')
+  @TenantScoped({
+    kind: 'umrahRegistrationPilgrim',
+    param: 'pilgrimId',
+    source: 'body',
+  })
   @Post(':id/pilgrims')
   @RequirePermissions(PERMISSIONS.HAJJ_OPS.GROUP_MANAGE)
   assignPilgrim(@Param('id') id: string, @Body() dto: AssignPilgrimToGroupDto) {
     return this.service.assignPilgrim(id, dto.pilgrimId);
   }
 
+  @TenantScoped('umrahGroup')
+  @TenantScoped({ kind: 'umrahRegistrationPilgrim', param: 'pilgrimId' })
   @Patch(':id/pilgrims/:pilgrimId/remove')
   @RequirePermissions(PERMISSIONS.HAJJ_OPS.GROUP_MANAGE)
   removePilgrim(

@@ -15,6 +15,7 @@ import { AddProviderMessageDto } from './dto/add-provider-message.dto';
 import { VisaSubmissionsService } from './visa-submissions.service';
 import { RequireFeature } from '../../common/decorators/require-feature.decorator';
 
+import { TenantScoped } from '../../common/tenancy/tenant-scoped.decorator';
 @RequireFeature('ENABLE_VISA')
 @Controller('visa/applications/:id/submission')
 export class VisaSubmissionsController {
@@ -31,12 +32,14 @@ export class VisaSubmissionsController {
     return staffId;
   }
 
+  @TenantScoped('visaApplication')
   @Get()
   @RequirePermissions(PERMISSIONS.VISA.VIEW)
   list(@Param('id') id: string) {
     return this.service.listSubmissions(id);
   }
 
+  @TenantScoped('visaApplication')
   @Post()
   @RequirePermissions(PERMISSIONS.VISA.SUBMIT)
   async submit(@CurrentUser() user: AuthContext, @Param('id') id: string) {
@@ -44,6 +47,7 @@ export class VisaSubmissionsController {
     return this.service.submit(id, staffId);
   }
 
+  @TenantScoped('visaApplication')
   @Post('sync')
   @RequirePermissions(PERMISSIONS.VISA.SUBMIT)
   async sync(@CurrentUser() user: AuthContext, @Param('id') id: string) {
@@ -51,18 +55,21 @@ export class VisaSubmissionsController {
     return this.service.syncStatus(id, staffId);
   }
 
+  @TenantScoped('visaApplication')
   @Get('messages')
   @RequirePermissions(PERMISSIONS.VISA.VIEW)
   listMessages(@Param('id') id: string) {
     return this.service.listProviderMessages(id);
   }
 
+  @TenantScoped('visaApplication')
   @Post('messages')
   @RequirePermissions(PERMISSIONS.VISA.SUBMIT)
   addMessage(@Param('id') id: string, @Body() dto: AddProviderMessageDto) {
     return this.service.addManualProviderMessage(id, dto.message, dto.severity);
   }
 
+  @TenantScoped('visaApplication')
   @Post('messages/:messageId/acknowledge')
   @RequirePermissions(PERMISSIONS.VISA.VIEW)
   async acknowledge(

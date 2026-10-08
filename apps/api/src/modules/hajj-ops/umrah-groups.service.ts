@@ -22,9 +22,10 @@ export class UmrahGroupsService {
     private readonly auditService: AuditService,
   ) {}
 
-  async create(dto: CreateUmrahGroupDto) {
+  async create(dto: CreateUmrahGroupDto, companyId?: string) {
     const group = await this.prisma.umrahGroup.create({
       data: {
+        companyId,
         groupNumber: generateGroupNumber(),
         name: dto.name,
         groupType: dto.groupType,
@@ -47,9 +48,12 @@ export class UmrahGroupsService {
     return group;
   }
 
-  listAll(filters: { status?: TravelGroupStatus; packageId?: string }) {
+  listAll(
+    filters: { status?: TravelGroupStatus; packageId?: string },
+    tenant?: string,
+  ) {
     return this.prisma.umrahGroup.findMany({
-      where: filters,
+      where: { ...filters, ...(tenant !== undefined && { companyId: tenant }) },
       include: {
         package: { select: { name: true } },
         coordinatorStaff: { select: { firstName: true, lastName: true } },

@@ -4,11 +4,13 @@ import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { VisaTimelineService } from './visa-timeline.service';
 import { RequireFeature } from '../../common/decorators/require-feature.decorator';
 
+import { TenantScoped } from '../../common/tenancy/tenant-scoped.decorator';
 @RequireFeature('ENABLE_VISA')
 @Controller('visa/applications/:id/timeline')
 export class VisaTimelineController {
   constructor(private readonly service: VisaTimelineService) {}
 
+  @TenantScoped('visaApplication')
   @Get()
   @RequirePermissions(PERMISSIONS.VISA.VIEW)
   getTimeline(@Param('id') id: string) {

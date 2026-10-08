@@ -7,6 +7,8 @@ import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { UsersService } from '../users/users.service';
 import { FeedbackService } from './feedback.service';
 
+import { TenantScoped } from '../../common/tenancy/tenant-scoped.decorator';
+import { resolveTenantFilter } from '../../common/utils/tenant.util';
 @Controller('crm/feedback')
 export class FeedbackController {
   constructor(
@@ -46,15 +48,21 @@ export class FeedbackController {
   @Get()
   @RequirePermissions(PERMISSIONS.CRM.FEEDBACK_VIEW)
   listAll(
+    @CurrentUser() user: AuthContext,
     @Query('isApproved') isApproved?: string,
     @Query('serviceType') serviceType?: string,
   ) {
-    return this.feedbackService.listAll({
-      isApproved: isApproved === undefined ? undefined : isApproved === 'true',
-      serviceType,
-    });
+    return this.feedbackService.listAll(
+      {
+        isApproved:
+          isApproved === undefined ? undefined : isApproved === 'true',
+        serviceType,
+      },
+      resolveTenantFilter(user),
+    );
   }
 
+  @TenantScoped('customerFeedback')
   @Post(':id/approve')
   @RequirePermissions(PERMISSIONS.CRM.FEEDBACK_APPROVE)
   async approve(@CurrentUser() user: AuthContext, @Param('id') id: string) {

@@ -17,6 +17,7 @@ import { UpdateVisaServiceDto } from './dto/update-visa-service.dto';
 import { VisaServicesService } from './visa-services.service';
 import { RequireFeature } from '../../common/decorators/require-feature.decorator';
 
+import { Roles } from '../../common/decorators/roles.decorator';
 /**
  * The visa product catalog — staff-facing (includes cost/margin). The
  * public/customer-facing equivalent is VisaController.listActiveServices()
@@ -29,6 +30,7 @@ import { RequireFeature } from '../../common/decorators/require-feature.decorato
 export class VisaServicesController {
   constructor(private readonly visaServicesService: VisaServicesService) {}
 
+  @Roles('SUPER_ADMIN')
   @Post()
   @RequirePermissions(PERMISSIONS.VISA.CREATE)
   create(@CurrentUser() user: AuthContext, @Body() dto: CreateVisaServiceDto) {
@@ -50,6 +52,7 @@ export class VisaServicesController {
     return this.visaServicesService.get(id);
   }
 
+  @Roles('SUPER_ADMIN')
   @Patch(':id')
   @RequirePermissions(PERMISSIONS.VISA.EDIT)
   update(

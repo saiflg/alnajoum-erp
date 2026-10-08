@@ -15,11 +15,16 @@ import { resolveTenantFilter } from '../../common/utils/tenant.util';
 import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { ManifestService } from './manifest.service';
 
+import { TenantScoped } from '../../common/tenancy/tenant-scoped.decorator';
 /** Spec #17/#18/#20 — contains passport numbers, so every route here is gated behind MANIFEST_VIEW. */
 @Controller('hajj-ops/manifests')
 export class ManifestController {
   constructor(private readonly service: ManifestService) {}
 
+  @TenantScoped({
+    param: 'groupId',
+    kindBy: { param: 'type', map: { HAJJ: 'hajjGroup', UMRAH: 'umrahGroup' } },
+  })
   @Get(':type/:groupId/pdf')
   @RequirePermissions(PERMISSIONS.HAJJ_OPS.MANIFEST_VIEW)
   async pdf(
@@ -40,6 +45,10 @@ export class ManifestController {
     return new StreamableFile(stream);
   }
 
+  @TenantScoped({
+    param: 'groupId',
+    kindBy: { param: 'type', map: { HAJJ: 'hajjGroup', UMRAH: 'umrahGroup' } },
+  })
   @Get(':type/:groupId/csv')
   @RequirePermissions(PERMISSIONS.HAJJ_OPS.MANIFEST_VIEW)
   async csv(

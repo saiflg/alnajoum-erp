@@ -1,5 +1,6 @@
 import {
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -64,13 +65,23 @@ export class ExpensesService {
     });
   }
 
-  listAll(filters: {
-    status?: ExpenseStatus;
-    branchId?: string;
-    category?: string;
-  }) {
+  listAll(
+    filters: {
+      status?: ExpenseStatus;
+      branchId?: string;
+      category?: string;
+    },
+    tenant?: string,
+  ) {
     return this.prisma.expense.findMany({
-      where: filters,
+      // An expense belongs to the company of the staff member who submitted it.
+      where: {
+        ...filters,
+        ...(tenant !== undefined && {
+          createdByStaff: { companyId: tenant },
+        }),
+      },
+      take: 500,
       include: {
         createdByStaff: { select: { firstName: true, lastName: true } },
         approvedByStaff: { select: { firstName: true, lastName: true } },
@@ -104,13 +115,26 @@ export class ExpensesService {
         `This expense is already ${expense.status.toLowerCase()}`,
       );
     }
-    const updated = await this.prisma.expense.update({
-      where: { id },
+    // Segregation of duties: whoever submitted a spend cannot be the one who authorises it.
+    if (expense.createdByStaffId === approvedByStaffId) {
+      throw new ForbiddenException(
+        'You cannot approve an expense that you submitted yourself',
+      );
+    }
+    // Atomic PENDING -> APPROVED: two reviewers cannot both decide the same expense.
+    const claim = await this.prisma.expense.updateMany({
+      where: { id, status: ExpenseStatus.PENDING },
       data: {
         status: ExpenseStatus.APPROVED,
         approvedByStaffId,
         approvedAt: new Date(),
       },
+    });
+    if (claim.count === 0) {
+      throw new ConflictException('This expense has already been reviewed');
+    }
+    const updated = await this.prisma.expense.findUniqueOrThrow({
+      where: { id },
     });
     await this.auditService.record({
       identityId: actorIdentityId,
@@ -129,9 +153,15 @@ export class ExpensesService {
         `This expense is already ${expense.status.toLowerCase()}`,
       );
     }
-    const updated = await this.prisma.expense.update({
-      where: { id },
+    const claim = await this.prisma.expense.updateMany({
+      where: { id, status: ExpenseStatus.PENDING },
       data: { status: ExpenseStatus.REJECTED, rejectionReason: reason },
+    });
+    if (claim.count === 0) {
+      throw new ConflictException('This expense has already been reviewed');
+    }
+    const updated = await this.prisma.expense.findUniqueOrThrow({
+      where: { id },
     });
     await this.auditService.record({
       identityId: actorIdentityId,
@@ -155,12 +185,29 @@ export class ExpensesService {
     const accountCode =
       expense.account?.code ?? this.fallbackAccountCode(expense.category);
 
-    const updated = await this.prisma.expense.update({
-      where: { id },
+    // Atomic APPROVED -> PAID *before* the money moves: a double click or a retry can no longer post
+    // the expense to the ledger twice.
+    const claim = await this.prisma.expense.updateMany({
+      where: { id, status: ExpenseStatus.APPROVED },
       data: { status: ExpenseStatus.PAID, paidAt: new Date() },
     });
+    if (claim.count === 0) {
+      throw new ConflictException('This expense has already been paid');
+    }
+    const updated = await this.prisma.expense.findUniqueOrThrow({
+      where: { id },
+    });
 
-    await this.financePostingService.postExpensePaid(updated, accountCode);
+    try {
+      await this.financePostingService.postExpensePaid(updated, accountCode);
+    } catch (error) {
+      // The ledger entry did not happen, so the expense must not read as paid.
+      await this.prisma.expense.updateMany({
+        where: { id, status: ExpenseStatus.PAID },
+        data: { status: ExpenseStatus.APPROVED, paidAt: null },
+      });
+      throw error;
+    }
 
     await this.auditService.record({
       identityId: actorIdentityId,

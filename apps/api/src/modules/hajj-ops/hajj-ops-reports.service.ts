@@ -8,48 +8,16 @@ import {
 } from '../analytics/analytics-scope.service';
 
 /**
- * A group has no companyId of its own; it belongs to a company through the
- * customers registered into it (or, for a group nobody has joined yet, through
- * its coordinator). A group with neither is unattributable and therefore
- * excluded from every tenant-scoped view, same conservative choice as leads.
+ * Groups, vehicles and drivers carry their own companyId (Phase 22). Before that a group could only be
+ * attributed through the customers registered into it and fleet records had no owner at all.
  */
 const hajjGroupTenant = (companyId?: string): Prisma.HajjGroupWhereInput =>
-  companyId
-    ? {
-        OR: [
-          { pilgrims: { some: { registration: { customer: { companyId } } } } },
-          { coordinatorStaff: { companyId } },
-        ],
-      }
-    : {};
+  companyId ? { companyId } : {};
 
 const umrahGroupTenant = (companyId?: string): Prisma.UmrahGroupWhereInput =>
-  companyId
-    ? {
-        OR: [
-          { pilgrims: { some: { registration: { customer: { companyId } } } } },
-          { coordinatorStaff: { companyId } },
-        ],
-      }
-    : {};
+  companyId ? { companyId } : {};
 
-/**
- * Fleet vehicles and drivers have no owner at all. A tenant sees only those its
- * own groups' transports actually use; SUPER_ADMIN sees the whole pool.
- */
-const fleetTenant = (companyId?: string) =>
-  companyId
-    ? {
-        transports: {
-          some: {
-            OR: [
-              { hajjGroup: hajjGroupTenant(companyId) },
-              { umrahGroup: umrahGroupTenant(companyId) },
-            ],
-          },
-        },
-      }
-    : {};
+const fleetTenant = (companyId?: string) => (companyId ? { companyId } : {});
 
 /** Spec #23 (role-based dashboards) / #24 (per-package profitability, financial-users-only). */
 @Injectable()

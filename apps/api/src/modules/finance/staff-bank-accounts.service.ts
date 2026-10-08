@@ -1,10 +1,19 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+
+import { tenantWhere } from '../../common/tenancy/tenant-guard.service';
+/** 0123456789 -> ******6789. Enough for a person to recognise the account, not to use it. */
+export function maskAccountNumber(value: string): string {
+  const digits = value.trim();
+  if (digits.length <= 4) return '*'.repeat(digits.length);
+  return '*'.repeat(digits.length - 4) + digits.slice(-4);
+}
 
 /** Spec #12 — the Finance-side half of staff payout bank account verification (the staff self-service update lives in StaffPayoutsController). */
 @Injectable()
@@ -14,12 +23,14 @@ export class StaffBankAccountsService {
     private readonly auditService: AuditService,
   ) {}
 
-  listUnverified() {
+  listUnverified(tenant?: string) {
     return this.prisma.staff.findMany({
       where: {
         bankAccountVerified: false,
         bankAccountNumber: { not: null },
+        ...(tenant !== undefined && { companyId: tenant }),
       },
+      take: 500,
       select: {
         id: true,
         firstName: true,
@@ -49,8 +60,14 @@ export class StaffBankAccountsService {
         'This staff member has no bank details on file to verify',
       );
     }
+    // Segregation of duties: you cannot vouch for your own payout account.
+    if (staff.id === verifiedByStaffId) {
+      throw new ForbiddenException(
+        'You cannot verify your own payout bank account',
+      );
+    }
 
-    const updated = await this.prisma.staff.update({
+    await this.prisma.staff.update({
       where: { id: staffId },
       data: {
         bankAccountVerified: true,
@@ -67,6 +84,12 @@ export class StaffBankAccountsService {
       metadata: { verifiedByStaffId },
     });
 
-    return updated;
+    // Never echo the account number back: the verifier already saw it on the list.
+    return {
+      staffId,
+      bankName: staff.bankName,
+      bankAccountNumber: maskAccountNumber(staff.bankAccountNumber),
+      bankAccountVerified: true,
+    };
   }
 }

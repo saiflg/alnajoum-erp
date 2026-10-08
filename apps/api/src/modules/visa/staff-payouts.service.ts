@@ -18,6 +18,7 @@ import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { STAFF_PAYOUT_PROVIDER } from './providers/staff-payout-provider.port';
 import type { StaffPayoutProviderPort } from './providers/staff-payout-provider.port';
 
+import { tenantWhere } from '../../common/tenancy/tenant-guard.service';
 function generatePayoutReference(): string {
   return `PAYOUT-${randomBytes(4).toString('hex').toUpperCase()}`;
 }
@@ -265,9 +266,13 @@ export class StaffPayoutsService {
     return summary;
   }
 
-  listAll(filters: { staffId?: string; status?: PayoutStatus }) {
+  listAll(
+    filters: { staffId?: string; status?: PayoutStatus },
+    tenant?: string,
+  ) {
     return this.prisma.staffPayout.findMany({
-      where: filters,
+      where: { ...filters, ...tenantWhere('staffPayout', tenant) },
+      take: 500,
       include: {
         staff: {
           select: { firstName: true, lastName: true, employeeCode: true },

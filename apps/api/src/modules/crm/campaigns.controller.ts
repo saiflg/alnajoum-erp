@@ -7,6 +7,8 @@ import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { UsersService } from '../users/users.service';
 import { CampaignsService } from './campaigns.service';
 
+import { TenantScoped } from '../../common/tenancy/tenant-scoped.decorator';
+import { resolveTenantFilter } from '../../common/utils/tenant.util';
 @Controller('crm/campaigns')
 @RequirePermissions(PERMISSIONS.CRM.CAMPAIGN_MANAGE)
 export class CampaignsController {
@@ -38,15 +40,20 @@ export class CampaignsController {
   }
 
   @Get()
-  listAll(@Query('status') status?: CampaignStatus) {
-    return this.campaignsService.listAll({ status });
+  listAll(
+    @CurrentUser() user: AuthContext,
+    @Query('status') status?: CampaignStatus,
+  ) {
+    return this.campaignsService.listAll({ status }, resolveTenantFilter(user));
   }
 
+  @TenantScoped('campaign')
   @Get(':id')
   get(@Param('id') id: string) {
     return this.campaignsService.get(id);
   }
 
+  @TenantScoped('campaign')
   @Post(':id/status')
   updateStatus(
     @Param('id') id: string,

@@ -17,6 +17,8 @@ import { RejectIncentiveDto } from './dto/reject-incentive.dto';
 import { VisaIncentivesService } from './visa-incentives.service';
 import { RequireFeature } from '../../common/decorators/require-feature.decorator';
 
+import { TenantScoped } from '../../common/tenancy/tenant-scoped.decorator';
+import { resolveTenantFilter } from '../../common/utils/tenant.util';
 @RequireFeature('ENABLE_VISA')
 @Controller('visa/incentives')
 export class VisaIncentivesController {
@@ -36,18 +38,24 @@ export class VisaIncentivesController {
   @Get()
   @RequirePermissions(PERMISSIONS.VISA.INCENTIVE_VIEW)
   list(
+    @CurrentUser() user: AuthContext,
     @Query('staffId') staffId?: string,
     @Query('status') status?: IncentiveStatus,
   ) {
-    return this.visaIncentivesService.listAll({ staffId, status });
+    return this.visaIncentivesService.listAll(
+      { staffId, status },
+      resolveTenantFilter(user),
+    );
   }
 
+  @TenantScoped('staffIncentive')
   @Get(':id')
   @RequirePermissions(PERMISSIONS.VISA.INCENTIVE_VIEW)
   get(@Param('id') id: string) {
     return this.visaIncentivesService.get(id);
   }
 
+  @TenantScoped('staffIncentive')
   @Post(':id/approve')
   @RequirePermissions(PERMISSIONS.VISA.INCENTIVE_APPROVE)
   async approve(@CurrentUser() user: AuthContext, @Param('id') id: string) {
@@ -55,6 +63,7 @@ export class VisaIncentivesController {
     return this.visaIncentivesService.approve(id, staffId, user.permissions);
   }
 
+  @TenantScoped('staffIncentive')
   @Post(':id/reject')
   @RequirePermissions(PERMISSIONS.VISA.INCENTIVE_APPROVE)
   async reject(

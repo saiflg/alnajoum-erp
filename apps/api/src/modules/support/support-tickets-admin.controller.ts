@@ -21,6 +21,7 @@ import { UsersService } from '../users/users.service';
 import { AddTicketMessageDto } from './dto/add-ticket-message.dto';
 import { SupportTicketsService } from './support-tickets.service';
 
+import { TenantScoped } from '../../common/tenancy/tenant-scoped.decorator';
 @Controller('support/tickets')
 @RequirePermissions(PERMISSIONS.SUPPORT.TICKET_VIEW)
 export class SupportTicketsAdminController {
@@ -44,11 +45,13 @@ export class SupportTicketsAdminController {
     );
   }
 
+  @TenantScoped('supportTicket')
   @Get(':id')
   get(@CurrentUser() user: AuthContext, @Param('id') id: string) {
     return this.ticketsService.get(id, resolveTenantFilter(user));
   }
 
+  @TenantScoped('supportTicket')
   @Post(':id/assign')
   @RequirePermissions(PERMISSIONS.SUPPORT.TICKET_MANAGE)
   async assign(
@@ -58,6 +61,7 @@ export class SupportTicketsAdminController {
     return this.ticketsService.assign(id, body.staffId, body.branchId);
   }
 
+  @TenantScoped('supportTicket')
   @Post(':id/status')
   @RequirePermissions(PERMISSIONS.SUPPORT.TICKET_MANAGE)
   updateStatus(
@@ -70,6 +74,7 @@ export class SupportTicketsAdminController {
     return this.ticketsService.updateStatus(id, body.status);
   }
 
+  @TenantScoped('supportTicket')
   @Post(':id/messages')
   @RequirePermissions(PERMISSIONS.SUPPORT.TICKET_MANAGE)
   async addMessage(

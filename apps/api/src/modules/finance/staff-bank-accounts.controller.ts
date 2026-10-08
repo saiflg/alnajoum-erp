@@ -12,6 +12,8 @@ import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { UsersService } from '../users/users.service';
 import { StaffBankAccountsService } from './staff-bank-accounts.service';
 
+import { TenantScoped } from '../../common/tenancy/tenant-scoped.decorator';
+import { resolveTenantFilter } from '../../common/utils/tenant.util';
 /** Spec #12's Finance-side verification (the staff self-service update lives on StaffPayoutsController). */
 @Controller('finance/staff-bank-accounts')
 @RequirePermissions(PERMISSIONS.FINANCE.STAFF_BANK_VERIFY)
@@ -22,10 +24,11 @@ export class StaffBankAccountsController {
   ) {}
 
   @Get('unverified')
-  listUnverified() {
-    return this.service.listUnverified();
+  listUnverified(@CurrentUser() user: AuthContext) {
+    return this.service.listUnverified(resolveTenantFilter(user));
   }
 
+  @TenantScoped({ kind: 'staff', param: 'staffId' })
   @Post(':staffId/verify')
   async verify(
     @CurrentUser() user: AuthContext,

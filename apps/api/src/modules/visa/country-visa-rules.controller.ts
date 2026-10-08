@@ -17,11 +17,13 @@ import { CreateCountryVisaRuleDto } from './dto/create-country-visa-rule.dto';
 import { UpdateCountryVisaRuleDto } from './dto/update-country-visa-rule.dto';
 import { RequireFeature } from '../../common/decorators/require-feature.decorator';
 
+import { Roles } from '../../common/decorators/roles.decorator';
 @RequireFeature('ENABLE_VISA')
 @Controller('visa/country-rules')
 export class CountryVisaRulesController {
   constructor(private readonly service: CountryVisaRulesService) {}
 
+  @Roles('SUPER_ADMIN')
   @Post()
   @RequirePermissions(PERMISSIONS.VISA.RULES_MANAGE)
   create(
@@ -58,6 +60,7 @@ export class CountryVisaRulesController {
     return this.service.get(id);
   }
 
+  @Roles('SUPER_ADMIN')
   @Patch(':id')
   @RequirePermissions(PERMISSIONS.VISA.RULES_MANAGE)
   update(
@@ -68,6 +71,7 @@ export class CountryVisaRulesController {
     return this.service.update(id, dto, user.sub);
   }
 
+  @Roles('SUPER_ADMIN')
   @Patch(':id/deactivate')
   @RequirePermissions(PERMISSIONS.VISA.RULES_MANAGE)
   deactivate(@CurrentUser() user: AuthContext, @Param('id') id: string) {

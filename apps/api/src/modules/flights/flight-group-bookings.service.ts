@@ -8,6 +8,7 @@ import { randomBytes } from 'crypto';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { CreateFlightGroupBookingDto } from './dto/create-flight-group-booking.dto';
 
+import { tenantWhere } from '../../common/tenancy/tenant-guard.service';
 function generateGroupReference(): string {
   return `GRP-${randomBytes(4).toString('hex').toUpperCase()}`;
 }
@@ -95,9 +96,10 @@ export class FlightGroupBookingsService {
     });
   }
 
-  listAll(filters: { status?: FlightGroupBookingStatus }) {
+  listAll(filters: { status?: FlightGroupBookingStatus }, tenant?: string) {
     return this.prisma.flightGroupBooking.findMany({
-      where: filters,
+      where: { ...filters, ...tenantWhere('flightGroupBooking', tenant) },
+      take: 500,
       include: {
         passengers: true,
         invoice: true,

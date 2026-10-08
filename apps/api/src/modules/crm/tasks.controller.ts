@@ -17,6 +17,7 @@ import { UsersService } from '../users/users.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { TasksService } from './tasks.service';
 
+import { TenantScoped } from '../../common/tenancy/tenant-scoped.decorator';
 @Controller('crm/tasks')
 export class TasksController {
   constructor(
@@ -33,6 +34,7 @@ export class TasksController {
   }
 
   /** Any staff member can create a task assigned to themselves; assigning it to someone else needs TASK_MANAGE. */
+  @TenantScoped({ kind: 'customer', param: 'customerId', source: 'body' })
   @Post()
   async create(@CurrentUser() user: AuthContext, @Body() dto: CreateTaskDto) {
     const staffId = await this.requireStaffId(user);

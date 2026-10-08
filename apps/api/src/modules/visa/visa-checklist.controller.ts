@@ -15,6 +15,7 @@ import { CreateChecklistExceptionDto } from './dto/create-checklist-exception.dt
 import { VisaChecklistService } from './visa-checklist.service';
 import { RequireFeature } from '../../common/decorators/require-feature.decorator';
 
+import { TenantScoped } from '../../common/tenancy/tenant-scoped.decorator';
 @RequireFeature('ENABLE_VISA')
 @Controller('visa/applications/:id/checklist')
 export class VisaChecklistController {
@@ -23,18 +24,21 @@ export class VisaChecklistController {
     private readonly usersService: UsersService,
   ) {}
 
+  @TenantScoped('visaApplication')
   @Get()
   @RequirePermissions(PERMISSIONS.VISA.VIEW)
   getChecklist(@Param('id') id: string) {
     return this.service.computeChecklist(id);
   }
 
+  @TenantScoped('visaApplication')
   @Get('passport-validity')
   @RequirePermissions(PERMISSIONS.VISA.VIEW)
   getPassportValidity(@Param('id') id: string) {
     return this.service.computePassportValidity(id);
   }
 
+  @TenantScoped('visaApplication')
   @Post('exceptions')
   @RequirePermissions(PERMISSIONS.VISA.CHECKLIST_EXCEPTION)
   async addException(

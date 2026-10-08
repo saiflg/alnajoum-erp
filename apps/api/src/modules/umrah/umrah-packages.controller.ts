@@ -19,6 +19,7 @@ import { UpdateUmrahPackageDto } from './dto/update-umrah-package.dto';
 import { UmrahPackagesService } from './umrah-packages.service';
 import { RequireFeature } from '../../common/decorators/require-feature.decorator';
 
+import { Roles } from '../../common/decorators/roles.decorator';
 @RequireFeature('ENABLE_UMRAH')
 @Controller('umrah/packages')
 export class UmrahPackagesController {
@@ -43,12 +44,14 @@ export class UmrahPackagesController {
     return this.packagesService.findOne(id, true);
   }
 
+  @Roles('SUPER_ADMIN')
   @Post()
   @RequirePermissions(PERMISSIONS.UMRAH_PACKAGE.CREATE)
   create(@CurrentUser() user: AuthContext, @Body() dto: CreateUmrahPackageDto) {
     return this.packagesService.create(dto, user.sub);
   }
 
+  @Roles('SUPER_ADMIN')
   @Patch(':id')
   @RequirePermissions(PERMISSIONS.UMRAH_PACKAGE.UPDATE)
   update(
@@ -59,6 +62,7 @@ export class UmrahPackagesController {
     return this.packagesService.update(id, dto, user.sub);
   }
 
+  @Roles('SUPER_ADMIN')
   @Delete(':id')
   @RequirePermissions(PERMISSIONS.UMRAH_PACKAGE.DELETE)
   async remove(@Param('id') id: string) {

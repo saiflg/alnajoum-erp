@@ -12,13 +12,16 @@ export class FleetService {
     private readonly auditService: AuditService,
   ) {}
 
-  createVehicle(dto: CreateVehicleDto) {
-    return this.prisma.vehicle.create({ data: dto });
+  createVehicle(dto: CreateVehicleDto, companyId?: string) {
+    return this.prisma.vehicle.create({ data: { ...dto, companyId } });
   }
 
-  listVehicles(status?: VehicleFleetStatus) {
+  listVehicles(status?: VehicleFleetStatus, tenant?: string) {
     return this.prisma.vehicle.findMany({
-      where: status ? { status } : undefined,
+      where: {
+        ...(status && { status }),
+        ...(tenant !== undefined && { companyId: tenant }),
+      },
       orderBy: { plateNumber: 'asc' },
     });
   }
@@ -34,8 +37,10 @@ export class FleetService {
     return vehicle;
   }
 
-  async createDriver(dto: CreateDriverDto) {
-    const driver = await this.prisma.driver.create({ data: dto });
+  async createDriver(dto: CreateDriverDto, companyId?: string) {
+    const driver = await this.prisma.driver.create({
+      data: { ...dto, companyId },
+    });
     // licenseNumber is sensitive — record that it was set, never its value.
     await this.auditService.record({
       action: 'driver.created',
@@ -46,9 +51,12 @@ export class FleetService {
   }
 
   /** Non-sensitive list — no licenseNumber, matches Staff.bankAccountNumber's list/detail split. */
-  listDrivers(status?: DriverStatus) {
+  listDrivers(status?: DriverStatus, tenant?: string) {
     return this.prisma.driver.findMany({
-      where: status ? { status } : undefined,
+      where: {
+        ...(status && { status }),
+        ...(tenant !== undefined && { companyId: tenant }),
+      },
       select: {
         id: true,
         firstName: true,

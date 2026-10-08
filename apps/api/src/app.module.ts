@@ -45,6 +45,8 @@ import { WhatsAppModule } from './modules/whatsapp/whatsapp.module';
 import { SuppliersModule } from './modules/suppliers/suppliers.module';
 import { MobileModule } from './modules/mobile/mobile.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
+import { TenancyModule } from './common/tenancy/tenancy.module';
+import { TenantResourceGuard } from './common/tenancy/tenant-resource.guard';
 import { WorkflowEventsModule } from './modules/workflows/events/workflow-events.module';
 import { WorkflowsModule } from './modules/workflows/workflows.module';
 import { RevenueModule } from './modules/revenue/revenue.module';
@@ -55,7 +57,14 @@ import { RevenueModule } from './modules/revenue/revenue.module';
       isGlobal: true,
       validate: validateEnv,
     }),
-    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
+    // 100 requests/minute per client by default. GLOBAL_THROTTLE_LIMIT exists for local load and
+    // security test harnesses only (it is flagged by the production config check).
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60_000,
+        limit: Number(process.env.GLOBAL_THROTTLE_LIMIT) || 100,
+      },
+    ]),
     ScheduleModule.forRoot(),
     // Global on purpose — the one place two feature modules that must
     // never import each other (Payments, WhatsApp) can still react to
@@ -98,6 +107,7 @@ import { RevenueModule } from './modules/revenue/revenue.module';
     MobileModule,
     RevenueModule,
     AnalyticsModule,
+    TenancyModule,
     WorkflowEventsModule,
     WorkflowsModule,
   ],
@@ -108,6 +118,9 @@ import { RevenueModule } from './modules/revenue/revenue.module';
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
     { provide: APP_GUARD, useClass: PermissionsGuard },
+    // After permissions: a caller without the permission still gets 403; an authorised one is then
+    // confined to records of their own company wherever a route declares @TenantScoped.
+    { provide: APP_GUARD, useClass: TenantResourceGuard },
     { provide: APP_GUARD, useClass: FeatureFlagGuard },
   ],
 })

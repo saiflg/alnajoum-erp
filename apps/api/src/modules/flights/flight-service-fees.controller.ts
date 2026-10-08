@@ -13,6 +13,7 @@ import { CreateFlightServiceFeeDto } from './dto/create-flight-service-fee.dto';
 import { UpdateFlightServiceFeeDto } from './dto/update-flight-service-fee.dto';
 import { FlightServiceFeesService } from './flight-service-fees.service';
 
+import { Roles } from '../../common/decorators/roles.decorator';
 @Controller('flights/service-fees')
 @RequirePermissions(PERMISSIONS.FLIGHT.PROVIDER_MANAGE)
 export class FlightServiceFeesController {
@@ -23,16 +24,19 @@ export class FlightServiceFeesController {
     return this.service.listAll();
   }
 
+  @Roles('SUPER_ADMIN')
   @Post()
   create(@Body() dto: CreateFlightServiceFeeDto) {
     return this.service.create(dto);
   }
 
+  @Roles('SUPER_ADMIN')
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateFlightServiceFeeDto) {
     return this.service.update(id, dto);
   }
 
+  @Roles('SUPER_ADMIN')
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.service.delete(id);

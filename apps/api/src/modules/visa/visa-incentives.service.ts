@@ -18,6 +18,7 @@ import { calculateStaffIncentiveAmount } from '../incentives/incentive-calculato
 import { NotificationsService } from '../notifications/notifications.service';
 import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 
+import { tenantWhere } from '../../common/tenancy/tenant-guard.service';
 function generateIncentiveReference(): string {
   return `INC-${randomBytes(4).toString('hex').toUpperCase()}`;
 }
@@ -153,9 +154,13 @@ export class VisaIncentivesService {
     }
   }
 
-  listAll(filters: { staffId?: string; status?: IncentiveStatus }) {
+  listAll(
+    filters: { staffId?: string; status?: IncentiveStatus },
+    tenant?: string,
+  ) {
     return this.prisma.staffIncentive.findMany({
-      where: filters,
+      where: { ...filters, ...tenantWhere('staffIncentive', tenant) },
+      take: 500,
       include: {
         staff: {
           select: { firstName: true, lastName: true, employeeCode: true },
@@ -230,13 +235,27 @@ export class VisaIncentivesService {
       );
     }
 
-    const updated = await this.prisma.staffIncentive.update({
-      where: { id },
+    // Segregation of duties: nobody approves an incentive that is paid to themselves.
+    if (incentive.staffId === approvedByStaffId) {
+      throw new ForbiddenException(
+        'You cannot approve an incentive that is payable to you',
+      );
+    }
+
+    // Atomic PENDING -> APPROVED: two approvers cannot both recognise (and ledger-post) it.
+    const claim = await this.prisma.staffIncentive.updateMany({
+      where: { id, status: IncentiveStatus.PENDING },
       data: {
         status: IncentiveStatus.APPROVED,
         approvedByStaffId,
         approvedAt: new Date(),
       },
+    });
+    if (claim.count === 0) {
+      throw new ConflictException('This incentive has already been reviewed');
+    }
+    const updated = await this.prisma.staffIncentive.findUniqueOrThrow({
+      where: { id },
     });
     // Recognizes the incentive as an owed expense the moment it's approved,
     // regardless of which module (visa/flight/hotel/travel package) earned

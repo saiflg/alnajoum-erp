@@ -39,12 +39,16 @@ export class ApprovalThresholdRulesController {
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: UpdateApprovalThresholdRuleDto) {
-    return this.service.update(id, dto);
+  update(
+    @CurrentUser() user: AuthContext,
+    @Param('id') id: string,
+    @Body() dto: UpdateApprovalThresholdRuleDto,
+  ) {
+    return this.service.update(id, dto, resolveTenantFilter(user));
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.service.delete(id);
+  remove(@CurrentUser() user: AuthContext, @Param('id') id: string) {
+    return this.service.delete(id, resolveTenantFilter(user));
   }
 }

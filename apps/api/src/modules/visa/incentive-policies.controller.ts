@@ -8,6 +8,7 @@ import { UpdateIncentivePolicyDto } from './dto/update-incentive-policy.dto';
 import { IncentivePoliciesService } from './incentive-policies.service';
 import { RequireFeature } from '../../common/decorators/require-feature.decorator';
 
+import { Roles } from '../../common/decorators/roles.decorator';
 @RequireFeature('ENABLE_VISA')
 @Controller('visa/incentive-policies')
 export class IncentivePoliciesController {
@@ -15,6 +16,7 @@ export class IncentivePoliciesController {
     private readonly incentivePoliciesService: IncentivePoliciesService,
   ) {}
 
+  @Roles('SUPER_ADMIN')
   @Post()
   @RequirePermissions(PERMISSIONS.VISA.EDIT)
   create(
@@ -36,6 +38,7 @@ export class IncentivePoliciesController {
     return this.incentivePoliciesService.get(id);
   }
 
+  @Roles('SUPER_ADMIN')
   @Patch(':id')
   @RequirePermissions(PERMISSIONS.VISA.EDIT)
   update(

@@ -23,6 +23,7 @@ import { VisaRefundsService } from './visa-refunds.service';
 import { VisaService } from './visa.service';
 import { RequireFeature } from '../../common/decorators/require-feature.decorator';
 
+import { TenantScoped } from '../../common/tenancy/tenant-scoped.decorator';
 @RequireFeature('ENABLE_VISA')
 @Controller('visa/applications')
 export class VisaApplicationsAdminController {
@@ -54,6 +55,7 @@ export class VisaApplicationsAdminController {
     );
   }
 
+  @TenantScoped('visaApplication')
   @Get(':id')
   @RequirePermissions(PERMISSIONS.VISA_APPLICATION.READ)
   findOne(@CurrentUser() user: AuthContext, @Param('id') id: string) {
@@ -86,18 +88,21 @@ export class VisaApplicationsAdminController {
     });
   }
 
+  @TenantScoped('visaApplication')
   @Post(':id/status')
   @RequirePermissions(PERMISSIONS.VISA_APPLICATION.MANAGE)
   updateStatus(@Param('id') id: string, @Body() dto: UpdateVisaStatusDto) {
     return this.visaService.updateStatus(id, dto.status, dto.staffNote);
   }
 
+  @TenantScoped('visaApplication')
   @Post(':id/cancel')
   @RequirePermissions(PERMISSIONS.VISA_APPLICATION.MANAGE)
   cancel(@Param('id') id: string) {
     return this.visaService.cancel(id);
   }
 
+  @TenantScoped('visaApplication')
   @Post(':id/verify-payment')
   @RequirePermissions(PERMISSIONS.VISA.PAYMENT_VERIFY)
   async verifyPayment(
@@ -108,6 +113,8 @@ export class VisaApplicationsAdminController {
     return this.visaService.markPaymentVerified(id, staffId);
   }
 
+  @TenantScoped('visaApplication')
+  @TenantScoped({ kind: 'staff', param: 'staffId', source: 'body' })
   @Post(':id/assign')
   @RequirePermissions(PERMISSIONS.VISA.ASSIGN)
   async assign(
@@ -118,12 +125,14 @@ export class VisaApplicationsAdminController {
     return this.visaService.assign(id, dto.staffId, user.sub);
   }
 
+  @TenantScoped('visaApplication')
   @Get(':id/notes')
   @RequirePermissions(PERMISSIONS.VISA.VIEW)
   listNotes(@Param('id') id: string) {
     return this.visaService.listNotes(id);
   }
 
+  @TenantScoped('visaApplication')
   @Post(':id/notes')
   @RequirePermissions(PERMISSIONS.VISA.REVIEW)
   async addNote(
@@ -135,12 +144,14 @@ export class VisaApplicationsAdminController {
     return this.visaService.addNote(id, staffId, dto.note);
   }
 
+  @TenantScoped('visaApplication')
   @Get(':id/refund-preview')
   @RequirePermissions(PERMISSIONS.VISA.REFUND)
   previewRefund(@Param('id') id: string) {
     return this.refundsService.previewRefund(id);
   }
 
+  @TenantScoped('visaApplication')
   @Post(':id/refund')
   @RequirePermissions(PERMISSIONS.VISA.REFUND)
   async requestRefund(
@@ -155,6 +166,7 @@ export class VisaApplicationsAdminController {
     });
   }
 
+  @TenantScoped('visaApplication')
   @Get(':id/refunds')
   @RequirePermissions(PERMISSIONS.VISA.REFUND)
   listRefunds(@Param('id') id: string) {

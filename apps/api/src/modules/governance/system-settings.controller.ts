@@ -42,7 +42,10 @@ export class SystemSettingsController {
 
   @Get('history/:settingId')
   @RequirePermissions(PERMISSIONS.SETTINGS.VIEW)
-  history(@Param('settingId') settingId: string) {
-    return this.service.history(settingId);
+  history(
+    @CurrentUser() user: AuthContext,
+    @Param('settingId') settingId: string,
+  ) {
+    return this.service.history(settingId, resolveTenantFilter(user));
   }
 }

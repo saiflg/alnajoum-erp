@@ -86,10 +86,19 @@ export class SystemSettingsService {
     });
   }
 
-  history(settingId: string) {
+  /** A tenant sees the history of its own settings and of the platform defaults, never another company's. */
+  history(settingId: string, tenantCompanyId?: string) {
     return this.prisma.systemSettingHistory.findMany({
-      where: { systemSettingId: settingId },
+      where: {
+        systemSettingId: settingId,
+        ...(tenantCompanyId !== undefined && {
+          systemSetting: {
+            OR: [{ companyId: tenantCompanyId }, { companyId: null }],
+          },
+        }),
+      },
       orderBy: { createdAt: 'desc' },
+      take: 200,
     });
   }
 }

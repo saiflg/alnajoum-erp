@@ -86,15 +86,21 @@ export class PilgrimLookupService {
 
   async findByCode(
     code: string,
+    tenant?: string,
   ): Promise<{ pilgrimType: PilgrimType; pilgrimId: string }> {
-    const hajj = await this.prisma.hajjRegistrationPilgrim.findUnique({
-      where: { pilgrimCode: code },
+    // A scanned code from another company's pilgrim is "not found", not a check-in.
+    const owner =
+      tenant === undefined
+        ? {}
+        : { registration: { customer: { companyId: tenant } } };
+    const hajj = await this.prisma.hajjRegistrationPilgrim.findFirst({
+      where: { pilgrimCode: code, ...owner },
       select: { id: true },
     });
     if (hajj) return { pilgrimType: PilgrimType.HAJJ, pilgrimId: hajj.id };
 
-    const umrah = await this.prisma.umrahRegistrationPilgrim.findUnique({
-      where: { pilgrimCode: code },
+    const umrah = await this.prisma.umrahRegistrationPilgrim.findFirst({
+      where: { pilgrimCode: code, ...owner },
       select: { id: true },
     });
     if (umrah) return { pilgrimType: PilgrimType.UMRAH, pilgrimId: umrah.id };

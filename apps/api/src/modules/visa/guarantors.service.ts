@@ -14,6 +14,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { CreateGuarantorDto } from './dto/create-guarantor.dto';
 import { VerifyGuarantorDto } from './dto/verify-guarantor.dto';
 
+import { tenantWhere } from '../../common/tenancy/tenant-guard.service';
 @Injectable()
 export class GuarantorsService {
   constructor(
@@ -72,12 +73,16 @@ export class GuarantorsService {
     return guarantor;
   }
 
-  list(filters: {
-    verificationStatus?: VerificationStatus;
-    approvalStatus?: ApprovalStatus;
-  }) {
+  list(
+    filters: {
+      verificationStatus?: VerificationStatus;
+      approvalStatus?: ApprovalStatus;
+    },
+    tenant?: string,
+  ) {
     return this.prisma.guarantor.findMany({
-      where: filters,
+      where: { ...filters, ...tenantWhere('guarantor', tenant) },
+      take: 500,
       include: { application: { select: { applicationReference: true } } },
       orderBy: { createdAt: 'desc' },
     });

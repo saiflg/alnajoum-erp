@@ -21,6 +21,8 @@ import { CreateExpenseDto } from './dto/create-expense.dto';
 import { ReviewExpenseDto } from './dto/review-expense.dto';
 import { ExpensesService } from './expenses.service';
 
+import { TenantScoped } from '../../common/tenancy/tenant-scoped.decorator';
+import { resolveTenantFilter } from '../../common/utils/tenant.util';
 const NAMESPACE = 'expense-receipts';
 
 @Controller('finance/expenses')
@@ -48,6 +50,7 @@ export class ExpensesController {
     return this.expensesService.create(dto, staffId, user.sub);
   }
 
+  @TenantScoped('expense')
   @Post(':id/receipt')
   @RequirePermissions(PERMISSIONS.FINANCE.EXPENSE_CREATE)
   @UseInterceptors(
@@ -63,19 +66,25 @@ export class ExpensesController {
   @Get()
   @RequirePermissions(PERMISSIONS.FINANCE.EXPENSE_APPROVE)
   listAll(
+    @CurrentUser() user: AuthContext,
     @Query('status') status?: ExpenseStatus,
     @Query('branchId') branchId?: string,
     @Query('category') category?: string,
   ) {
-    return this.expensesService.listAll({ status, branchId, category });
+    return this.expensesService.listAll(
+      { status, branchId, category },
+      resolveTenantFilter(user),
+    );
   }
 
+  @TenantScoped('expense')
   @Get(':id')
   @RequirePermissions(PERMISSIONS.FINANCE.EXPENSE_APPROVE)
   get(@Param('id') id: string) {
     return this.expensesService.get(id);
   }
 
+  @TenantScoped('expense')
   @Post(':id/approve')
   @RequirePermissions(PERMISSIONS.FINANCE.EXPENSE_APPROVE)
   async approve(@CurrentUser() user: AuthContext, @Param('id') id: string) {
@@ -83,6 +92,7 @@ export class ExpensesController {
     return this.expensesService.approve(id, staffId, user.sub);
   }
 
+  @TenantScoped('expense')
   @Post(':id/reject')
   @RequirePermissions(PERMISSIONS.FINANCE.EXPENSE_APPROVE)
   async reject(
@@ -97,6 +107,7 @@ export class ExpensesController {
     );
   }
 
+  @TenantScoped('expense')
   @Post(':id/pay')
   @RequirePermissions(PERMISSIONS.FINANCE.EXPENSE_APPROVE)
   async markPaid(@CurrentUser() user: AuthContext, @Param('id') id: string) {

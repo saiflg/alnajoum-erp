@@ -10,6 +10,7 @@ import { AuditService } from '../audit/audit.service';
 import { calculateStaffIncentiveAmount } from '../incentives/incentive-calculator';
 import { CreateTravelPackageDto } from './dto/create-travel-package.dto';
 
+import { tenantWhere } from '../../common/tenancy/tenant-guard.service';
 function generatePackageReference(): string {
   return `PKG-${randomBytes(4).toString('hex').toUpperCase()}`;
 }
@@ -110,8 +111,10 @@ export class TravelPackagesService {
     });
   }
 
-  listAll() {
+  listAll(tenant?: string) {
     return this.prisma.travelPackage.findMany({
+      where: tenantWhere('travelPackage', tenant),
+      take: 500,
       include: {
         components: true,
         customer: { select: { firstName: true, lastName: true } },

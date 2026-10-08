@@ -7,6 +7,7 @@ import { UsersService } from '../users/users.service';
 import { PurchaseFlightAncillaryDto } from './dto/purchase-flight-ancillary.dto';
 import { FlightAncillariesService } from './flight-ancillaries.service';
 
+import { TenantScoped } from '../../common/tenancy/tenant-scoped.decorator';
 @Controller('flights/bookings/:id/ancillaries')
 @RequirePermissions(PERMISSIONS.FLIGHT.ANCILLARY_MANAGE)
 export class FlightAncillariesController {
@@ -15,11 +16,13 @@ export class FlightAncillariesController {
     private readonly usersService: UsersService,
   ) {}
 
+  @TenantScoped('flightBooking')
   @Get()
   list(@Param('id') id: string) {
     return this.service.listForBooking(id);
   }
 
+  @TenantScoped('flightBooking')
   @Post()
   async purchase(
     @CurrentUser() user: AuthContext,

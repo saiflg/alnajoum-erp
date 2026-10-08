@@ -15,6 +15,7 @@ import { CreateCurrencyDto } from './dto/create-currency.dto';
 import { UpdateCurrencyDto } from './dto/update-currency.dto';
 import { CurrencyService } from './currency.service';
 
+import { Roles } from '../../common/decorators/roles.decorator';
 @Controller('currencies')
 export class CurrencyController {
   constructor(private readonly service: CurrencyService) {}
@@ -34,12 +35,14 @@ export class CurrencyController {
     return this.service.get(code);
   }
 
+  @Roles('SUPER_ADMIN')
   @Post()
   @RequirePermissions(PERMISSIONS.CURRENCY.MANAGE)
   create(@CurrentUser() user: AuthContext, @Body() dto: CreateCurrencyDto) {
     return this.service.create(dto, user.sub);
   }
 
+  @Roles('SUPER_ADMIN')
   @Patch(':code')
   @RequirePermissions(PERMISSIONS.CURRENCY.MANAGE)
   update(

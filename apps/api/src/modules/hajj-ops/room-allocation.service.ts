@@ -56,7 +56,7 @@ export class RoomAllocationService {
     private readonly pilgrimLookup: PilgrimLookupService,
   ) {}
 
-  async create(dto: CreateRoomAllocationDto) {
+  async create(dto: CreateRoomAllocationDto, companyId?: string) {
     if (!dto.hajjGroupId && !dto.umrahGroupId) {
       throw new BadRequestException(
         'A room allocation must reference either a Hajj group or an Umrah group',
@@ -88,6 +88,7 @@ export class RoomAllocationService {
 
     return this.prisma.roomAllocation.create({
       data: {
+        companyId,
         hajjGroupId: dto.hajjGroupId,
         umrahGroupId: dto.umrahGroupId,
         hotelBookingId: dto.hotelBookingId,
@@ -99,9 +100,12 @@ export class RoomAllocationService {
     });
   }
 
-  listForGroup(filters: { hajjGroupId?: string; umrahGroupId?: string }) {
+  listForGroup(
+    filters: { hajjGroupId?: string; umrahGroupId?: string },
+    tenant?: string,
+  ) {
     return this.prisma.roomAllocation.findMany({
-      where: filters,
+      where: { ...filters, ...(tenant !== undefined && { companyId: tenant }) },
       include: ROOM_INCLUDE,
       orderBy: { roomNumber: 'asc' },
     });
@@ -123,7 +127,25 @@ export class RoomAllocationService {
    * already uses for hotelAssigned, so "linkable" and "counts toward
    * readiness" always agree.
    */
-  async listLinkableHotelBookings(groupType: PilgrimType, groupId: string) {
+  async listLinkableHotelBookings(
+    groupType: PilgrimType,
+    groupId: string,
+    tenant?: string,
+  ) {
+    if (tenant !== undefined) {
+      // The group must be the caller's own; another company's group is indistinguishable from none.
+      const owned =
+        groupType === PilgrimType.HAJJ
+          ? await this.prisma.hajjGroup.findFirst({
+              where: { id: groupId, companyId: tenant },
+              select: { id: true },
+            })
+          : await this.prisma.umrahGroup.findFirst({
+              where: { id: groupId, companyId: tenant },
+              select: { id: true },
+            });
+      if (!owned) throw new NotFoundException('Group not found');
+    }
     const pilgrims =
       groupType === PilgrimType.HAJJ
         ? await this.prisma.hajjRegistrationPilgrim.findMany({

@@ -15,6 +15,8 @@ import { UsersService } from '../users/users.service';
 import { CheckInService } from './checkin.service';
 import { CheckInByCodeDto, CheckInDto } from './dto/checkin.dto';
 
+import { resolveTenantFilter } from '../../common/utils/tenant.util';
+import { TenantScoped } from '../../common/tenancy/tenant-scoped.decorator';
 @Controller('hajj-ops/checkin')
 export class CheckInController {
   constructor(
@@ -23,6 +25,15 @@ export class CheckInController {
   ) {}
 
   /** Spec #33 — (re)generates this pilgrim's QR payload (an opaque internal code, never passport/financial data). */
+  @TenantScoped({
+    kindBy: {
+      param: 'type',
+      map: {
+        HAJJ: 'hajjRegistrationPilgrim',
+        UMRAH: 'umrahRegistrationPilgrim',
+      },
+    },
+  })
   @Get('qr/:type/:id')
   @RequirePermissions(PERMISSIONS.HAJJ_OPS.CHECK_IN)
   getQrCode(
@@ -45,10 +56,20 @@ export class CheckInController {
       dto.event,
       staffId ?? undefined,
       dto.location,
+      resolveTenantFilter(user),
     );
   }
 
   /** Manual check-in fallback (no QR scanner available). */
+  @TenantScoped({
+    kindBy: {
+      param: 'type',
+      map: {
+        HAJJ: 'hajjRegistrationPilgrim',
+        UMRAH: 'umrahRegistrationPilgrim',
+      },
+    },
+  })
   @Post(':type/:id')
   @RequirePermissions(PERMISSIONS.HAJJ_OPS.CHECK_IN)
   async checkIn(
@@ -67,6 +88,15 @@ export class CheckInController {
     );
   }
 
+  @TenantScoped({
+    kindBy: {
+      param: 'type',
+      map: {
+        HAJJ: 'hajjRegistrationPilgrim',
+        UMRAH: 'umrahRegistrationPilgrim',
+      },
+    },
+  })
   @Get(':type/:id/history')
   @RequirePermissions(PERMISSIONS.HAJJ_OPS.CHECK_IN)
   history(

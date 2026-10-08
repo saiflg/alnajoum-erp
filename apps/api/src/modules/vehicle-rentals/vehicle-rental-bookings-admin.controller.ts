@@ -8,6 +8,7 @@ import { UsersService } from '../users/users.service';
 import { CreateVehicleRentalDto } from './dto/create-vehicle-rental.dto';
 import { VehicleRentalsService } from './vehicle-rentals.service';
 
+import { TenantScoped } from '../../common/tenancy/tenant-scoped.decorator';
 @Controller('vehicle-rentals/bookings')
 export class VehicleRentalBookingsAdminController {
   constructor(
@@ -15,9 +16,13 @@ export class VehicleRentalBookingsAdminController {
     private readonly usersService: UsersService,
   ) {}
 
+  @TenantScoped({ kind: 'customer', param: 'customerId', source: 'body' })
   @Post()
   @RequirePermissions(PERMISSIONS.VEHICLE_RENTAL.BOOK)
-  async create(@CurrentUser() user: AuthContext, @Body() dto: CreateVehicleRentalDto) {
+  async create(
+    @CurrentUser() user: AuthContext,
+    @Body() dto: CreateVehicleRentalDto,
+  ) {
     const staffId = await this.usersService.getStaffIdForIdentity(user.sub);
     return this.vehicleRentalsService.createBooking(
       dto.customerId,

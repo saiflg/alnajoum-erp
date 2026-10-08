@@ -118,6 +118,11 @@ export function checkProductionConfig(
       'TRUST_PROXY_HOPS',
       "TRUST_PROXY_HOPS is not set: behind a reverse proxy all clients share one rate-limit bucket and logged IPs are the proxy's. Set it to the number of proxy hops (1 behind Caddy).",
     );
+  if (str('GLOBAL_THROTTLE_LIMIT'))
+    warn(
+      'GLOBAL_THROTTLE_LIMIT',
+      'GLOBAL_THROTTLE_LIMIT overrides the default 100 requests/minute limit and is meant for test harnesses only.',
+    );
   if (str('AUTH_THROTTLE_LIMIT'))
     warn(
       'AUTH_THROTTLE_LIMIT',

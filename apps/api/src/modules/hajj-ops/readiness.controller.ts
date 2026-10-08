@@ -16,6 +16,8 @@ import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { ReadinessService } from './readiness.service';
 import { UsersService } from '../users/users.service';
 
+import { resolveTenantFilter } from '../../common/utils/tenant.util';
+import { TenantScoped } from '../../common/tenancy/tenant-scoped.decorator';
 @Controller('hajj-ops/readiness')
 export class ReadinessController {
   constructor(
@@ -24,6 +26,15 @@ export class ReadinessController {
   ) {}
 
   /** Spec #3/#28-#29 — one pilgrim's document checklist + readiness score. */
+  @TenantScoped({
+    kindBy: {
+      param: 'type',
+      map: {
+        HAJJ: 'hajjRegistrationPilgrim',
+        UMRAH: 'umrahRegistrationPilgrim',
+      },
+    },
+  })
   @Get(':type/:id')
   @RequirePermissions(PERMISSIONS.HAJJ_OPS.CHECKLIST_VIEW)
   get(
@@ -34,6 +45,10 @@ export class ReadinessController {
   }
 
   /** Spec #29 — readiness for every pilgrim in a group at a glance. */
+  @TenantScoped({
+    param: 'groupId',
+    kindBy: { param: 'type', map: { HAJJ: 'hajjGroup', UMRAH: 'umrahGroup' } },
+  })
   @Get('group/:type/:groupId')
   @RequirePermissions(PERMISSIONS.HAJJ_OPS.CHECKLIST_VIEW)
   getForGroup(
@@ -44,6 +59,15 @@ export class ReadinessController {
   }
 
   /** Spec #30 — authorized, audited manual override; never available without CHECKLIST_OVERRIDE. */
+  @TenantScoped({
+    kindBy: {
+      param: 'type',
+      map: {
+        HAJJ: 'hajjRegistrationPilgrim',
+        UMRAH: 'umrahRegistrationPilgrim',
+      },
+    },
+  })
   @Post(':type/:id/override')
   @RequirePermissions(PERMISSIONS.HAJJ_OPS.CHECKLIST_OVERRIDE)
   async override(

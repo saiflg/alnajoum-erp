@@ -19,6 +19,7 @@ import { CreateLeadDto } from './dto/create-lead.dto';
 import { UpdateLeadDto } from './dto/update-lead.dto';
 import { LeadsService } from './leads.service';
 
+import { TenantScoped } from '../../common/tenancy/tenant-scoped.decorator';
 @Controller('crm/leads')
 export class LeadsController {
   constructor(
@@ -85,18 +86,21 @@ export class LeadsController {
     return this.leadsService.createStage(body.name, body.order);
   }
 
+  @TenantScoped('lead')
   @Get(':id')
   @RequirePermissions(PERMISSIONS.CRM.LEAD_READ)
   get(@CurrentUser() user: AuthContext, @Param('id') id: string) {
     return this.leadsService.get(id, resolveTenantFilter(user));
   }
 
+  @TenantScoped('lead')
   @Patch(':id')
   @RequirePermissions(PERMISSIONS.CRM.LEAD_MANAGE)
   update(@Param('id') id: string, @Body() dto: UpdateLeadDto) {
     return this.leadsService.update(id, dto);
   }
 
+  @TenantScoped('lead')
   @Post(':id/stage')
   @RequirePermissions(PERMISSIONS.CRM.LEAD_MANAGE)
   async changeStage(
@@ -108,6 +112,8 @@ export class LeadsController {
     return this.leadsService.changeStage(id, body.stageId, staffId);
   }
 
+  @TenantScoped('lead')
+  @TenantScoped({ kind: 'staff', param: 'staffId', source: 'body' })
   @Post(':id/assign')
   @RequirePermissions(PERMISSIONS.CRM.LEAD_MANAGE)
   async assign(
@@ -126,6 +132,7 @@ export class LeadsController {
     return this.leadsService.assign(id, targetStaffId, staffId);
   }
 
+  @TenantScoped('lead')
   @Post(':id/lost')
   @RequirePermissions(PERMISSIONS.CRM.LEAD_MANAGE)
   async markLost(
@@ -137,6 +144,12 @@ export class LeadsController {
     return this.leadsService.markLost(id, body.reason, staffId);
   }
 
+  @TenantScoped('lead')
+  @TenantScoped({
+    kind: 'customer',
+    param: 'existingCustomerId',
+    source: 'body',
+  })
   @Post(':id/convert')
   @RequirePermissions(PERMISSIONS.CRM.LEAD_MANAGE)
   async convert(

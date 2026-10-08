@@ -8,6 +8,7 @@ import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { LedgerService } from './ledger.service';
 
+import { Roles } from '../../common/decorators/roles.decorator';
 class CreateAccountDto {
   @IsString()
   @MaxLength(20)
@@ -61,6 +62,7 @@ export class ChartOfAccountsController {
     });
   }
 
+  @Roles('SUPER_ADMIN')
   @Post()
   @RequirePermissions(PERMISSIONS.FINANCE.ACCOUNTS_MANAGE)
   create(@Body() dto: CreateAccountDto) {
@@ -75,6 +77,7 @@ export class ChartOfAccountsController {
     });
   }
 
+  @Roles('SUPER_ADMIN')
   @Post('journal-entries/:id/reverse')
   @RequirePermissions(PERMISSIONS.FINANCE.ACCOUNTS_MANAGE)
   reverseEntry(

@@ -19,6 +19,7 @@ import { UpdateHotelDto } from './dto/update-hotel.dto';
 import { HotelCatalogService } from './hotel-catalog.service';
 import { RequireFeature } from '../../common/decorators/require-feature.decorator';
 
+import { Roles } from '../../common/decorators/roles.decorator';
 @RequireFeature('ENABLE_HOTELS')
 @Controller('hotels/catalog')
 @RequirePermissions(PERMISSIONS.HOTEL.MANAGE_CATALOG)
@@ -35,11 +36,13 @@ export class HotelCatalogController {
     return this.catalogService.getHotel(id);
   }
 
+  @Roles('SUPER_ADMIN')
   @Post()
   create(@CurrentUser() user: AuthContext, @Body() dto: CreateHotelDto) {
     return this.catalogService.createHotel(dto, user.sub);
   }
 
+  @Roles('SUPER_ADMIN')
   @Patch(':id')
   update(
     @CurrentUser() user: AuthContext,
@@ -49,11 +52,13 @@ export class HotelCatalogController {
     return this.catalogService.updateHotel(id, dto, user.sub);
   }
 
+  @Roles('SUPER_ADMIN')
   @Delete(':id')
   remove(@CurrentUser() user: AuthContext, @Param('id') id: string) {
     return this.catalogService.deleteHotel(id, user.sub);
   }
 
+  @Roles('SUPER_ADMIN')
   @Post(':id/room-types')
   createRoomType(
     @CurrentUser() user: AuthContext,
@@ -63,6 +68,7 @@ export class HotelCatalogController {
     return this.catalogService.createRoomType(hotelId, dto, user.sub);
   }
 
+  @Roles('SUPER_ADMIN')
   @Patch('room-types/:id')
   updateRoomType(
     @CurrentUser() user: AuthContext,
@@ -72,6 +78,7 @@ export class HotelCatalogController {
     return this.catalogService.updateRoomType(id, dto, user.sub);
   }
 
+  @Roles('SUPER_ADMIN')
   @Delete('room-types/:id')
   removeRoomType(@CurrentUser() user: AuthContext, @Param('id') id: string) {
     return this.catalogService.deleteRoomType(id, user.sub);

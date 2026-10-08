@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 
+import { tenantWhere } from '../../common/tenancy/tenant-guard.service';
 /** Spec #23 — never auto-published; isApproved gates visibility everywhere it's read back. */
 @Injectable()
 export class FeedbackService {
@@ -31,9 +32,13 @@ export class FeedbackService {
     return feedback;
   }
 
-  listAll(filters: { isApproved?: boolean; serviceType?: string }) {
+  listAll(
+    filters: { isApproved?: boolean; serviceType?: string },
+    tenant?: string,
+  ) {
     return this.prisma.customerFeedback.findMany({
-      where: filters,
+      where: { ...filters, ...tenantWhere('customerFeedback', tenant) },
+      take: 500,
       include: {
         customer: { select: { firstName: true, lastName: true } },
         staff: { select: { firstName: true, lastName: true } },

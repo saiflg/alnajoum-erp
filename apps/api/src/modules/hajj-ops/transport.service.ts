@@ -12,7 +12,7 @@ import { CreateTransportDto } from './dto/transport.dto';
 export class TransportService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(dto: CreateTransportDto) {
+  async create(dto: CreateTransportDto, companyId?: string) {
     if (!dto.hajjGroupId && !dto.umrahGroupId) {
       throw new BadRequestException(
         'A transport assignment must reference either a Hajj group or an Umrah group',
@@ -25,6 +25,7 @@ export class TransportService {
     }
     return this.prisma.transport.create({
       data: {
+        companyId,
         type: dto.type,
         hajjGroupId: dto.hajjGroupId,
         umrahGroupId: dto.umrahGroupId,
@@ -38,13 +39,16 @@ export class TransportService {
     });
   }
 
-  listAll(filters: {
-    hajjGroupId?: string;
-    umrahGroupId?: string;
-    status?: TransportStatus;
-  }) {
+  listAll(
+    filters: {
+      hajjGroupId?: string;
+      umrahGroupId?: string;
+      status?: TransportStatus;
+    },
+    tenant?: string,
+  ) {
     return this.prisma.transport.findMany({
-      where: filters,
+      where: { ...filters, ...(tenant !== undefined && { companyId: tenant }) },
       include: {
         vehicle: { select: { plateNumber: true, type: true } },
         driver: { select: { firstName: true, lastName: true, phone: true } },

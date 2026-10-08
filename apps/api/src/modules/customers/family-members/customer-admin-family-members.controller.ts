@@ -33,6 +33,7 @@ import { CreateFamilyMemberDto } from './dto/create-family-member.dto';
 import { UpdateFamilyMemberDto } from './dto/update-family-member.dto';
 import { FamilyMembersService } from './family-members.service';
 
+import { TenantScoped } from '../../../common/tenancy/tenant-scoped.decorator';
 @Controller('customers/:customerId/family-members')
 export class CustomerAdminFamilyMembersController {
   constructor(
@@ -40,6 +41,7 @@ export class CustomerAdminFamilyMembersController {
     private readonly documentsService: FamilyMemberDocumentsService,
   ) {}
 
+  @TenantScoped({ kind: 'customer', param: 'customerId' })
   @Post()
   @RequirePermissions(PERMISSIONS.CUSTOMER.UPDATE)
   create(
@@ -50,12 +52,14 @@ export class CustomerAdminFamilyMembersController {
     return this.familyMembersService.create(customerId, dto, user.sub);
   }
 
+  @TenantScoped({ kind: 'customer', param: 'customerId' })
   @Get()
   @RequirePermissions(PERMISSIONS.CUSTOMER.READ)
   list(@Param('customerId') customerId: string) {
     return this.familyMembersService.listForCustomer(customerId);
   }
 
+  @TenantScoped({ kind: 'customer', param: 'customerId' })
   @Get(':memberId')
   @RequirePermissions(PERMISSIONS.CUSTOMER.READ)
   findOne(
@@ -65,6 +69,7 @@ export class CustomerAdminFamilyMembersController {
     return this.familyMembersService.getMember(memberId, customerId);
   }
 
+  @TenantScoped({ kind: 'customer', param: 'customerId' })
   @Patch(':memberId')
   @RequirePermissions(PERMISSIONS.CUSTOMER.UPDATE)
   update(
@@ -75,6 +80,7 @@ export class CustomerAdminFamilyMembersController {
     return this.familyMembersService.update(memberId, dto, customerId);
   }
 
+  @TenantScoped({ kind: 'customer', param: 'customerId' })
   @Delete(':memberId')
   @RequirePermissions(PERMISSIONS.CUSTOMER.DELETE)
   async remove(
@@ -85,6 +91,7 @@ export class CustomerAdminFamilyMembersController {
     return { deleted: true };
   }
 
+  @TenantScoped({ kind: 'customer', param: 'customerId' })
   @Get(':memberId/documents')
   @RequirePermissions(PERMISSIONS.CUSTOMER.READ)
   async listDocuments(
@@ -95,6 +102,7 @@ export class CustomerAdminFamilyMembersController {
     return this.documentsService.listForMember(memberId);
   }
 
+  @TenantScoped({ kind: 'customer', param: 'customerId' })
   @Post(':memberId/documents')
   @RequirePermissions(PERMISSIONS.CUSTOMER.UPDATE)
   @UseInterceptors(
@@ -125,6 +133,7 @@ export class CustomerAdminFamilyMembersController {
     );
   }
 
+  @TenantScoped({ kind: 'customer', param: 'customerId' })
   @Get(':memberId/documents/:documentId/file')
   @RequirePermissions(PERMISSIONS.CUSTOMER.READ)
   async downloadDocument(
@@ -152,6 +161,7 @@ export class CustomerAdminFamilyMembersController {
     );
   }
 
+  @TenantScoped({ kind: 'customer', param: 'customerId' })
   @Delete(':memberId/documents/:documentId')
   @RequirePermissions(PERMISSIONS.CUSTOMER.DELETE)
   async deleteDocument(

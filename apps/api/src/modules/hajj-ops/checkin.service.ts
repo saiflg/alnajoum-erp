@@ -31,9 +31,12 @@ export class CheckInService {
     event: PilgrimCheckInEvent,
     staffId?: string,
     location?: string,
+    tenant?: string,
   ) {
-    const { pilgrimType, pilgrimId } =
-      await this.pilgrimLookup.findByCode(code);
+    const { pilgrimType, pilgrimId } = await this.pilgrimLookup.findByCode(
+      code,
+      tenant,
+    );
     return this.recordCheckIn(pilgrimType, pilgrimId, event, staffId, location);
   }
 

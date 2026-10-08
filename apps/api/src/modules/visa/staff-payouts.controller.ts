@@ -19,6 +19,8 @@ import { UpdateBankDetailsDto } from './dto/update-bank-details.dto';
 import { StaffPayoutsService } from './staff-payouts.service';
 import { RequireFeature } from '../../common/decorators/require-feature.decorator';
 
+import { TenantScoped } from '../../common/tenancy/tenant-scoped.decorator';
+import { resolveTenantFilter } from '../../common/utils/tenant.util';
 @RequireFeature('ENABLE_VISA')
 @Controller('visa/payouts')
 export class StaffPayoutsController {
@@ -57,12 +59,17 @@ export class StaffPayoutsController {
   @Get()
   @RequirePermissions(PERMISSIONS.VISA.PAYOUT_APPROVE)
   list(
+    @CurrentUser() user: AuthContext,
     @Query('staffId') staffId?: string,
     @Query('status') status?: PayoutStatus,
   ) {
-    return this.staffPayoutsService.listAll({ staffId, status });
+    return this.staffPayoutsService.listAll(
+      { staffId, status },
+      resolveTenantFilter(user),
+    );
   }
 
+  @TenantScoped({ kind: 'staffIncentive', param: 'incentiveId' })
   @Post(':incentiveId/pay')
   @RequirePermissions(PERMISSIONS.VISA.PAYOUT_APPROVE)
   async pay(
@@ -76,6 +83,7 @@ export class StaffPayoutsController {
     return this.staffPayoutsService.attemptPayout(incentiveId, staffId);
   }
 
+  @TenantScoped({ kind: 'staffIncentive', param: 'incentiveId' })
   @Post(':incentiveId/retry')
   @RequirePermissions(PERMISSIONS.VISA.PAYOUT_APPROVE)
   async retry(

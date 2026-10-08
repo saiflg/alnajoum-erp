@@ -15,18 +15,21 @@ import type { AuthContext } from '../../../common/interfaces/auth-context.interf
 import { PERMISSIONS } from '../../rbac/constants/permissions.constant';
 import { CustomerDocumentsService } from './customer-documents.service';
 
+import { TenantScoped } from '../../../common/tenancy/tenant-scoped.decorator';
 const NAMESPACE = 'customer-documents';
 
 @Controller('customers/:customerId/documents')
 export class CustomerAdminDocumentsController {
   constructor(private readonly documentsService: CustomerDocumentsService) {}
 
+  @TenantScoped({ kind: 'customer', param: 'customerId' })
   @Get()
   @RequirePermissions(PERMISSIONS.CUSTOMER.READ)
   list(@Param('customerId') customerId: string) {
     return this.documentsService.listForCustomer(customerId);
   }
 
+  @TenantScoped({ kind: 'customer', param: 'customerId' })
   @Get(':documentId/file')
   @RequirePermissions(PERMISSIONS.CUSTOMER.READ)
   async download(
@@ -47,6 +50,7 @@ export class CustomerAdminDocumentsController {
     );
   }
 
+  @TenantScoped({ kind: 'customer', param: 'customerId' })
   @Delete(':documentId')
   @RequirePermissions(PERMISSIONS.CUSTOMER.DELETE)
   async remove(

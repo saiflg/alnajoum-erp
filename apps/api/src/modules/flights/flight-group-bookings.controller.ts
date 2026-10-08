@@ -9,6 +9,8 @@ import { CreateFlightGroupBookingDto } from './dto/create-flight-group-booking.d
 import { FlightGroupBookingsService } from './flight-group-bookings.service';
 import { RequireFeature } from '../../common/decorators/require-feature.decorator';
 
+import { TenantScoped } from '../../common/tenancy/tenant-scoped.decorator';
+import { resolveTenantFilter } from '../../common/utils/tenant.util';
 @RequireFeature('ENABLE_GROUP_BOOKINGS')
 @Controller('flights/group-bookings')
 @RequirePermissions(PERMISSIONS.FLIGHT.GROUP_MANAGE)
@@ -28,20 +30,29 @@ export class FlightGroupBookingsController {
   }
 
   @Get()
-  list(@Query('status') status?: FlightGroupBookingStatus) {
-    return this.groupBookingsService.listAll({ status });
+  list(
+    @CurrentUser() user: AuthContext,
+    @Query('status') status?: FlightGroupBookingStatus,
+  ) {
+    return this.groupBookingsService.listAll(
+      { status },
+      resolveTenantFilter(user),
+    );
   }
 
+  @TenantScoped('flightGroupBooking')
   @Get(':id')
   get(@Param('id') id: string) {
     return this.groupBookingsService.get(id);
   }
 
+  @TenantScoped('flightGroupBooking')
   @Post(':id/payment')
   recordPayment(@Param('id') id: string, @Body('amount') amount: number) {
     return this.groupBookingsService.recordPayment(id, Number(amount));
   }
 
+  @TenantScoped('flightGroupBooking')
   @Post(':id/manifest')
   importManifest(
     @Param('id') id: string,

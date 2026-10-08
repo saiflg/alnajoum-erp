@@ -22,6 +22,7 @@ import { HotelRefundsService } from './hotel-refunds.service';
 import { HotelsService } from './hotels.service';
 import { RequireFeature } from '../../common/decorators/require-feature.decorator';
 
+import { TenantScoped } from '../../common/tenancy/tenant-scoped.decorator';
 @RequireFeature('ENABLE_HOTELS')
 @Controller('hotels/bookings')
 export class HotelBookingsAdminController {
@@ -32,6 +33,7 @@ export class HotelBookingsAdminController {
     private readonly refundsService: HotelRefundsService,
   ) {}
 
+  @TenantScoped({ kind: 'customer', param: 'customerId', source: 'body' })
   @Post()
   @RequirePermissions(PERMISSIONS.HOTEL.BOOK)
   async create(
@@ -81,6 +83,7 @@ export class HotelBookingsAdminController {
     );
   }
 
+  @TenantScoped('hotelBooking')
   @Get(':id')
   @RequirePermissions(PERMISSIONS.HOTEL.READ)
   findOne(@CurrentUser() user: AuthContext, @Param('id') id: string) {
@@ -91,12 +94,14 @@ export class HotelBookingsAdminController {
     );
   }
 
+  @TenantScoped('hotelBooking')
   @Post(':id/cancel')
   @RequirePermissions(PERMISSIONS.HOTEL.CANCEL)
   cancel(@Param('id') id: string) {
     return this.hotelsService.cancelBooking(id);
   }
 
+  @TenantScoped('hotelBooking')
   @Post(':id/complete')
   @RequirePermissions(PERMISSIONS.HOTEL.COMPLETE)
   async complete(@CurrentUser() user: AuthContext, @Param('id') id: string) {
@@ -104,12 +109,14 @@ export class HotelBookingsAdminController {
     return this.completionService.complete(id, staffId ?? '');
   }
 
+  @TenantScoped('hotelBooking')
   @Get(':id/refund-preview')
   @RequirePermissions(PERMISSIONS.HOTEL.REFUND)
   previewRefund(@Param('id') id: string) {
     return this.refundsService.previewRefund(id);
   }
 
+  @TenantScoped('hotelBooking')
   @Post(':id/refund')
   @RequirePermissions(PERMISSIONS.HOTEL.REFUND)
   async requestRefund(
@@ -124,6 +131,7 @@ export class HotelBookingsAdminController {
     });
   }
 
+  @TenantScoped('hotelBooking')
   @Get(':id/refunds')
   @RequirePermissions(PERMISSIONS.HOTEL.READ)
   listRefunds(@Param('id') id: string) {

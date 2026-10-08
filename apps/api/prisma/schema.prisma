@@ -468,6 +468,12 @@ model Company {
 
   // Phase 21 — workflow automation.
   workflowDefinitions WorkflowDefinition[]
+  hajjGroups HajjGroup[]
+  umrahGroups UmrahGroup[]
+  hajjOpsVehicles Vehicle[]
+  hajjOpsDrivers Driver[]
+  hajjOpsTransports Transport[]
+  roomAllocations RoomAllocation[]
 
   @@map("companies")
 }
@@ -5181,6 +5187,10 @@ enum TravelGroupStatus {
 
 model HajjGroup {
   id          String @id @default(cuid())
+
+  // Phase 22 - tenant ownership. Nullable only so existing rows could be backfilled; new rows always set it.
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: Restrict)
   groupNumber String @unique
   name        String
 
@@ -5208,6 +5218,7 @@ model HajjGroup {
 
   @@index([packageId])
   @@index([status])
+  @@index([companyId])
   @@map("hajj_groups")
 }
 
@@ -5221,6 +5232,10 @@ enum UmrahGroupType {
 
 model UmrahGroup {
   id          String         @id @default(cuid())
+
+  // Phase 22 - tenant ownership. Nullable only so existing rows could be backfilled; new rows always set it.
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: Restrict)
   groupNumber String         @unique
   name        String
   groupType   UmrahGroupType @default(GROUP)
@@ -5249,6 +5264,7 @@ model UmrahGroup {
 
   @@index([packageId])
   @@index([status])
+  @@index([companyId])
   @@map("umrah_groups")
 }
 
@@ -5272,6 +5288,10 @@ enum VehicleFleetStatus {
 // provider); no overlap in purpose or data.
 model Vehicle {
   id          String             @id @default(cuid())
+
+  // Phase 22 - tenant ownership. Nullable only so existing rows could be backfilled; new rows always set it.
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: Restrict)
   plateNumber String             @unique
   type        VehicleFleetType
   capacity    Int
@@ -5284,6 +5304,7 @@ model Vehicle {
   drivers    Driver[]
   transports Transport[]
 
+  @@index([companyId])
   @@map("hajj_ops_vehicles")
 }
 
@@ -5294,6 +5315,10 @@ enum DriverStatus {
 
 model Driver {
   id        String @id @default(cuid())
+
+  // Phase 22 - tenant ownership. Nullable only so existing rows could be backfilled; new rows always set it.
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: Restrict)
   firstName String
   lastName  String
   phone     String
@@ -5313,6 +5338,7 @@ model Driver {
   transports Transport[]
 
   @@index([vehicleId])
+  @@index([companyId])
   @@map("hajj_ops_drivers")
 }
 
@@ -5334,6 +5360,10 @@ enum TransportStatus {
 
 model Transport {
   id   String        @id @default(cuid())
+
+  // Phase 22 - tenant ownership. Nullable only so existing rows could be backfilled; new rows always set it.
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: Restrict)
   type TransportType
 
   // Exactly one of these is set — same "exactly one" convention as
@@ -5360,6 +5390,7 @@ model Transport {
 
   @@index([hajjGroupId])
   @@index([umrahGroupId])
+  @@index([companyId])
   @@map("hajj_ops_transports")
 }
 
@@ -5439,6 +5470,10 @@ model PilgrimReadinessOverride {
 model RoomAllocation {
   id String @id @default(cuid())
 
+  // Phase 22 - tenant ownership. Nullable only so existing rows could be backfilled; new rows always set it.
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
   hajjGroupId  String?
   hajjGroup    HajjGroup?  @relation(fields: [hajjGroupId], references: [id], onDelete: Cascade)
   umrahGroupId String?
@@ -5467,6 +5502,7 @@ model RoomAllocation {
 
   @@index([hajjGroupId])
   @@index([umrahGroupId])
+  @@index([companyId])
   @@map("room_allocations")
 }
 

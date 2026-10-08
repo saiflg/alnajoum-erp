@@ -12,6 +12,7 @@ import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { UsersService } from '../users/users.service';
 import { FlightVoidsService } from './flight-voids.service';
 
+import { TenantScoped } from '../../common/tenancy/tenant-scoped.decorator';
 @Controller('flights/bookings/:id/void')
 @RequirePermissions(PERMISSIONS.FLIGHT.VOID)
 export class FlightVoidsController {
@@ -20,6 +21,7 @@ export class FlightVoidsController {
     private readonly usersService: UsersService,
   ) {}
 
+  @TenantScoped('flightBooking')
   @Get('eligibility')
   eligibility(@Param('id') id: string) {
     return this.service.getEligibility(id);
@@ -27,11 +29,13 @@ export class FlightVoidsController {
 
   // Mirrors FlightRefundsService's `GET :id/refunds` — a booking may have
   // more than one void attempt (e.g. a FAILED try followed by a retry).
+  @TenantScoped('flightBooking')
   @Get()
   list(@Param('id') id: string) {
     return this.service.listAll({ bookingId: id });
   }
 
+  @TenantScoped('flightBooking')
   @Post()
   async request(@CurrentUser() user: AuthContext, @Param('id') id: string) {
     const staffId = await this.usersService.getStaffIdForIdentity(user.sub);
