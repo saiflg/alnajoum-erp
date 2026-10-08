@@ -13,10 +13,23 @@ interface RegisterInput {
   phone?: string;
 }
 
+/** The password was right but the account has two-factor on: no session exists until the code is verified. */
+export interface TwoFactorRequired {
+  requiresTwoFactor: true;
+  challengeToken: string;
+}
+
+export function needsTwoFactor(
+  result: CurrentUser | TwoFactorRequired,
+): result is TwoFactorRequired {
+  return (result as TwoFactorRequired).requiresTwoFactor === true;
+}
+
 interface AuthContextValue {
   user: CurrentUser | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<CurrentUser>;
+  login: (email: string, password: string) => Promise<CurrentUser | TwoFactorRequired>;
+  verifyTwoFactor: (challengeToken: string, code: string) => Promise<CurrentUser>;
   register: (input: RegisterInput) => Promise<CurrentUser>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
@@ -59,9 +72,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [refreshUser]);
 
   const login = useCallback(async (email: string, password: string) => {
-    await apiRequest('/auth/login', {
+    const result = await apiRequest<{ requiresTwoFactor?: boolean; challengeToken?: string } | null>(
+      '/auth/login',
+      {
+        method: 'POST',
+        body: { email, password },
+        retryOn401: false,
+      },
+    );
+    // Two-factor accounts used to be locked out of the web app: the challenge was ignored and the
+    // follow-up /auth/me failed because no session had been issued.
+    if (result?.requiresTwoFactor && result.challengeToken) {
+      return { requiresTwoFactor: true, challengeToken: result.challengeToken } as TwoFactorRequired;
+    }
+    const me = await apiRequest<CurrentUser>('/auth/me');
+    setUser(me);
+    return me;
+  }, []);
+
+  const verifyTwoFactor = useCallback(async (challengeToken: string, code: string) => {
+    await apiRequest('/auth/2fa/login-verify', {
       method: 'POST',
-      body: { email, password },
+      body: { challengeToken, code },
       retryOn401: false,
     });
     const me = await apiRequest<CurrentUser>('/auth/me');
@@ -90,7 +122,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user]);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, refreshUser }}>
+    <AuthContext.Provider value={{ user, loading, login, verifyTwoFactor, register, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );
