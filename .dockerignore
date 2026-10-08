@@ -9,7 +9,12 @@
 .github
 .vscode
 *.log
-.env
-.env.*
-!.env.example
-!.env.test
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.test
+**/*.pem
+**/*.key
+**/backups
+**/*.dump
+**/*.sql.gz

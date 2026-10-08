@@ -179,7 +179,7 @@ bindings, plus the Next.js build). Watch progress with:
 docker compose -f docker-compose.prod.yml --env-file .env.prod logs -f
 ```
 
-Once `postgres` and `redis` report healthy, apply migrations and seed the
+Once `postgres` reports healthy, apply migrations and seed the
 bootstrap data (company, roles, permissions, Super Admin account):
 
 ```bash
@@ -304,7 +304,6 @@ actually sent. To send real email:
 | Container | What it does | Exposed to the internet? |
 |---|---|---|
 | `postgres` | Database | No — internal Docker network only |
-| `redis` | Cache/session store | No — internal Docker network only |
 | `api` | NestJS backend | No — only reachable through Caddy |
 | `web` | Next.js frontend | No — only reachable through Caddy |
 | `caddy` | Reverse proxy + TLS | Yes — ports 80/443 |
@@ -316,3 +315,23 @@ see [`docker-compose.prod.yml`](docker-compose.prod.yml) and
 [`deploy/Caddyfile`](deploy/Caddyfile) for the exact routing (`/api/*` to
 the API, everything else to the website, both on one origin so the
 existing cookie-based auth needs no cross-origin configuration).
+
+
+## Container hardening (Phase 22)
+
+The api and web containers run as the unprivileged `node` user with a read-only root filesystem, all Linux
+capabilities dropped and `no-new-privileges`; the api writes only to the `uploads` and `backups` volumes and
+`/tmp`. Both have health checks (`docker compose ps` shows `healthy`). Redis was removed from the stack: nothing in
+the application uses it.
+
+If you upgrade an existing deployment whose `uploads_data` / `backups_data` volumes were created by the earlier
+root-owned image, give them to the new user once:
+
+```bash
+docker run --rm -v alnajoum-erp_uploads_data:/v alpine chown -R 1000:1000 /v
+docker run --rm -v alnajoum-erp_backups_data:/v alpine chown -R 1000:1000 /v
+```
+
+These changes were written and reviewed but **not built or run** in this phase (no image build was possible on the
+development machine); build and start the stack once on the target host and confirm both containers report healthy
+before relying on them.

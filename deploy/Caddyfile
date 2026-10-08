@@ -16,6 +16,15 @@
 
 encode gzip
 
+# Phase 22: headers the browser enforces for the whole site. (The web app also sends its own CSP.)
+header {
+	X-Content-Type-Options nosniff
+	X-Frame-Options DENY
+	Referrer-Policy strict-origin-when-cross-origin
+	Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+	-Server
+}
+
 handle /api/* {
 	reverse_proxy api:4000
 }

@@ -8,7 +8,7 @@
 # Ampere A1 shape is arm64, and glibc images have far more reliable native
 # module support there than Alpine.
 
-FROM node:22-bookworm-slim AS base
+FROM node:22.11.0-bookworm-slim AS base
 # postgresql-client-16 provides pg_dump/pg_restore, used by BackupService
 # (Phase 11 "backup management") to shell out to a real, restorable
 # dump rather than a JS reimplementation — see that service's own doc
@@ -58,5 +58,13 @@ WORKDIR /repo
 COPY --from=build /repo/node_modules ./node_modules
 COPY --from=build /repo/apps/api ./apps/api
 WORKDIR /repo/apps/api
+# Phase 22: do not run as root. The only places the app writes are the uploads and backups folders; they
+# are created and handed to the unprivileged `node` user BEFORE the volumes are mounted, so a fresh named
+# volume inherits that ownership. (A volume created by an earlier root-owned image keeps root ownership:
+# run `chown -R 1000:1000` on it once - see DEPLOYMENT.md.)
+RUN mkdir -p uploads backups && chown -R node:node uploads backups
+USER node
 EXPOSE 4000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:4000/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 CMD ["node", "dist/main.js"]

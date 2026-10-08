@@ -89,8 +89,8 @@ COMPOSE="sudo docker compose -f docker-compose.prod.yml --env-file .env.prod"
 echo "==> Building images (first build takes several minutes)"
 $COMPOSE build
 
-echo "==> Starting database and cache"
-$COMPOSE up -d postgres redis
+echo "==> Starting database"
+$COMPOSE up -d postgres
 
 echo "==> Applying migrations and seeding permissions/roles/bootstrap admin"
 $COMPOSE run --rm api npx prisma migrate deploy

@@ -1,7 +1,7 @@
 # Build context is the repo root (see docker-compose.prod.yml) — same
 # reasoning as apps/api/Dockerfile: this is a pnpm workspace.
 
-FROM node:22-bookworm-slim AS base
+FROM node:22.11.0-bookworm-slim AS base
 RUN corepack enable
 
 FROM base AS deps
@@ -32,6 +32,10 @@ WORKDIR /app
 COPY --from=build /repo/apps/web/.next/standalone ./
 COPY --from=build /repo/apps/web/.next/static ./apps/web/.next/static
 COPY --from=build /repo/apps/web/public ./apps/web/public
+# Phase 22: unprivileged user; the standalone output is read-only at runtime.
+USER node
 EXPOSE 3000
 ENV PORT=3000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))"
 CMD ["node", "apps/web/server.js"]

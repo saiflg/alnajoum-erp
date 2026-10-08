@@ -15,7 +15,8 @@
 
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:16.4-alpine
+    security_opt: [no-new-privileges:true]
     container_name: alnajoum-postgres
     restart: unless-stopped
     environment:
@@ -31,18 +32,8 @@ services:
       retries: 10
     networks: [internal]
 
-  redis:
-    image: redis:7-alpine
-    container_name: alnajoum-redis
-    restart: unless-stopped
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-    networks: [internal]
+  # Redis was deployed here with no password and nothing in the application uses it (Phase 22 removed it;
+  # add it back WITH `--requirepass` if a feature ever needs it).
 
   api:
     build:
@@ -50,10 +41,22 @@ services:
       dockerfile: apps/api/Dockerfile
     container_name: alnajoum-api
     restart: unless-stopped
+    # Phase 22 container hardening: no extra privileges, no Linux capabilities, read-only root filesystem
+    # (the uploads/backups volumes and /tmp stay writable), bounded memory.
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 1g
+    pids_limit: 512
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 40s
+      retries: 3
     depends_on:
       postgres:
-        condition: service_healthy
-      redis:
         condition: service_healthy
     environment:
       NODE_ENV: production
@@ -61,7 +64,6 @@ services:
       # Caddy is the single reverse-proxy hop in front of the API.
       TRUST_PROXY_HOPS: 1
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
-      REDIS_URL: redis://redis:6379
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
       JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-15m}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
@@ -110,6 +112,18 @@ services:
         NEXT_PUBLIC_API_URL: ${PUBLIC_ORIGIN}
     container_name: alnajoum-web
     restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp, /app/apps/web/.next/cache]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 768m
+    pids_limit: 256
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
     depends_on: [api]
     environment:
       NODE_ENV: production
@@ -117,7 +131,10 @@ services:
     networks: [internal]
 
   caddy:
-    image: caddy:2-alpine
+    image: caddy:2.8.4-alpine
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
     container_name: alnajoum-caddy
     restart: unless-stopped
     depends_on: [api, web]
@@ -137,7 +154,6 @@ networks:
 
 volumes:
   postgres_data:
-  redis_data:
   uploads_data:
   backups_data:
   caddy_data:
