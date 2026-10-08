@@ -7,6 +7,7 @@ import type { AuthContext } from '../../common/interfaces/auth-context.interface
 import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { FinanceSettingsService } from './finance-settings.service';
 
+import { RequireStepUp } from '../../common/security/step-up';
 class UpdateFinanceSettingsDto {
   @IsOptional()
   @IsInt()
@@ -30,6 +31,7 @@ export class FinanceSettingsController {
   }
 
   // Finance settings are a single global row (accounts, rates), not per company.
+  @RequireStepUp()
   @Patch()
   @Roles('SUPER_ADMIN')
   update(

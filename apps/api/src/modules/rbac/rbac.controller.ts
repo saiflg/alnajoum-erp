@@ -17,6 +17,7 @@ import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
 import { RbacService } from './rbac.service';
 
+import { RequireStepUp } from '../../common/security/step-up';
 @Controller('rbac')
 export class RbacController {
   constructor(private readonly rbacService: RbacService) {}
@@ -33,6 +34,7 @@ export class RbacController {
     return this.rbacService.listPermissions();
   }
 
+  @RequireStepUp()
   @Post('roles')
   @Roles('SUPER_ADMIN') // roles are global, so defining them is a platform operation
   @RequirePermissions(PERMISSIONS.ROLE.CREATE)
@@ -40,6 +42,7 @@ export class RbacController {
     return this.rbacService.createRole(dto);
   }
 
+  @RequireStepUp()
   @Patch('roles/:roleId')
   @Roles('SUPER_ADMIN') // roles are global, so defining them is a platform operation
   @RequirePermissions(PERMISSIONS.ROLE.UPDATE)
@@ -47,6 +50,7 @@ export class RbacController {
     return this.rbacService.updateRole(roleId, dto);
   }
 
+  @RequireStepUp()
   @Delete('roles/:roleId')
   @Roles('SUPER_ADMIN') // roles are global, so defining them is a platform operation
   @RequirePermissions(PERMISSIONS.ROLE.DELETE)
@@ -54,6 +58,7 @@ export class RbacController {
     return this.rbacService.deleteRole(roleId);
   }
 
+  @RequireStepUp()
   @Post('identities/:identityId/roles')
   @RequirePermissions(PERMISSIONS.ROLE.ASSIGN)
   assignRole(
@@ -68,6 +73,7 @@ export class RbacController {
     });
   }
 
+  @RequireStepUp()
   @Delete('identities/:identityId/roles/:roleId')
   @RequirePermissions(PERMISSIONS.ROLE.ASSIGN)
   removeRole(

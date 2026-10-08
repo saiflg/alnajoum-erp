@@ -237,6 +237,11 @@ export const DEFAULT_ROLE_DEFINITIONS: Array<{
       PERMISSIONS.WORKFLOW.RETRY_EXECUTION,
       PERMISSIONS.WORKFLOW.CANCEL_EXECUTION,
       PERMISSIONS.WORKFLOW.SEND_MESSAGES,
+      PERMISSIONS.SECURITY.VIEW,
+      PERMISSIONS.SECURITY.INCIDENT_MANAGE,
+      PERMISSIONS.SECURITY.ACCESS_REVIEW,
+      PERMISSIONS.SECURITY.PRIVACY_MANAGE,
+      PERMISSIONS.SECURITY.BREAK_GLASS_REQUEST,
       PERMISSIONS.AI.USAGE_VIEW,
       PERMISSIONS.WHATSAPP.READ,
       PERMISSIONS.WHATSAPP.SEND,
@@ -258,6 +263,8 @@ export const DEFAULT_ROLE_DEFINITIONS: Array<{
     description: 'Manages operations and staff within an assigned branch.',
     isSystem: true,
     permissions: [
+      // Emergency, time-boxed, approved-by-Super-Admin access to another role.
+      PERMISSIONS.SECURITY.BREAK_GLASS_REQUEST,
       PERMISSIONS.BRANCH.READ,
       PERMISSIONS.BRANCH.UPDATE,
       PERMISSIONS.STAFF.READ,
@@ -359,6 +366,8 @@ export const DEFAULT_ROLE_DEFINITIONS: Array<{
       'Manages invoicing and payment collection; read access to company/branch data for finance reporting.',
     isSystem: true,
     permissions: [
+      // Emergency, time-boxed, approved-by-Super-Admin access to another role.
+      PERMISSIONS.SECURITY.BREAK_GLASS_REQUEST,
       PERMISSIONS.REVENUE.PRICING_VIEW,
       PERMISSIONS.COMPANY.READ,
       PERMISSIONS.BRANCH.READ,
@@ -433,6 +442,8 @@ export const DEFAULT_ROLE_DEFINITIONS: Array<{
     description: 'Baseline internal staff access.',
     isSystem: true,
     permissions: [
+      // Emergency, time-boxed, approved-by-Super-Admin access to another role.
+      PERMISSIONS.SECURITY.BREAK_GLASS_REQUEST,
       PERMISSIONS.STAFF.READ,
       PERMISSIONS.CUSTOMER.READ,
       PERMISSIONS.FLIGHT.BOOK,

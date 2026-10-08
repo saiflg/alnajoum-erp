@@ -264,8 +264,17 @@ export const PERMISSIONS = {
   API_KEY: {
     MANAGE: 'api_key:manage', // create/revoke one's own; USER.MANAGE_SESSIONS-equivalent admin override is not exposed this phase
   },
+  // security:view_events pre-dates Phase 22; the rest are the Phase 22 security-operations keys.
+  // BREAK_GLASS_APPROVE is deliberately held by SUPER_ADMIN only.
   SECURITY: {
     VIEW_EVENTS: 'security:view_events', // audit_logs rows with a "security.*" action prefix
+    VIEW: 'security:view',
+    INCIDENT_MANAGE: 'security:incident_manage',
+    ACCESS_REVIEW: 'security:access_review',
+    PRIVACY_MANAGE: 'security:privacy_manage', // customer data export / erasure
+    BREAK_GLASS_REQUEST: 'security:break_glass_request',
+    BREAK_GLASS_APPROVE: 'security:break_glass_approve',
+    RETENTION_MANAGE: 'security:retention_manage',
   },
   CURRENCY: {
     MANAGE: 'currency:manage',

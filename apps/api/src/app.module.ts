@@ -46,7 +46,9 @@ import { SuppliersModule } from './modules/suppliers/suppliers.module';
 import { MobileModule } from './modules/mobile/mobile.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { TenancyModule } from './common/tenancy/tenancy.module';
+import { StepUpGuard } from './common/security/step-up';
 import { TenantResourceGuard } from './common/tenancy/tenant-resource.guard';
+import { SecurityModule } from './modules/security/security.module';
 import { WorkflowEventsModule } from './modules/workflows/events/workflow-events.module';
 import { WorkflowsModule } from './modules/workflows/workflows.module';
 import { RevenueModule } from './modules/revenue/revenue.module';
@@ -108,6 +110,7 @@ import { RevenueModule } from './modules/revenue/revenue.module';
     RevenueModule,
     AnalyticsModule,
     TenancyModule,
+    SecurityModule,
     WorkflowEventsModule,
     WorkflowsModule,
   ],
@@ -121,6 +124,8 @@ import { RevenueModule } from './modules/revenue/revenue.module';
     // After permissions: a caller without the permission still gets 403; an authorised one is then
     // confined to records of their own company wherever a route declares @TenantScoped.
     { provide: APP_GUARD, useClass: TenantResourceGuard },
+    // Sensitive actions (@RequireStepUp) need a fresh proof of identity on top of the session.
+    { provide: APP_GUARD, useClass: StepUpGuard },
     { provide: APP_GUARD, useClass: FeatureFlagGuard },
   ],
 })

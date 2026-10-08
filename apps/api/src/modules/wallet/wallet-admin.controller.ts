@@ -10,6 +10,7 @@ import { CreditWalletDto } from './dto/credit-wallet.dto';
 import { TransferWalletDto } from './dto/transfer-wallet.dto';
 import { WalletService } from './wallet.service';
 
+import { RequireStepUp } from '../../common/security/step-up';
 @Controller('wallet')
 export class WalletAdminController {
   constructor(
@@ -24,6 +25,7 @@ export class WalletAdminController {
   }
 
   /** Static route — must be registered before the dynamic ":customerId" GET below. */
+  @RequireStepUp()
   @Post('transfer')
   @RequirePermissions(PERMISSIONS.WALLET.TRANSFER)
   async transfer(
@@ -55,6 +57,7 @@ export class WalletAdminController {
     );
   }
 
+  @RequireStepUp()
   @Post(':customerId/credit')
   @RequirePermissions(PERMISSIONS.WALLET.CREDIT)
   async credit(
@@ -74,6 +77,7 @@ export class WalletAdminController {
     );
   }
 
+  @RequireStepUp()
   @Post(':customerId/adjust')
   @RequirePermissions(PERMISSIONS.WALLET.ADJUST)
   async adjust(

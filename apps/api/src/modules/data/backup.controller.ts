@@ -17,6 +17,7 @@ import { BackupService } from './backup.service';
 
 import { Roles } from '../../common/decorators/roles.decorator';
 import { contentDisposition } from '../../common/documents/file-signature';
+import { RequireStepUp } from '../../common/security/step-up';
 // A backup contains every company's data, so the whole controller is platform-administrator only.
 @Roles('SUPER_ADMIN')
 @Controller('backups')
@@ -34,6 +35,7 @@ export class BackupController {
     return this.service.create(user.sub);
   }
 
+  @RequireStepUp()
   @Get(':filename/download')
   download(
     @Param('filename') filename: string,
@@ -47,6 +49,7 @@ export class BackupController {
     return new StreamableFile(fs.createReadStream(filePath));
   }
 
+  @RequireStepUp()
   @Delete(':filename')
   async remove(
     @CurrentUser() user: AuthContext,

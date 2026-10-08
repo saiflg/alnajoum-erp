@@ -20,10 +20,25 @@ const BASE = args.base || 'http://localhost:4000/api/v1';
 const [VE, VP] = (args.victim || 'chidi.eze@demo.alnajoum.travel:Demo@2026').split(/:(.*)/s);
 const [AE, AP] = (args.attacker || 'admin@zamzamhorizon.demo.alnajoum.travel:Demo@2026').split(/:(.*)/s);
 
+
+// Sensitive routes (wallet credit, role changes, payouts...) need a fresh proof of identity on top of the
+// session. The harness obtains one per user and sends it on every request; routes that do not ask for it ignore it.
+const stepUpTokens = new Map();
+async function obtainStepUp(base, accessToken, password) {
+  const r = await fetch(base + '/security/step-up', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ password }),
+  });
+  const j = await r.json().catch(() => ({}));
+  const t = (j.data ?? j).stepUpToken;
+  if (t) stepUpTokens.set(accessToken, t);
+}
+
 async function call(token, method, path, body) {
   const res = await fetch(BASE + path, {
     method,
-    headers: { authorization: `Bearer ${token}`, ...(body ? { 'content-type': 'application/json' } : {}) },
+    headers: { authorization: `Bearer ${token}`, ...(stepUpTokens.has(token) ? { 'x-step-up-token': stepUpTokens.get(token) } : {}), ...(body ? { 'content-type': 'application/json' } : {}) },
     body: body ? JSON.stringify(body) : undefined,
   });
   const text = await res.text();
@@ -42,6 +57,8 @@ const first = (r) => rows(r)[0];
 
 const V = await login(VE, VP);
 const A = await login(AE, AP);
+await obtainStepUp(BASE, V, VP);
+await obtainStepUp(BASE, A, AP);
 
 // ---- victim-owned ids
 const customers = rows(await call(V, 'GET', '/customers'));

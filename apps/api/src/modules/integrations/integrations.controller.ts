@@ -15,6 +15,7 @@ import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { UpsertCredentialDto } from './dto/upsert-credential.dto';
 import { IntegrationsService } from './integrations.service';
 
+import { RequireStepUp } from '../../common/security/step-up';
 /**
  * Integration credentials are PLATFORM settings (one payment key, one email account, one AI key for
  * every tenant). A tenant admin who could edit them could redirect all email, forge payment webhooks
@@ -34,6 +35,7 @@ export class IntegrationsController {
     return this.integrationsService.listForCategory(category);
   }
 
+  @RequireStepUp()
   @Patch(':category/:provider')
   @RequirePermissions(PERMISSIONS.INTEGRATIONS.MANAGE)
   async upsertCredential(
@@ -52,6 +54,7 @@ export class IntegrationsController {
     return { saved: true };
   }
 
+  @RequireStepUp()
   @Patch(':category/:provider/activate')
   @RequirePermissions(PERMISSIONS.INTEGRATIONS.MANAGE)
   async activate(

@@ -26,10 +26,25 @@ const BASE = args.base || 'http://localhost:4000/api/v1';
 const N = Number(args.n || 8);
 const PASSWORD = 'Demo@2026';
 
+
+// Sensitive routes (wallet credit, role changes, payouts...) need a fresh proof of identity on top of the
+// session. The harness obtains one per user and sends it on every request; routes that do not ask for it ignore it.
+const stepUpTokens = new Map();
+async function obtainStepUp(base, accessToken, password) {
+  const r = await fetch(base + '/security/step-up', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ password }),
+  });
+  const j = await r.json().catch(() => ({}));
+  const t = (j.data ?? j).stepUpToken;
+  if (t) stepUpTokens.set(accessToken, t);
+}
+
 async function call(token, method, path, body) {
   const res = await fetch(BASE + path, {
     method,
-    headers: { authorization: `Bearer ${token}`, ...(body ? { 'content-type': 'application/json' } : {}) },
+    headers: { authorization: `Bearer ${token}`, ...(stepUpTokens.has(token) ? { 'x-step-up-token': stepUpTokens.get(token) } : {}), ...(body ? { 'content-type': 'application/json' } : {}) },
     body: body ? JSON.stringify(body) : undefined,
   });
   const text = await res.text();
@@ -50,6 +65,8 @@ const rows = (r) => (Array.isArray(r.data) ? r.data : r.data?.items ?? []);
 
 const admin = await login('chidi.eze@demo.alnajoum.travel');
 const finance = await login('ibrahim.musa@demo.alnajoum.travel');
+await obtainStepUp(BASE, admin, PASSWORD);
+await obtainStepUp(BASE, finance, PASSWORD);
 
 const results = [];
 function report(name, pass, detail) {
@@ -146,10 +163,11 @@ function report(name, pass, detail) {
   }
   if (!target) report('manual payment approval race', false, 'no open invoice left');
   else {
-    const sub = await call(finance, 'POST', '/manual-payments', { customerId: target.customerId, invoiceId: target.id, amount: 5, method: 'BANK_TRANSFER' });
+    // The company admin records the claim; the finance officer reviews it (different people - the recorder may not review).
+    const sub = await call(admin, 'POST', '/manual-payments', { customerId: target.customerId, invoiceId: target.id, amount: 5, method: 'BANK_TRANSFER' });
     if (!sub.data?.id) report('manual payment approval race', false, `submit failed: ${sub.status} ${sub.text.slice(0, 100)}`);
     else {
-      const rs = await race(N, () => call(admin, 'POST', `/manual-payments/${sub.data.id}/approve`, {}));
+      const rs = await race(N, () => call(finance, 'POST', `/manual-payments/${sub.data.id}/approve`, {}));
       const d = (await call(admin, 'GET', `/invoices/${target.id}`)).data;
       const created = (d.payments || []).filter((p) => p.amount === 5 && /MPAY/.test(p.paymentReference || '')).length;
       report('manual payment approval race', count(rs, ok) === 1, `${N} approvals: ${count(rs, ok)} succeeded, ${created} payment(s) of 5 on the invoice`);

@@ -44,6 +44,10 @@ export class HttpExceptionFilter implements ExceptionFilter {
       path: request.url,
       timestamp: new Date().toISOString(),
       message,
+      // e.g. STEP_UP_REQUIRED: lets a client react to a specific condition without parsing prose.
+      ...(typeof (exceptionResponse as Record<string, unknown> | null)?.code === 'string' && {
+        code: (exceptionResponse as Record<string, unknown>).code,
+      }),
     });
   }
 }

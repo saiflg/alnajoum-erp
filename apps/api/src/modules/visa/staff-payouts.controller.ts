@@ -21,6 +21,7 @@ import { RequireFeature } from '../../common/decorators/require-feature.decorato
 
 import { TenantScoped } from '../../common/tenancy/tenant-scoped.decorator';
 import { resolveTenantFilter } from '../../common/utils/tenant.util';
+import { RequireStepUp } from '../../common/security/step-up';
 @RequireFeature('ENABLE_VISA')
 @Controller('visa/payouts')
 export class StaffPayoutsController {
@@ -70,6 +71,7 @@ export class StaffPayoutsController {
   }
 
   @TenantScoped({ kind: 'staffIncentive', param: 'incentiveId' })
+  @RequireStepUp()
   @Post(':incentiveId/pay')
   @RequirePermissions(PERMISSIONS.VISA.PAYOUT_APPROVE)
   async pay(
@@ -84,6 +86,7 @@ export class StaffPayoutsController {
   }
 
   @TenantScoped({ kind: 'staffIncentive', param: 'incentiveId' })
+  @RequireStepUp()
   @Post(':incentiveId/retry')
   @RequirePermissions(PERMISSIONS.VISA.PAYOUT_APPROVE)
   async retry(

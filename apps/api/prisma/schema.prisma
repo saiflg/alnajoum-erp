@@ -478,6 +478,10 @@ model Company {
   journalEntries JournalEntry[]
   dailyClosings DailyClosing[]
   corporateAccounts CorporateAccount[]
+  securityIncidents SecurityIncident[]
+  accessReviews AccessReview[]
+  dataSubjectRequests DataSubjectRequest[]
+  breakGlassGrants BreakGlassGrant[]
 
   @@map("companies")
 }
@@ -6319,4 +6323,187 @@ model WorkflowRateCounter {
   count       Int
 
   @@map("workflow_rate_counters")
+}
+
+// ---------------------------------------------------------------------------------------------------------
+// Phase 22 - security operations & compliance records. These record WHAT HAPPENED and WHO decided; they do
+// not prove legal compliance with any regulation.
+// ---------------------------------------------------------------------------------------------------------
+
+enum IncidentSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum IncidentStatus {
+  OPEN
+  INVESTIGATING
+  CONTAINED
+  RESOLVED
+  CLOSED
+}
+
+/// A security incident (suspected breach, leaked credential, abuse). Append-only timeline in SecurityIncidentNote.
+model SecurityIncident {
+  id        String  @id @default(cuid())
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  title       String
+  description String
+  severity    IncidentSeverity
+  status      IncidentStatus   @default(OPEN)
+
+  detectedAt           DateTime  @default(now())
+  reportedByIdentityId String
+  assignedToIdentityId String?
+  resolvedAt           DateTime?
+  /// Whether personal data may have been exposed (drives the breach-notification checklist in the runbook).
+  personalDataInvolved Boolean   @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  notes SecurityIncidentNote[]
+
+  @@index([companyId, status])
+  @@index([severity])
+  @@map("security_incidents")
+}
+
+model SecurityIncidentNote {
+  id         String           @id @default(cuid())
+  incidentId String
+  incident   SecurityIncident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+
+  authorIdentityId String
+  body             String
+  /// Set when the note records a status change, so the timeline reads as a history.
+  statusChange     IncidentStatus?
+
+  createdAt DateTime @default(now())
+
+  @@index([incidentId, createdAt])
+  @@map("security_incident_notes")
+}
+
+enum AccessReviewStatus {
+  OPEN
+  COMPLETED
+}
+
+enum AccessReviewDecision {
+  PENDING
+  KEEP
+  REVOKE
+}
+
+/// A periodic review of who has access: a snapshot of every staff account and role of the company, each
+/// to be confirmed or revoked by a reviewer. Completing the review applies the revocations.
+model AccessReview {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  status               AccessReviewStatus @default(OPEN)
+  startedByIdentityId  String
+  startedAt            DateTime           @default(now())
+  completedByIdentityId String?
+  completedAt          DateTime?
+
+  items AccessReviewItem[]
+
+  @@index([companyId, status])
+  @@map("access_reviews")
+}
+
+model AccessReviewItem {
+  id       String       @id @default(cuid())
+  reviewId String
+  review   AccessReview @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
+  identityId  String
+  email       String
+  staffName   String
+  roles       String[]
+  lastLoginAt DateTime?
+  twoFactorEnabled Boolean @default(false)
+  isActive    Boolean @default(true)
+
+  decision          AccessReviewDecision @default(PENDING)
+  decidedByIdentityId String?
+  decidedAt         DateTime?
+  note              String?
+  /// Filled when completing the review actually removed the person's access.
+  revokedAt         DateTime?
+
+  @@index([reviewId])
+  @@map("access_review_items")
+}
+
+enum DataSubjectRequestType {
+  EXPORT
+  ERASURE
+}
+
+enum DataSubjectRequestStatus {
+  COMPLETED
+  REFUSED
+}
+
+/// A customer's request for a copy of their data, or for it to be erased. The record keeps who asked, who
+/// carried it out and what was done - never the exported data itself.
+model DataSubjectRequest {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  customerId String
+  type       DataSubjectRequestType
+  status     DataSubjectRequestStatus
+  handledByIdentityId String
+  /// Counts of what was exported / anonymised, or the reason it was refused.
+  outcome    Json
+
+  createdAt DateTime @default(now())
+
+  @@index([companyId, createdAt])
+  @@index([customerId])
+  @@map("data_subject_requests")
+}
+
+enum BreakGlassStatus {
+  REQUESTED
+  ACTIVE
+  EXPIRED
+  REVOKED
+  DENIED
+}
+
+/// Time-boxed emergency elevation: a staff member asks for a role for a short, stated reason; a SUPER_ADMIN
+/// OTHER than the requester approves; the role is granted and removed automatically at expiry. Every step
+/// is audited.
+model BreakGlassGrant {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  identityId String
+  roleId     String
+  roleName   String
+  reason     String
+
+  status       BreakGlassStatus @default(REQUESTED)
+  requestedAt  DateTime         @default(now())
+  durationMinutes Int
+  approvedByIdentityId String?
+  approvedAt   DateTime?
+  expiresAt    DateTime?
+  endedAt      DateTime?
+
+  @@index([status, expiresAt])
+  @@index([identityId])
+  @@map("break_glass_grants")
 }

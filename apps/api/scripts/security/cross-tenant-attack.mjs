@@ -60,11 +60,26 @@ function inventory() {
 }
 
 // ---------------------------------------------------------------- http
+
+// Sensitive routes (wallet credit, role changes, payouts...) need a fresh proof of identity on top of the
+// session. The harness obtains one per user and sends it on every request; routes that do not ask for it ignore it.
+const stepUpTokens = new Map();
+async function obtainStepUp(base, accessToken, password) {
+  const r = await fetch(base + '/security/step-up', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ password }),
+  });
+  const j = await r.json().catch(() => ({}));
+  const t = (j.data ?? j).stepUpToken;
+  if (t) stepUpTokens.set(accessToken, t);
+}
 async function call(token, method, path, body) {
   const res = await fetch(BASE + path, {
     method,
     headers: {
       authorization: `Bearer ${token}`,
+      ...(stepUpTokens.has(token) ? { 'x-step-up-token': stepUpTokens.get(token) } : {}),
       ...(method !== 'GET' && method !== 'DELETE' ? { 'content-type': 'application/json' } : {}),
     },
     body: method !== 'GET' && method !== 'DELETE' ? JSON.stringify(body ?? {}) : undefined,
@@ -105,6 +120,8 @@ console.log(`route inventory: ${routes.length} routes`);
 
 const victimToken = await login(VICTIM_EMAIL, VICTIM_PASS);
 const attackerToken = await login(ATTACKER_EMAIL, ATTACKER_PASS);
+await obtainStepUp(BASE, victimToken, VICTIM_PASS);
+await obtainStepUp(BASE, attackerToken, ATTACKER_PASS);
 
 const pool = [];
 for (const r of routes.filter((x) => x.method === 'GET' && !x.path.includes(':'))) {
