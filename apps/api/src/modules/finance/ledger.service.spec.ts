@@ -10,11 +10,26 @@ describe('LedgerService', () => {
   let prisma: Record<string, any>;
   let auditService: { record: jest.Mock };
 
-  const accounts: Record<string, { id: string; code: string; type: AccountType }> = {
+  const accounts: Record<
+    string,
+    { id: string; code: string; type: AccountType }
+  > = {
     '1000': { id: 'acc-cash', code: '1000', type: AccountType.ASSET },
-    '4000': { id: 'acc-flight-revenue', code: '4000', type: AccountType.REVENUE },
-    '5080': { id: 'acc-cost-of-services', code: '5080', type: AccountType.EXPENSE },
-    '2030': { id: 'acc-supplier-payables', code: '2030', type: AccountType.LIABILITY },
+    '4000': {
+      id: 'acc-flight-revenue',
+      code: '4000',
+      type: AccountType.REVENUE,
+    },
+    '5080': {
+      id: 'acc-cost-of-services',
+      code: '5080',
+      type: AccountType.EXPENSE,
+    },
+    '2030': {
+      id: 'acc-supplier-payables',
+      code: '2030',
+      type: AccountType.LIABILITY,
+    },
   };
 
   beforeEach(async () => {
@@ -27,8 +42,11 @@ describe('LedgerService', () => {
         findMany: jest.fn().mockResolvedValue([]),
       },
       journalEntry: {
-        create: jest.fn((args: any) => Promise.resolve({ id: 'entry-1', ...args.data })),
+        create: jest.fn((args: any) =>
+          Promise.resolve({ id: 'entry-1', ...args.data }),
+        ),
         update: jest.fn(),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
         findUnique: jest.fn(),
         aggregate: jest.fn().mockResolvedValue({ _sum: { amount: 0 } }),
       },
@@ -112,6 +130,7 @@ describe('LedgerService', () => {
         description: 'Payment for invoice INV-1',
         sourceModule: 'PAYMENT',
         sourceId: 'payment-1',
+        companyId: 'company-1',
       });
 
       expect(prisma.journalEntry.create).toHaveBeenCalledWith({
@@ -122,6 +141,7 @@ describe('LedgerService', () => {
           currency: 'NGN',
           sourceModule: 'PAYMENT',
           sourceId: 'payment-1',
+          companyId: 'company-1',
         }),
       });
       expect(entry.amount).toBe(68_250);
@@ -136,10 +156,13 @@ describe('LedgerService', () => {
         reference: 'REF-1',
         description: 'test',
         sourceModule: 'PAYMENT',
+        companyId: 'company-1',
       });
 
       expect(prisma.journalEntry.create).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ amount: 1000 }) }),
+        expect.objectContaining({
+          data: expect.objectContaining({ amount: 1000 }),
+        }),
       );
     });
   });
@@ -157,11 +180,16 @@ describe('LedgerService', () => {
         sourceModule: 'PAYMENT',
         sourceId: 'payment-1',
         branchId: null,
+        companyId: 'company-1',
         status: JournalEntryStatus.POSTED,
       });
       prisma.journalEntry.create.mockResolvedValue({ id: 'entry-2' });
 
-      const reversal = await service.reverseEntry('entry-1', 'Booking refunded', 'identity-1');
+      const reversal = await service.reverseEntry(
+        'entry-1',
+        'Booking refunded',
+        'identity-1',
+      );
 
       expect(prisma.journalEntry.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
@@ -171,10 +199,14 @@ describe('LedgerService', () => {
           reversalOfId: 'entry-1',
         }),
       });
-      expect(prisma.journalEntry.update).toHaveBeenCalledWith({
-        where: { id: 'entry-1' },
+      expect(prisma.journalEntry.updateMany).toHaveBeenCalledWith({
+        where: { id: 'entry-1', status: JournalEntryStatus.POSTED },
         data: { status: JournalEntryStatus.REVERSED },
       });
+      // The reversal stays in the same company's books as the entry it reverses.
+      expect(prisma.journalEntry.create.mock.calls[0][0].data.companyId).toBe(
+        'company-1',
+      );
       expect(reversal.id).toBe('entry-2');
     });
 
@@ -184,7 +216,119 @@ describe('LedgerService', () => {
         status: JournalEntryStatus.REVERSED,
       });
 
-      await expect(service.reverseEntry('entry-1', 'reason')).rejects.toThrow(BadRequestException);
+      await expect(service.reverseEntry('entry-1', 'reason')).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+  });
+
+  describe('per-company books (Phase 22 S-11)', () => {
+    const entryOf = (companyId: string) => ({
+      id: 'entry-1',
+      debitAccountId: 'acc-cash',
+      creditAccountId: 'acc-flight-revenue',
+      amount: 100,
+      currency: 'NGN',
+      reference: 'R',
+      description: 'd',
+      sourceModule: 'PAYMENT',
+      sourceId: 'p1',
+      branchId: null,
+      companyId,
+      status: JournalEntryStatus.POSTED,
+    });
+
+    it("a tenant cannot reverse another company's entry (it looks like a missing entry)", async () => {
+      prisma.journalEntry.findUnique.mockResolvedValue(entryOf('company-2'));
+      await expect(
+        service.reverseEntry('entry-1', 'x', 'identity-1', 'company-1'),
+      ).rejects.toThrow('Journal entry not found');
+      expect(prisma.journalEntry.updateMany).not.toHaveBeenCalled();
+      expect(prisma.journalEntry.create).not.toHaveBeenCalled();
+    });
+
+    it("a SUPER_ADMIN (no tenant) may reverse any company's entry", async () => {
+      prisma.journalEntry.findUnique.mockResolvedValue(entryOf('company-2'));
+      prisma.journalEntry.create.mockResolvedValue({ id: 'entry-2' });
+      await expect(
+        service.reverseEntry('entry-1', 'x', 'identity-1'),
+      ).resolves.toBeDefined();
+    });
+
+    it('two simultaneous reversals cannot both succeed', async () => {
+      prisma.journalEntry.findUnique.mockResolvedValue(entryOf('company-1'));
+      prisma.journalEntry.updateMany.mockResolvedValue({ count: 0 }); // somebody else got there first
+      await expect(
+        service.reverseEntry('entry-1', 'x', 'identity-1', 'company-1'),
+      ).rejects.toThrow('already reversed');
+      expect(prisma.journalEntry.create).not.toHaveBeenCalled();
+    });
+
+    it('refuses to post an entry that belongs to no company', async () => {
+      await expect(
+        service.post({
+          debitCode: '1000',
+          creditCode: '4000',
+          amount: 5,
+          currency: 'NGN',
+          reference: 'R',
+          description: 'd',
+          sourceModule: 'MISC',
+        }),
+      ).rejects.toThrow(/which company/);
+      expect(prisma.journalEntry.create).not.toHaveBeenCalled();
+    });
+
+    it("derives the company from the record being posted for (a payment's invoice's customer)", async () => {
+      prisma.payment = {
+        findUnique: jest.fn().mockResolvedValue({
+          invoice: {
+            customer: { companyId: 'company-9' },
+            issuedByStaff: null,
+            corporateBooking: null,
+          },
+        }),
+      };
+      await service.post({
+        debitCode: '1000',
+        creditCode: '4000',
+        amount: 5,
+        currency: 'NGN',
+        reference: 'R',
+        description: 'd',
+        sourceModule: 'PAYMENT',
+        sourceId: 'pay-1',
+      });
+      expect(prisma.journalEntry.create.mock.calls[0][0].data.companyId).toBe(
+        'company-9',
+      );
+    });
+
+    it('balances, trial balance and entry lists are confined to the company when one is given', async () => {
+      prisma.ledgerAccount.findMany.mockResolvedValue([accounts['1000']]);
+      prisma.journalEntry.findMany = jest.fn().mockResolvedValue([]);
+      await service.getAccountBalance('1000', undefined, 'company-1');
+      await service.getAccountMovement(
+        '1000',
+        undefined,
+        undefined,
+        'company-1',
+      );
+      await service.trialBalance(undefined, 'company-1');
+      await service.listEntries({}, 'company-1');
+      for (const call of prisma.journalEntry.aggregate.mock.calls) {
+        expect(call[0].where.companyId).toBe('company-1');
+      }
+      expect(
+        prisma.journalEntry.findMany.mock.calls[0][0].where.companyId,
+      ).toBe('company-1');
+    });
+
+    it('without a company, balances span every company (SUPER_ADMIN)', async () => {
+      await service.getAccountBalance('1000');
+      expect(
+        prisma.journalEntry.aggregate.mock.calls[0][0].where,
+      ).not.toHaveProperty('companyId');
     });
   });
 

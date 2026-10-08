@@ -30,41 +30,50 @@ const superAdmin = authUser(['SUPER_ADMIN'], null);
 
 describe('FinanceReportsService — tenant isolation', () => {
   describe('ledger-backed reports (profit-and-loss, cash-flow, dashboard)', () => {
-    // The ledger has no companyId, so these cannot be split per tenant and are
-    // platform-administrator only (documented in docs/analytics.md).
+    // Journal entries and investments carry their company, so a tenant gets ITS OWN books and every
+    // ledger query is confined to that company.
     it.each([
       ['COMPANY_ADMIN', admin],
       ['FINANCE_OFFICER', finance],
       ['BRANCH_MANAGER', manager],
-    ])('%s is refused and the ledger is never queried', async (_n, user) => {
-      const { service, calls, ledger, investments } = setup();
-      await expect(service.profitAndLoss(user, {})).rejects.toBeInstanceOf(
-        ForbiddenException,
-      );
-      await expect(service.cashFlow(user, {})).rejects.toBeInstanceOf(
-        ForbiddenException,
-      );
-      await expect(service.dashboardKpis(user)).rejects.toBeInstanceOf(
-        ForbiddenException,
-      );
-      expect(calls()).toEqual([]);
-      expect(ledger.getAccountBalance).not.toHaveBeenCalled();
-      expect(investments.position).not.toHaveBeenCalled();
-    });
+    ])(
+      '%s gets their own company only: every ledger query carries the company',
+      async (_n, user) => {
+        const { service, prisma, calls, ledger, investments } = setup();
+        prisma.journalEntry.findMany.mockResolvedValue([]);
+        prisma.ledgerAccount.findMany.mockResolvedValue([{ id: 'acc-1' }]);
+        await service.profitAndLoss(user, {});
+        await service.cashFlow(user, {});
+        await service.dashboardKpis(user);
+        // The chart of accounts is a shared template (codes/types), so account lookups carry no company.
+        expectEveryQueryTenantScoped(calls(), 'co-A', [
+          'ledgerAccount.findMany',
+        ]);
+        for (const call of ledger.getAccountBalance.mock.calls) {
+          expect(call[2]).toBe('co-A');
+        }
+        expect(investments.position).toHaveBeenCalledWith('co-A');
+      },
+    );
 
-    it('a caller with no company is refused too', async () => {
-      const { service } = setup();
+    it('a caller whose account has no company is refused before any ledger query', async () => {
+      const { service, calls } = setup();
       await expect(
         service.profitAndLoss(authUser(['COMPANY_ADMIN'], null), {}),
       ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(calls()).toEqual([]);
     });
 
-    it('SUPER_ADMIN still gets the platform-wide figures, unchanged in shape', async () => {
-      const { service, prisma } = setup();
+    it('SUPER_ADMIN still gets the platform-wide figures, with no company filter', async () => {
+      const { service, prisma, ledger, investments } = setup();
       prisma.journalEntry.findMany.mockResolvedValue([]);
       prisma.ledgerAccount.findMany.mockResolvedValue([]);
       const pl = await service.profitAndLoss(superAdmin, {});
       expect(pl).toHaveProperty('netProfit', 0);
+      expect(
+        (prisma.journalEntry.findMany.mock.calls[0][0] as { where: object })
+          .where,
+      ).not.toHaveProperty('companyId');
       expect(await service.cashFlow(superAdmin, {})).toMatchObject({
         inflow: 0,
         net: 0,
@@ -73,6 +82,8 @@ describe('FinanceReportsService — tenant isolation', () => {
         'cashFlowNet',
         0,
       );
+      expect(investments.position).toHaveBeenLastCalledWith(undefined);
+      expect(ledger.getAccountBalance.mock.calls[0][2]).toBeUndefined();
     });
   });
 

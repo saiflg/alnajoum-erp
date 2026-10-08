@@ -7,6 +7,7 @@ import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { CompanyInvestmentsService } from './company-investments.service';
 import { CreateInvestmentDto } from './dto/create-investment.dto';
 
+import { resolveTenantFilter } from '../../common/utils/tenant.util';
 /** Spec #15/#16 — Super Admin / Company Admin only (see default-roles.constant.ts). */
 @Controller('finance/investments')
 @RequirePermissions(PERMISSIONS.FINANCE.INVESTMENT_MANAGE)
@@ -15,16 +16,19 @@ export class CompanyInvestmentsController {
 
   @Post()
   create(@CurrentUser() user: AuthContext, @Body() dto: CreateInvestmentDto) {
-    return this.service.create(dto, user.sub);
+    return this.service.create(dto, user.sub, user.companyId as string);
   }
 
   @Get()
-  listAll(@Query('type') type?: InvestmentType) {
-    return this.service.listAll({ type });
+  listAll(
+    @CurrentUser() user: AuthContext,
+    @Query('type') type?: InvestmentType,
+  ) {
+    return this.service.listAll({ type }, resolveTenantFilter(user));
   }
 
   @Get('position')
-  position() {
-    return this.service.position();
+  position(@CurrentUser() user: AuthContext) {
+    return this.service.position(resolveTenantFilter(user));
   }
 }

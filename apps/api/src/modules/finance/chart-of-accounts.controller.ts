@@ -9,6 +9,7 @@ import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { LedgerService } from './ledger.service';
 
 import { Roles } from '../../common/decorators/roles.decorator';
+import { resolveTenantFilter } from '../../common/utils/tenant.util';
 class CreateAccountDto {
   @IsString()
   @MaxLength(20)
@@ -42,24 +43,31 @@ export class ChartOfAccountsController {
 
   @Get('trial-balance')
   @RequirePermissions(PERMISSIONS.FINANCE.LEDGER_VIEW)
-  trialBalance(@Query('asOf') asOf?: string) {
-    return this.ledger.trialBalance(asOf ? new Date(asOf) : undefined);
+  trialBalance(@CurrentUser() user: AuthContext, @Query('asOf') asOf?: string) {
+    return this.ledger.trialBalance(
+      asOf ? new Date(asOf) : undefined,
+      resolveTenantFilter(user),
+    );
   }
 
   @Get('journal-entries')
   @RequirePermissions(PERMISSIONS.FINANCE.LEDGER_VIEW)
   journalEntries(
+    @CurrentUser() user: AuthContext,
     @Query('sourceModule') sourceModule?: string,
     @Query('sourceId') sourceId?: string,
     @Query('from') from?: string,
     @Query('to') to?: string,
   ) {
-    return this.ledger.listEntries({
-      sourceModule,
-      sourceId,
-      from: from ? new Date(from) : undefined,
-      to: to ? new Date(to) : undefined,
-    });
+    return this.ledger.listEntries(
+      {
+        sourceModule,
+        sourceId,
+        from: from ? new Date(from) : undefined,
+        to: to ? new Date(to) : undefined,
+      },
+      resolveTenantFilter(user),
+    );
   }
 
   @Roles('SUPER_ADMIN')
@@ -77,7 +85,6 @@ export class ChartOfAccountsController {
     });
   }
 
-  @Roles('SUPER_ADMIN')
   @Post('journal-entries/:id/reverse')
   @RequirePermissions(PERMISSIONS.FINANCE.ACCOUNTS_MANAGE)
   reverseEntry(
@@ -85,6 +92,11 @@ export class ChartOfAccountsController {
     @Param('id') id: string,
     @Body() body: { reason: string },
   ) {
-    return this.ledger.reverseEntry(id, body.reason, user.sub);
+    return this.ledger.reverseEntry(
+      id,
+      body.reason,
+      user.sub,
+      resolveTenantFilter(user),
+    );
   }
 }

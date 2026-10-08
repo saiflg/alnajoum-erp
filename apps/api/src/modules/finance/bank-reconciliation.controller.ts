@@ -17,6 +17,7 @@ import { BankReconciliationService } from './bank-reconciliation.service';
 import { CreateBankStatementLineDto } from './dto/create-bank-statement-line.dto';
 import { MatchBankStatementLineDto } from './dto/match-bank-statement-line.dto';
 
+import { resolveTenantFilter } from '../../common/utils/tenant.util';
 @Controller('finance/bank-reconciliation')
 @RequirePermissions(PERMISSIONS.FINANCE.BANK_RECONCILIATION)
 export class BankReconciliationController {
@@ -52,13 +53,16 @@ export class BankReconciliationController {
   }
 
   @Get('lines')
-  listAll(@Query('status') status?: BankStatementLineStatus) {
-    return this.service.listAll({ status });
+  listAll(
+    @CurrentUser() user: AuthContext,
+    @Query('status') status?: BankStatementLineStatus,
+  ) {
+    return this.service.listAll({ status }, resolveTenantFilter(user));
   }
 
   @Get('duplicates')
-  findDuplicates() {
-    return this.service.findDuplicates();
+  findDuplicates(@CurrentUser() user: AuthContext) {
+    return this.service.findDuplicates(resolveTenantFilter(user));
   }
 
   @Post('lines/:id/match')
@@ -67,11 +71,11 @@ export class BankReconciliationController {
     @Param('id') id: string,
     @Body() dto: MatchBankStatementLineDto,
   ) {
-    return this.service.match(id, dto, user.sub);
+    return this.service.match(id, dto, user.sub, resolveTenantFilter(user));
   }
 
   @Post('lines/:id/ignore')
   ignore(@CurrentUser() user: AuthContext, @Param('id') id: string) {
-    return this.service.ignore(id, user.sub);
+    return this.service.ignore(id, user.sub, resolveTenantFilter(user));
   }
 }

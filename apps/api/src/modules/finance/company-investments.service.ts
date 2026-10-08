@@ -14,9 +14,14 @@ export class CompanyInvestmentsService {
     private readonly financePostingService: FinancePostingService,
   ) {}
 
-  async create(dto: CreateInvestmentDto, actorIdentityId?: string) {
+  async create(
+    dto: CreateInvestmentDto,
+    actorIdentityId: string | undefined,
+    companyId: string,
+  ) {
     const investment = await this.prisma.companyInvestment.create({
       data: {
+        companyId,
         type: dto.type,
         amount: dto.amount,
         currency: dto.currency ?? 'NGN',
@@ -41,16 +46,18 @@ export class CompanyInvestmentsService {
     return investment;
   }
 
-  listAll(filters: { type?: InvestmentType }) {
+  listAll(filters: { type?: InvestmentType }, tenant?: string) {
     return this.prisma.companyInvestment.findMany({
-      where: filters,
+      where: { ...filters, ...(tenant !== undefined && { companyId: tenant }) },
       orderBy: { date: 'desc' },
     });
   }
 
   /** Spec #16's "Initial + Additional − Withdrawals" position, kept distinct from operating profit. */
-  async position() {
-    const investments = await this.prisma.companyInvestment.findMany();
+  async position(tenant?: string) {
+    const investments = await this.prisma.companyInvestment.findMany({
+      where: tenant !== undefined ? { companyId: tenant } : undefined,
+    });
     const initial = investments
       .filter((i) => i.type === InvestmentType.INITIAL)
       .reduce((sum, i) => sum + i.amount, 0);

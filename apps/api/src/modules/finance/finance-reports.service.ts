@@ -1,8 +1,4 @@
-import {
-  ForbiddenException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { AccountType } from '@prisma/client';
 import type { AuthContext } from '../../common/interfaces/auth-context.interface';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
@@ -47,19 +43,12 @@ export class FinanceReportsService {
   ) {}
 
   /**
-   * The ledger (JournalEntry / LedgerAccount) and company investments have no
-   * companyId, and a join through `sourceId` would be invented rather than
-   * known, so the figures built from them cannot be split per tenant. Until the
-   * ledger carries a tenant they are SUPER_ADMIN (platform-wide) only; a tenant
-   * caller is refused instead of being shown every company's money. Per-company
-   * revenue/collections are available from /analytics/* meanwhile.
+   * The company whose books a report reads: the caller's own, or `undefined` for a SUPER_ADMIN (the
+   * whole platform). Journal entries and investments carry their company (Phase 22), so a tenant's
+   * ledger figures are computed from that company's entries only.
    */
-  private requirePlatformLedger(user: AuthContext): void {
-    if (this.scopes.tenantOf(user) !== undefined) {
-      throw new ForbiddenException(
-        'The general ledger is not yet separated per company, so this report is limited to platform administrators. Use the executive analytics for figures on your own company.',
-      );
-    }
+  private ledgerTenant(user: AuthContext): string | undefined {
+    return this.scopes.tenantOf(user);
   }
 
   private whereCreatedAt(range: DateRange) {
@@ -74,9 +63,13 @@ export class FinanceReportsService {
 
   /** Spec #17. */
   async profitAndLoss(user: AuthContext, range: DateRange) {
-    this.requirePlatformLedger(user);
+    const tenant = this.ledgerTenant(user);
     const entries = await this.prisma.journalEntry.findMany({
-      where: { status: 'POSTED', ...this.whereCreatedAt(range) },
+      where: {
+        status: 'POSTED',
+        ...(tenant !== undefined && { companyId: tenant }),
+        ...this.whereCreatedAt(range),
+      },
       include: { debitAccount: true, creditAccount: true },
     });
 
@@ -174,7 +167,7 @@ export class FinanceReportsService {
 
   /** Spec #18 — investment inflows kept separate from operating revenue via sourceModule. */
   async cashFlow(user: AuthContext, range: DateRange) {
-    this.requirePlatformLedger(user);
+    const tenant = this.ledgerTenant(user);
     const cashAccounts = await this.prisma.ledgerAccount.findMany({
       where: {
         code: { in: [ACCOUNT_CODES.CASH, ACCOUNT_CODES.BANK_ACCOUNTS] },
@@ -197,6 +190,7 @@ export class FinanceReportsService {
       where: {
         status: 'POSTED',
         OR: [{ debitAccountId: { in: ids } }, { creditAccountId: { in: ids } }],
+        ...(tenant !== undefined && { companyId: tenant }),
         ...this.whereCreatedAt(range),
       },
     });
@@ -231,7 +225,9 @@ export class FinanceReportsService {
 
   /** Spec #26. */
   async dashboardKpis(user: AuthContext) {
-    this.requirePlatformLedger(user);
+    const tenant = this.ledgerTenant(user);
+    const staffScope =
+      tenant === undefined ? {} : { staff: { companyId: tenant } };
     const [
       pl,
       cash,
@@ -248,29 +244,45 @@ export class FinanceReportsService {
     ] = await Promise.all([
       this.profitAndLoss(user, {}),
       this.cashFlow(user, {}),
-      this.investments.position(),
-      this.ledger.getAccountBalance(ACCOUNT_CODES.CASH),
-      this.ledger.getAccountBalance(ACCOUNT_CODES.BANK_ACCOUNTS),
-      this.ledger.getAccountBalance(ACCOUNT_CODES.CUSTOMER_WALLET_LIABILITY),
-      this.ledger.getAccountBalance(ACCOUNT_CODES.STAFF_INCENTIVE_PAYABLE),
-      this.ledger.getAccountBalance(ACCOUNT_CODES.SUPPLIER_PAYABLES),
+      this.investments.position(tenant),
+      this.ledger.getAccountBalance(ACCOUNT_CODES.CASH, undefined, tenant),
+      this.ledger.getAccountBalance(
+        ACCOUNT_CODES.BANK_ACCOUNTS,
+        undefined,
+        tenant,
+      ),
+      this.ledger.getAccountBalance(
+        ACCOUNT_CODES.CUSTOMER_WALLET_LIABILITY,
+        undefined,
+        tenant,
+      ),
+      this.ledger.getAccountBalance(
+        ACCOUNT_CODES.STAFF_INCENTIVE_PAYABLE,
+        undefined,
+        tenant,
+      ),
+      this.ledger.getAccountBalance(
+        ACCOUNT_CODES.SUPPLIER_PAYABLES,
+        undefined,
+        tenant,
+      ),
       this.prisma.staffIncentive.aggregate({
-        where: { status: 'PENDING' },
+        where: { status: 'PENDING', ...staffScope },
         _sum: { amount: true },
         _count: true,
       }),
       this.prisma.staffIncentive.aggregate({
-        where: { status: 'APPROVED' },
+        where: { status: 'APPROVED', ...staffScope },
         _sum: { amount: true },
         _count: true,
       }),
       this.prisma.staffPayout.aggregate({
-        where: { status: 'PENDING' },
+        where: { status: 'PENDING', ...staffScope },
         _sum: { amount: true },
         _count: true,
       }),
       this.prisma.staffPayout.aggregate({
-        where: { status: 'SUCCESSFUL' },
+        where: { status: 'SUCCESSFUL', ...staffScope },
         _sum: { amount: true },
         _count: true,
       }),

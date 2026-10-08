@@ -12,6 +12,7 @@ import type { AuthContext } from '../../common/interfaces/auth-context.interface
 import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { UsersService } from '../users/users.service';
 import { DailyClosingService } from './daily-closing.service';
+import { resolveTenantFilter } from '../../common/utils/tenant.util';
 
 @Controller('finance/daily-closing')
 @RequirePermissions(PERMISSIONS.FINANCE.DAILY_CLOSING)
@@ -22,15 +23,22 @@ export class DailyClosingController {
   ) {}
 
   @Get('preview')
-  preview(@Query('businessDate') businessDate?: string) {
+  preview(
+    @CurrentUser() user: AuthContext,
+    @Query('businessDate') businessDate?: string,
+  ) {
     return this.service.preview(
       businessDate ? new Date(businessDate) : new Date(),
+      resolveTenantFilter(user),
     );
   }
 
   @Get()
-  listAll(@Query('branchId') branchId?: string) {
-    return this.service.listAll({ branchId });
+  listAll(
+    @CurrentUser() user: AuthContext,
+    @Query('branchId') branchId?: string,
+  ) {
+    return this.service.listAll({ branchId }, resolveTenantFilter(user));
   }
 
   @Post()
@@ -47,6 +55,7 @@ export class DailyClosingController {
       staffId,
       body.branchId,
       user.sub,
+      user.companyId as string,
     );
   }
 }

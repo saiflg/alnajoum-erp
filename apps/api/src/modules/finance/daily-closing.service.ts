@@ -1,6 +1,7 @@
 import { ConflictException, Injectable } from '@nestjs/common';
 import { PaymentMethod } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
+import { tenantWhere } from '../../common/tenancy/tenant-guard.service';
 import { AuditService } from '../audit/audit.service';
 import { ACCOUNT_CODES } from './constants/account-codes.constant';
 
@@ -23,19 +24,33 @@ export class DailyClosingService {
     private readonly auditService: AuditService,
   ) {}
 
-  async isDateClosed(date: Date, branchId?: string): Promise<boolean> {
+  async isDateClosed(
+    date: Date,
+    branchId?: string,
+    companyId?: string,
+  ): Promise<boolean> {
     const closing = await this.prisma.dailyClosing.findFirst({
-      where: { businessDate: startOfDay(date), branchId: branchId ?? null },
+      where: {
+        businessDate: startOfDay(date),
+        branchId: branchId ?? null,
+        ...(companyId !== undefined && { companyId }),
+      },
     });
     return closing != null;
   }
 
-  async preview(businessDate: Date) {
+  /** `tenant` undefined = SUPER_ADMIN (the whole platform); otherwise only that company's movements. */
+  async preview(businessDate: Date, tenant?: string) {
     const from = startOfDay(businessDate);
     const to = endOfDay(businessDate);
 
     const payments = await this.prisma.payment.findMany({
-      where: { paidAt: { gte: from, lte: to } },
+      where: {
+        paidAt: { gte: from, lte: to },
+        ...(tenant !== undefined && {
+          invoice: tenantWhere('invoice', tenant),
+        }),
+      },
     });
     const byMethod: Record<string, number> = {};
     for (const p of payments) {
@@ -49,7 +64,12 @@ export class DailyClosingService {
     const [walletTransactions, refunds, expenses, payouts, supplierPayments] =
       await Promise.all([
         this.prisma.walletTransaction.aggregate({
-          where: { createdAt: { gte: from, lte: to } },
+          where: {
+            createdAt: { gte: from, lte: to },
+            ...(tenant !== undefined && {
+              wallet: { customer: { companyId: tenant } },
+            }),
+          },
           _sum: { amount: true },
         }),
         refundLossesAccount
@@ -57,20 +77,33 @@ export class DailyClosingService {
               where: {
                 debitAccountId: refundLossesAccount.id,
                 createdAt: { gte: from, lte: to },
+                ...(tenant !== undefined && { companyId: tenant }),
               },
               _sum: { amount: true },
             })
           : Promise.resolve({ _sum: { amount: 0 } }),
         this.prisma.expense.aggregate({
-          where: { paidAt: { gte: from, lte: to } },
+          where: {
+            paidAt: { gte: from, lte: to },
+            ...(tenant !== undefined && {
+              createdByStaff: { companyId: tenant },
+            }),
+          },
           _sum: { amount: true },
         }),
         this.prisma.staffPayout.aggregate({
-          where: { status: 'SUCCESSFUL', updatedAt: { gte: from, lte: to } },
+          where: {
+            status: 'SUCCESSFUL',
+            updatedAt: { gte: from, lte: to },
+            ...(tenant !== undefined && { staff: { companyId: tenant } }),
+          },
           _sum: { amount: true },
         }),
         this.prisma.supplierPayment.aggregate({
-          where: { paidAt: { gte: from, lte: to } },
+          where: {
+            paidAt: { gte: from, lte: to },
+            ...(tenant !== undefined && { payable: { companyId: tenant } }),
+          },
           _sum: { amount: true },
         }),
       ]);
@@ -96,16 +129,25 @@ export class DailyClosingService {
     businessDate: Date,
     closedByStaffId: string,
     branchId: string | undefined,
-    actorIdentityId?: string,
+    actorIdentityId: string | undefined,
+    companyId: string,
   ) {
     const day = startOfDay(businessDate);
-    if (await this.isDateClosed(day, branchId)) {
+    // A day is closed per company: another company having closed the same date is irrelevant.
+    if (await this.isDateClosed(day, branchId, companyId)) {
       throw new ConflictException('This business date has already been closed');
     }
 
-    const summary = await this.preview(day);
+    // The frozen summary covers THIS company's movements only.
+    const summary = await this.preview(day, companyId);
     const closing = await this.prisma.dailyClosing.create({
-      data: { businessDate: day, branchId, summary, closedByStaffId },
+      data: {
+        companyId,
+        businessDate: day,
+        branchId,
+        summary,
+        closedByStaffId,
+      },
     });
 
     await this.auditService.record({
@@ -119,9 +161,10 @@ export class DailyClosingService {
     return closing;
   }
 
-  listAll(filters: { branchId?: string }) {
+  listAll(filters: { branchId?: string }, tenant?: string) {
     return this.prisma.dailyClosing.findMany({
-      where: filters,
+      where: { ...filters, ...(tenant !== undefined && { companyId: tenant }) },
+      take: 500,
       include: {
         closedByStaff: { select: { firstName: true, lastName: true } },
         branch: { select: { name: true } },

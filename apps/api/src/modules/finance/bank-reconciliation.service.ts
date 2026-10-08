@@ -9,6 +9,7 @@ import { AuditService } from '../audit/audit.service';
 import { CreateBankStatementLineDto } from './dto/create-bank-statement-line.dto';
 import { MatchBankStatementLineDto } from './dto/match-bank-statement-line.dto';
 
+import { tenantWhere } from '../../common/tenancy/tenant-guard.service';
 /**
  * Spec #23. Localhost has no live bank-feed integration, so lines are
  * entered manually (one at a time, or pasted in bulk from a CSV export —
@@ -56,9 +57,60 @@ export class BankReconciliationService {
     return { imported: created.length };
   }
 
-  listAll(filters: { status?: BankStatementLineStatus }) {
+  /** A statement line belongs to the company of the staff member who imported it. */
+  private lineScope(tenant?: string) {
+    return tenant === undefined
+      ? {}
+      : { importedByStaff: { companyId: tenant } };
+  }
+
+  /** The record a line is being matched to must exist and, for a tenant, be that company's own. */
+  private async assertMatchTarget(
+    type: MatchBankStatementLineDto['matchedType'],
+    id: string,
+    tenant?: string,
+  ) {
+    const t = tenant;
+    const found =
+      type === 'PAYMENT'
+        ? await this.prisma.payment.findFirst({
+            where: {
+              id,
+              ...(t !== undefined && { invoice: tenantWhere('invoice', t) }),
+            },
+            select: { id: true },
+          })
+        : type === 'EXPENSE'
+          ? await this.prisma.expense.findFirst({
+              where: {
+                id,
+                ...(t !== undefined && { createdByStaff: { companyId: t } }),
+              },
+              select: { id: true },
+            })
+          : type === 'SUPPLIER_PAYMENT'
+            ? await this.prisma.supplierPayment.findFirst({
+                where: {
+                  id,
+                  ...(t !== undefined && { payable: { companyId: t } }),
+                },
+                select: { id: true },
+              })
+            : await this.prisma.staffPayout.findFirst({
+                where: {
+                  id,
+                  ...(t !== undefined && { staff: { companyId: t } }),
+                },
+                select: { id: true },
+              });
+    if (!found)
+      throw new NotFoundException('The record to match was not found');
+  }
+
+  listAll(filters: { status?: BankStatementLineStatus }, tenant?: string) {
     return this.prisma.bankStatementLine.findMany({
-      where: filters,
+      where: { ...filters, ...this.lineScope(tenant) },
+      take: 1000,
       orderBy: { date: 'desc' },
     });
   }
@@ -68,11 +120,12 @@ export class BankReconciliationService {
    * same amount, currency, and externalReference appearing on more than
    * one UNMATCHED line.
    */
-  async findDuplicates() {
+  async findDuplicates(tenant?: string) {
     const lines = await this.prisma.bankStatementLine.findMany({
       where: {
         status: BankStatementLineStatus.UNMATCHED,
         externalReference: { not: null },
+        ...this.lineScope(tenant),
       },
     });
     const seen = new Map<string, typeof lines>();
@@ -87,9 +140,10 @@ export class BankReconciliationService {
     id: string,
     dto: MatchBankStatementLineDto,
     actorIdentityId?: string,
+    tenant?: string,
   ) {
-    const line = await this.prisma.bankStatementLine.findUnique({
-      where: { id },
+    const line = await this.prisma.bankStatementLine.findFirst({
+      where: { id, ...this.lineScope(tenant) },
     });
     if (!line) {
       throw new NotFoundException('Bank statement line not found');
@@ -97,14 +151,22 @@ export class BankReconciliationService {
     if (line.status !== BankStatementLineStatus.UNMATCHED) {
       throw new ConflictException('This line has already been reconciled');
     }
+    await this.assertMatchTarget(dto.matchedType, dto.matchedId, tenant);
 
-    const updated = await this.prisma.bankStatementLine.update({
-      where: { id },
+    // Atomic UNMATCHED -> MATCHED: two reconcilers cannot both claim the same line.
+    const claim = await this.prisma.bankStatementLine.updateMany({
+      where: { id, status: BankStatementLineStatus.UNMATCHED },
       data: {
         status: BankStatementLineStatus.MATCHED,
         matchedType: dto.matchedType,
         matchedId: dto.matchedId,
       },
+    });
+    if (claim.count === 0) {
+      throw new ConflictException('This line has already been reconciled');
+    }
+    const updated = await this.prisma.bankStatementLine.findUniqueOrThrow({
+      where: { id },
     });
 
     await this.auditService.record({
@@ -118,9 +180,9 @@ export class BankReconciliationService {
     return updated;
   }
 
-  async ignore(id: string, actorIdentityId?: string) {
-    const line = await this.prisma.bankStatementLine.findUnique({
-      where: { id },
+  async ignore(id: string, actorIdentityId?: string, tenant?: string) {
+    const line = await this.prisma.bankStatementLine.findFirst({
+      where: { id, ...this.lineScope(tenant) },
     });
     if (!line) {
       throw new NotFoundException('Bank statement line not found');

@@ -21,6 +21,12 @@ export interface PostEntryParams {
   sourceId?: string;
   createdByIdentityId?: string;
   branchId?: string;
+  /**
+   * The company whose books this entry belongs to. Optional only for convenience: when omitted it is
+   * derived from the record the entry is for (see resolveCompanyId) and the post fails if no company
+   * can be found - an entry that belongs to nobody would appear in nobody's accounts.
+   */
+  companyId?: string;
 }
 
 export function generateJournalReference(prefix: string): string {
@@ -71,6 +77,174 @@ export class LedgerService {
     this.accountIdCache.clear();
   }
 
+  /**
+   * Which company a posting belongs to, from the record it is for. This is the one place that knows
+   * how each sourceModule reaches a company, mirrored by the SQL backfill in migration
+   * 20261009030000_phase22_ledger_per_company.
+   */
+  async resolveCompanyId(
+    params: Pick<
+      PostEntryParams,
+      'companyId' | 'sourceModule' | 'sourceId' | 'branchId'
+    >,
+    client: Client = this.prisma,
+  ): Promise<string | undefined> {
+    if (params.companyId) return params.companyId;
+    const id = params.sourceId;
+    const viaCustomer = {
+      select: { customer: { select: { companyId: true } } },
+    } as const;
+    if (id) {
+      switch (params.sourceModule) {
+        case 'FLIGHT_BOOKING':
+          return (
+            await client.flightBooking.findUnique({
+              where: { id },
+              ...viaCustomer,
+            })
+          )?.customer.companyId;
+        case 'HOTEL_BOOKING':
+          return (
+            await client.hotelBooking.findUnique({
+              where: { id },
+              ...viaCustomer,
+            })
+          )?.customer.companyId;
+        case 'VISA_APPLICATION':
+          return (
+            await client.visaApplication.findUnique({
+              where: { id },
+              ...viaCustomer,
+            })
+          )?.customer.companyId;
+        case 'FLIGHT_REFUND':
+          return (
+            await client.flightRefund.findUnique({
+              where: { id },
+              select: {
+                booking: {
+                  select: { customer: { select: { companyId: true } } },
+                },
+              },
+            })
+          )?.booking.customer.companyId;
+        case 'FLIGHT_VOID':
+          return (
+            await client.flightVoid.findUnique({
+              where: { id },
+              select: {
+                booking: {
+                  select: { customer: { select: { companyId: true } } },
+                },
+              },
+            })
+          )?.booking.customer.companyId;
+        case 'HOTEL_REFUND':
+          return (
+            await client.hotelRefund.findUnique({
+              where: { id },
+              select: {
+                booking: {
+                  select: { customer: { select: { companyId: true } } },
+                },
+              },
+            })
+          )?.booking.customer.companyId;
+        case 'VISA_REFUND':
+          return (
+            await client.visaRefund.findUnique({
+              where: { id },
+              select: {
+                application: {
+                  select: { customer: { select: { companyId: true } } },
+                },
+              },
+            })
+          )?.application.customer.companyId;
+        case 'PAYMENT': {
+          const payment = await client.payment.findUnique({
+            where: { id },
+            select: {
+              invoice: {
+                select: {
+                  customer: { select: { companyId: true } },
+                  issuedByStaff: { select: { companyId: true } },
+                  corporateBooking: {
+                    select: { bookedByStaff: { select: { companyId: true } } },
+                  },
+                },
+              },
+            },
+          });
+          const inv = payment?.invoice;
+          return (
+            inv?.customer?.companyId ??
+            inv?.issuedByStaff?.companyId ??
+            inv?.corporateBooking?.bookedByStaff.companyId
+          );
+        }
+        case 'WALLET':
+          return (
+            await client.walletTransaction.findUnique({
+              where: { id },
+              select: {
+                wallet: {
+                  select: { customer: { select: { companyId: true } } },
+                },
+              },
+            })
+          )?.wallet.customer.companyId;
+        case 'EXPENSE':
+          return (
+            await client.expense.findUnique({
+              where: { id },
+              select: { createdByStaff: { select: { companyId: true } } },
+            })
+          )?.createdByStaff.companyId;
+        case 'INCENTIVE':
+          return (
+            await client.staffIncentive.findUnique({
+              where: { id },
+              select: { staff: { select: { companyId: true } } },
+            })
+          )?.staff.companyId;
+        case 'PAYOUT':
+          return (
+            await client.staffPayout.findUnique({
+              where: { id },
+              select: { staff: { select: { companyId: true } } },
+            })
+          )?.staff.companyId;
+        case 'SUPPLIER_PAYMENT':
+          // sourceId is the SupplierPayment; the company belongs to the payable it settles.
+          return (
+            await client.supplierPayment.findUnique({
+              where: { id },
+              select: { payable: { select: { companyId: true } } },
+            })
+          )?.payable.companyId;
+        case 'INVESTMENT':
+          return (
+            (
+              await client.companyInvestment.findUnique({
+                where: { id },
+                select: { companyId: true },
+              })
+            )?.companyId ?? undefined
+          );
+      }
+    }
+    if (params.branchId) {
+      return (
+        await client.branch.findUnique({
+          where: { id: params.branchId },
+          select: { companyId: true },
+        })
+      )?.companyId;
+    }
+    return undefined;
+  }
+
   private async accountId(code: string, client: Client): Promise<string> {
     const cached = this.accountIdCache.get(code);
     if (cached) return cached;
@@ -110,8 +284,16 @@ export class LedgerService {
       this.accountId(params.creditCode, client),
     ]);
 
+    const companyId = await this.resolveCompanyId(params, client);
+    if (!companyId) {
+      throw new BadRequestException(
+        `Cannot determine which company's books ${params.sourceModule}${params.sourceId ? `:${params.sourceId}` : ''} belongs to; refusing to post an entry that would belong to no one`,
+      );
+    }
+
     const entry = await client.journalEntry.create({
       data: {
+        companyId,
         debitAccountId,
         creditAccountId,
         amount: Math.round(params.amount),
@@ -143,12 +325,14 @@ export class LedgerService {
     entryId: string,
     reason: string,
     actorIdentityId?: string,
+    tenant?: string,
   ) {
     const original = await this.prisma.journalEntry.findUnique({
       where: { id: entryId },
       include: { debitAccount: true, creditAccount: true },
     });
-    if (!original) {
+    // Another company's entry is indistinguishable from a missing one.
+    if (!original || (tenant !== undefined && original.companyId !== tenant)) {
       throw new BadRequestException('Journal entry not found');
     }
     if (original.status === JournalEntryStatus.REVERSED) {
@@ -156,8 +340,20 @@ export class LedgerService {
     }
 
     const reversal = await this.prisma.$transaction(async (tx) => {
+      // Atomic POSTED -> REVERSED: two simultaneous reversals cannot both succeed (the unique
+      // reversalOfId would only have rejected the second *after* it had done its work).
+      const claim = await tx.journalEntry.updateMany({
+        where: { id: original.id, status: JournalEntryStatus.POSTED },
+        data: { status: JournalEntryStatus.REVERSED },
+      });
+      if (claim.count === 0) {
+        throw new BadRequestException(
+          'This journal entry was already reversed',
+        );
+      }
       const created = await tx.journalEntry.create({
         data: {
+          companyId: original.companyId,
           debitAccountId: original.creditAccountId,
           creditAccountId: original.debitAccountId,
           amount: original.amount,
@@ -170,10 +366,6 @@ export class LedgerService {
           branchId: original.branchId,
           reversalOfId: original.id,
         },
-      });
-      await tx.journalEntry.update({
-        where: { id: original.id },
-        data: { status: JournalEntryStatus.REVERSED },
       });
       return created;
     });
@@ -203,13 +395,20 @@ export class LedgerService {
    * automatically since their own reversal already nets them to zero (both
    * legs stay in the sum, cancelling out) — no special-casing needed.
    */
-  async getAccountBalance(code: string, asOf?: Date): Promise<number> {
+  async getAccountBalance(
+    code: string,
+    asOf?: Date,
+    companyId?: string,
+  ): Promise<number> {
     const account = await this.prisma.ledgerAccount.findUnique({
       where: { code },
     });
     if (!account) return 0;
 
-    const dateFilter = asOf ? { createdAt: { lte: asOf } } : {};
+    const dateFilter = {
+      ...(asOf ? { createdAt: { lte: asOf } } : {}),
+      ...(companyId !== undefined ? { companyId } : {}),
+    };
     const [debitSum, creditSum] = await Promise.all([
       this.prisma.journalEntry.aggregate({
         where: { debitAccountId: account.id, ...dateFilter },
@@ -237,6 +436,7 @@ export class LedgerService {
     code: string,
     from?: Date,
     to?: Date,
+    companyId?: string,
   ): Promise<number> {
     const account = await this.prisma.ledgerAccount.findUnique({
       where: { code },
@@ -247,9 +447,10 @@ export class LedgerService {
       ...(from ? { gte: from } : {}),
       ...(to ? { lte: to } : {}),
     };
-    const createdAt = Object.keys(dateFilter).length
-      ? { createdAt: dateFilter }
-      : {};
+    const createdAt = {
+      ...(Object.keys(dateFilter).length ? { createdAt: dateFilter } : {}),
+      ...(companyId !== undefined ? { companyId } : {}),
+    };
 
     const [debitSum, creditSum] = await Promise.all([
       this.prisma.journalEntry.aggregate({
@@ -267,7 +468,7 @@ export class LedgerService {
   }
 
   /** Every account with its signed balance — the trial balance (spec #26's finance dashboard, and a sanity check that Assets = Liabilities + Equity + (Revenue - Expenses)). */
-  async trialBalance(asOf?: Date) {
+  async trialBalance(asOf?: Date, companyId?: string) {
     const accounts = await this.prisma.ledgerAccount.findMany({
       where: { isActive: true },
       orderBy: { code: 'asc' },
@@ -277,18 +478,21 @@ export class LedgerService {
         code: account.code,
         name: account.name,
         type: account.type,
-        balance: await this.getAccountBalance(account.code, asOf),
+        balance: await this.getAccountBalance(account.code, asOf, companyId),
       })),
     );
   }
 
-  listEntries(filters: {
-    sourceModule?: string;
-    sourceId?: string;
-    accountCode?: string;
-    from?: Date;
-    to?: Date;
-  }) {
+  listEntries(
+    filters: {
+      sourceModule?: string;
+      sourceId?: string;
+      accountCode?: string;
+      from?: Date;
+      to?: Date;
+    },
+    companyId?: string,
+  ) {
     const dateFilter =
       filters.from || filters.to
         ? {
@@ -302,6 +506,7 @@ export class LedgerService {
       where: {
         sourceModule: filters.sourceModule,
         sourceId: filters.sourceId,
+        ...(companyId !== undefined ? { companyId } : {}),
         ...dateFilter,
       },
       include: { debitAccount: true, creditAccount: true },

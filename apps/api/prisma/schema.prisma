@@ -474,6 +474,9 @@ model Company {
   hajjOpsDrivers Driver[]
   hajjOpsTransports Transport[]
   roomAllocations RoomAllocation[]
+  companyInvestments CompanyInvestment[]
+  journalEntries JournalEntry[]
+  dailyClosings DailyClosing[]
 
   @@map("companies")
 }
@@ -3959,6 +3962,10 @@ enum JournalEntryStatus {
 model JournalEntry {
   id String @id @default(cuid())
 
+  // Phase 22 - the books of one company. The chart of accounts is a shared template; entries are not.
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
   debitAccountId  String
   debitAccount    LedgerAccount @relation("DebitAccount", fields: [debitAccountId], references: [id], onDelete: Restrict)
   creditAccountId String
@@ -4000,6 +4007,7 @@ model JournalEntry {
   @@index([reference])
   @@index([status])
   @@index([createdAt])
+  @@index([companyId, createdAt])
   @@map("journal_entries")
 }
 
@@ -4071,6 +4079,10 @@ enum InvestmentType {
 model CompanyInvestment {
   id String @id @default(cuid())
 
+  // Phase 22 - the books of one company. The chart of accounts is a shared template; entries are not.
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
   type        InvestmentType
   amount      Int
   currency    String
@@ -4085,6 +4097,7 @@ model CompanyInvestment {
   createdAt DateTime @default(now())
 
   @@index([type])
+  @@index([companyId])
   @@map("company_investments")
 }
 
@@ -4423,7 +4436,11 @@ enum DailyClosingStatus {
 model DailyClosing {
   id String @id @default(cuid())
 
-  businessDate DateTime @unique
+  // Phase 22 - a day is closed per company; two companies can both close the same date.
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  businessDate DateTime
   branchId     String?
   branch       Branch?  @relation(fields: [branchId], references: [id], onDelete: SetNull)
 
@@ -4435,6 +4452,7 @@ model DailyClosing {
 
   status DailyClosingStatus @default(CLOSED)
 
+  @@unique([companyId, businessDate])
   @@index([businessDate])
   @@map("daily_closings")
 }
