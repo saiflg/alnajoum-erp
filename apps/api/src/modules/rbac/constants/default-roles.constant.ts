@@ -48,6 +48,14 @@ export const DEFAULT_ROLE_DEFINITIONS: Array<{
     description: 'Manages a single company: its branches, staff, and roles.',
     isSystem: true,
     permissions: [
+      // Phase 23 — AI agent layer
+      PERMISSIONS.AI.COPILOT_USE,
+      PERMISSIONS.AI.OPERATIONS_VIEW,
+      PERMISSIONS.AI.EXECUTIVE_VIEW,
+      PERMISSIONS.AI.APPROVE,
+      PERMISSIONS.AI.CONVERSATION_MANAGE,
+      PERMISSIONS.AI.FEEDBACK,
+      PERMISSIONS.AI.ADMIN,
       PERMISSIONS.COMPANY.READ,
       PERMISSIONS.COMPANY.UPDATE,
       PERMISSIONS.BRANCH.CREATE,
@@ -263,6 +271,12 @@ export const DEFAULT_ROLE_DEFINITIONS: Array<{
     description: 'Manages operations and staff within an assigned branch.',
     isSystem: true,
     permissions: [
+      // Phase 23 — AI agent layer
+      PERMISSIONS.AI.COPILOT_USE,
+      PERMISSIONS.AI.OPERATIONS_VIEW,
+      PERMISSIONS.AI.APPROVE,
+      PERMISSIONS.AI.CONVERSATION_MANAGE,
+      PERMISSIONS.AI.FEEDBACK,
       // Emergency, time-boxed, approved-by-Super-Admin access to another role.
       PERMISSIONS.SECURITY.BREAK_GLASS_REQUEST,
       PERMISSIONS.BRANCH.READ,
@@ -366,6 +380,11 @@ export const DEFAULT_ROLE_DEFINITIONS: Array<{
       'Manages invoicing and payment collection; read access to company/branch data for finance reporting.',
     isSystem: true,
     permissions: [
+      // Phase 23 — AI agent layer
+      PERMISSIONS.AI.COPILOT_USE,
+      PERMISSIONS.AI.OPERATIONS_VIEW,
+      PERMISSIONS.AI.APPROVE,
+      PERMISSIONS.AI.FEEDBACK,
       // Emergency, time-boxed, approved-by-Super-Admin access to another role.
       PERMISSIONS.SECURITY.BREAK_GLASS_REQUEST,
       PERMISSIONS.REVENUE.PRICING_VIEW,
@@ -442,6 +461,10 @@ export const DEFAULT_ROLE_DEFINITIONS: Array<{
     description: 'Baseline internal staff access.',
     isSystem: true,
     permissions: [
+      // Phase 23 — AI agent layer
+      PERMISSIONS.AI.COPILOT_USE,
+      PERMISSIONS.AI.CONVERSATION_MANAGE,
+      PERMISSIONS.AI.FEEDBACK,
       // Emergency, time-boxed, approved-by-Super-Admin access to another role.
       PERMISSIONS.SECURITY.BREAK_GLASS_REQUEST,
       PERMISSIONS.STAFF.READ,

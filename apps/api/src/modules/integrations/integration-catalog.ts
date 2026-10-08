@@ -295,6 +295,24 @@ export const INTEGRATION_CATALOG: Record<
           placeholder: '0.2',
         },
         {
+          key: 'region',
+          label: 'Provider region / data location (state it; do not assume)',
+          secret: false,
+          placeholder: 'e.g. EU, US, self-hosted in Nigeria',
+        },
+        {
+          key: 'dataSharing',
+          label: 'What is shared with this provider (state it; do not assume)',
+          secret: false,
+          placeholder: 'e.g. prompts only, masked; no training',
+        },
+        {
+          key: 'retention',
+          label: 'Provider retention of prompts/outputs (state it; do not assume)',
+          secret: false,
+          placeholder: 'e.g. zero retention, 30 days',
+        },
+        {
           key: 'dailyRequestLimit',
           label: 'Daily Request Limit (per company)',
           secret: false,

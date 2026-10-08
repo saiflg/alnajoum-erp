@@ -115,6 +115,11 @@ import { VisaService } from './visa.service';
     VisaOpsAutomationService,
     VisaTimelineService,
   ],
-  exports: [VisaService, VisaDocumentsService, VisaIncentivesService],
+  exports: [
+    VisaService,
+    VisaDocumentsService,
+    VisaIncentivesService,
+    VisaChecklistService,
+  ],
 })
 export class VisaModule {}

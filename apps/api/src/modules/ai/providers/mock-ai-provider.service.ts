@@ -1,4 +1,6 @@
 import { Injectable } from '@nestjs/common';
+import { planNext, PlannerRequest } from '../../agents/runtime/mock-agent-planner';
+import { MockAiFaultService } from './mock-ai-faults.service';
 import {
   AiCompletionRequest,
   AiCompletionResult,
@@ -24,7 +26,13 @@ import {
  */
 @Injectable()
 export class MockAiProviderService implements AiProviderPort {
+  constructor(private readonly faults: MockAiFaultService) {}
+
   async complete(request: AiCompletionRequest): Promise<AiCompletionResult> {
+    // Phase 23: the agent runtime speaks a JSON protocol; the mock answers it with a deterministic planner.
+    if (request.system.includes('ALNAJOUM_AGENT_PROTOCOL')) {
+      return this.completeAgentTurn(request);
+    }
     const text = request.jsonMode
       ? this.classifyAnalyticsQuestion(request.prompt)
       : this.draftReply(request.prompt);
@@ -34,6 +42,44 @@ export class MockAiProviderService implements AiProviderPort {
       provider: 'mock',
       model: 'mock-keyword-matcher-v1',
     });
+  }
+
+  private async completeAgentTurn(request: AiCompletionRequest): Promise<AiCompletionResult> {
+    let payload: PlannerRequest & { agent: string };
+    try {
+      payload = JSON.parse(request.prompt) as PlannerRequest & { agent: string };
+    } catch {
+      throw new Error('mock provider: the agent protocol payload was not JSON');
+    }
+    const fault = this.faults.take(payload.agent);
+    if (fault) {
+      if (fault.mode === 'FAIL' || fault.mode === 'OUTAGE')
+        throw new Error('mock provider: simulated provider outage');
+      if (fault.mode === 'TIMEOUT')
+        await new Promise((r) => setTimeout(r, fault.delayMs ?? 30_000));
+      if (fault.mode === 'MALFORMED')
+        return this.usage(request, '{"action": "tool", "tool": ', payload);
+      if (fault.mode === 'EMPTY') return this.usage(request, '', payload);
+    }
+    // The objective arrives wrapped as untrusted data; the planner reads only what is inside the envelope.
+    const objective = String(payload.objective ?? '')
+      .replace(/^<untrusted[^>]*>\n?/, '')
+      .replace(/\n?<\/untrusted>$/, '');
+    const action = planNext({ ...payload, objective });
+    return this.usage(request, JSON.stringify(action), payload);
+  }
+
+  /** Simulated token accounting: about one token per four characters, so budgets can be exercised. */
+  private usage(request: AiCompletionRequest, text: string, _p: unknown): AiCompletionResult {
+    return {
+      text,
+      provider: 'mock',
+      model: 'mock-agent-planner-v1',
+      usage: {
+        promptTokens: Math.ceil((request.system.length + request.prompt.length) / 4),
+        completionTokens: Math.ceil(text.length / 4),
+      },
+    };
   }
 
   /** Deliberately format-agnostic: takes the last non-empty line of

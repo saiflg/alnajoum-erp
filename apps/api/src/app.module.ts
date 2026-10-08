@@ -40,6 +40,7 @@ import { HajjOpsModule } from './modules/hajj-ops/hajj-ops.module';
 import { GovernanceModule } from './modules/governance/governance.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { DataModule } from './modules/data/data.module';
+import { AgentsModule } from './modules/agents/agents.module';
 import { AiModule } from './modules/ai/ai.module';
 import { WhatsAppModule } from './modules/whatsapp/whatsapp.module';
 import { SuppliersModule } from './modules/suppliers/suppliers.module';
@@ -104,6 +105,7 @@ import { RevenueModule } from './modules/revenue/revenue.module';
     DashboardModule,
     DataModule,
     AiModule,
+    AgentsModule,
     WhatsAppModule,
     SuppliersModule,
     MobileModule,

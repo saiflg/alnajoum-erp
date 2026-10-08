@@ -1,10 +1,11 @@
+import { MockAiFaultService } from './mock-ai-faults.service';
 import { MockAiProviderService } from './mock-ai-provider.service';
 
 describe('MockAiProviderService', () => {
   let service: MockAiProviderService;
 
   beforeEach(() => {
-    service = new MockAiProviderService();
+    service = new MockAiProviderService(new MockAiFaultService());
   });
 
   interface Selection {

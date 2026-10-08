@@ -23,6 +23,6 @@ import { StepUpService } from './step-up.service';
     BreakGlassService,
     StepUpService,
   ],
-  exports: [BreakGlassService, RetentionService],
+  exports: [BreakGlassService, RetentionService, SecurityOverviewService],
 })
 export class SecurityModule {}

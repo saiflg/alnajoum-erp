@@ -305,6 +305,14 @@ export const PERMISSIONS = {
     // Reviewing the usage log (who asked what, which provider answered) —
     // a narrower, more sensitive capability than running queries oneself.
     USAGE_VIEW: 'ai:usage_view',
+    // Phase 23 — the agent layer. Using an agent never grants more than the user's own permissions.
+    COPILOT_USE: 'ai:copilot_use', // talk to the staff copilot and specialist agents
+    OPERATIONS_VIEW: 'ai:operations_view', // the control tower and exception queue
+    EXECUTIVE_VIEW: 'ai:executive_view', // the executive assistant and daily briefing
+    APPROVE: 'ai:approve', // see and decide AI action approvals (also needs the action's own permission)
+    CONVERSATION_MANAGE: 'ai:conversation_manage', // take over / pause / resume customer AI conversations
+    FEEDBACK: 'ai:feedback', // mark answers correct / incorrect / unsafe
+    ADMIN: 'ai:admin', // agents, versions, controls, budgets, knowledge, executions, safety, governance
   },
   WHATSAPP: {
     READ: 'whatsapp:read',

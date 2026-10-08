@@ -6,6 +6,7 @@ import { AiAnalyticsService } from './ai-analytics.service';
 import { AiUsageAdminController } from './ai-usage-admin.controller';
 import { AiUsageService } from './ai-usage.service';
 import { AiProviderRouter } from './providers/ai-provider.router';
+import { MockAiFaultService } from './providers/mock-ai-faults.service';
 import { MockAiProviderService } from './providers/mock-ai-provider.service';
 import { OpenAiCompatibleAiProviderService } from './providers/openai-compatible-ai-provider.service';
 
@@ -20,8 +21,9 @@ import { OpenAiCompatibleAiProviderService } from './providers/openai-compatible
     AiUsageService,
     AiProviderRouter,
     MockAiProviderService,
+    MockAiFaultService,
     OpenAiCompatibleAiProviderService,
   ],
-  exports: [AiAnalyticsService, AiUsageService, AiProviderRouter],
+  exports: [AiAnalyticsService, AiUsageService, AiProviderRouter, MockAiProviderService, MockAiFaultService],
 })
 export class AiModule {}

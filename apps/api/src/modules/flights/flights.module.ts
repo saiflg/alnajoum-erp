@@ -106,6 +106,6 @@ import { TravelportFlightProviderService } from './providers/travelport-flight-p
     FlightProviderRoutingService,
     FlightServiceFeesService,
   ],
-  exports: [FlightsService],
+  exports: [FlightsService, FlightRefundsService, FlightTicketingService],
 })
 export class FlightsModule {}

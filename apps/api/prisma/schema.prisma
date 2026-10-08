@@ -170,6 +170,7 @@ model Customer {
   visaIncentivesEarned     StaffIncentive[]
   hotelBookingGuests       HotelBookingGuest[]
   travelPackages           TravelPackage[]
+  aiConversations          AiConversation[]
 
   // Phase 7 — CRM, support, communication.
   convertedFromLeads Lead[]
@@ -486,6 +487,17 @@ model Company {
   accessReviews       AccessReview[]
   dataSubjectRequests DataSubjectRequest[]
   breakGlassGrants    BreakGlassGrant[]
+
+  // Phase 23 — AI agentic operations layer
+  aiExecutions       AiExecution[]
+  aiApprovals        AiApproval[]
+  aiMemories         AiMemory[]
+  aiKnowledgeSources AiKnowledgeSource[]
+  aiFeedback         AiFeedback[]
+  aiConversations    AiConversation[]
+  aiRecommendations  AiRecommendation[]
+  aiSafetyEvents     AiSafetyEvent[]
+  aiBriefings        AiBriefing[]
 
   @@map("companies")
 }
@@ -6523,4 +6535,564 @@ model BreakGlassGrant {
   @@index([status, expiresAt])
   @@index([identityId])
   @@map("break_glass_grants")
+}
+
+// ===========================================================================
+// Phase 23 — controlled AI agentic operations layer.
+//
+// Agents are PLATFORM definitions (code-defined catalogue seeded as v1); a tenant controls them through
+// AiControl (disable, autonomy cap, force approval), AiBudget, knowledge and policies — it cannot rewrite an
+// agent's prompt or tool list. Every run, step, approval, memory and message is tenant-scoped.
+// Existing entities are reused: ApprovalRequest (human approval), WorkflowEvent bus, AuditLog,
+// SecurityIncident, AiUsageLog (the Phase 13 analytics assistant) are NOT duplicated.
+// ===========================================================================
+
+enum AiAgentStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum AiAgentVersionStatus {
+  DRAFT
+  PUBLISHED
+  RETIRED
+}
+
+enum AiExecutionStatus {
+  RUNNING
+  WAITING_APPROVAL
+  WAITING_CUSTOMER
+  COMPLETED
+  FAILED
+  ESCALATED
+  CANCELLED
+  HANDED_OFF
+  REJECTED
+}
+
+enum AiStepKind {
+  MODEL
+  TOOL
+  APPROVAL
+  DELEGATION
+  GUARD
+  ESCALATION
+}
+
+enum AiStepStatus {
+  OK
+  ERROR
+  DENIED
+  PENDING_APPROVAL
+  SIMULATED
+  SKIPPED
+}
+
+enum AiRiskLevel {
+  READ_ONLY
+  LOW_RISK_WRITE
+  MEDIUM_RISK
+  HIGH_RISK
+}
+
+enum AiApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+  EXECUTED
+  FAILED
+  EXPIRED
+}
+
+enum AiMemoryType {
+  SHORT_TERM
+  OPERATIONAL
+  PREFERENCE
+  KNOWLEDGE
+  HISTORICAL
+}
+
+enum AiFeedbackRating {
+  CORRECT
+  INCORRECT
+  PARTIAL
+  UNSAFE
+  NEEDS_REVIEW
+}
+
+enum AiControlKind {
+  ALL_DISABLED
+  AGENT_DISABLED
+  TOOL_DISABLED
+  AUTONOMOUS_DISABLED
+  FORCE_APPROVAL
+  AUTONOMY_CAP
+  FEATURE_FLAG
+  COMM_POLICY
+}
+
+enum AiBudgetPeriod {
+  DAILY
+  MONTHLY
+}
+
+enum AiConversationStatus {
+  AI_ACTIVE
+  PAUSED
+  HUMAN_TAKEN
+  CLOSED
+}
+
+enum AiMessageRole {
+  CUSTOMER
+  AI
+  STAFF
+  SYSTEM
+}
+
+enum AiRecommendationStatus {
+  OPEN
+  ACKNOWLEDGED
+  DONE
+  DISMISSED
+}
+
+enum AiSafetyEventKind {
+  PROMPT_INJECTION
+  UNAUTHORIZED_ACTION
+  APPROVAL_BYPASS
+  SECRET_REQUEST
+  TENANT_ESCAPE
+  POLICY_VIOLATION
+  LOOP_DETECTED
+  BUDGET_EXCEEDED
+  UNVERIFIED_NUMBER
+  KILL_SWITCH
+}
+
+model AiAgent {
+  id          String        @id @default(cuid())
+  key         String        @unique
+  name        String
+  description String
+  purpose     String
+  /// CUSTOMER | STAFF | OPERATIONS | EXECUTIVE | SYSTEM — who may talk to it.
+  audience    String
+  status      AiAgentStatus @default(ACTIVE)
+
+  currentVersionId String?         @unique
+  currentVersion   AiAgentVersion? @relation("AgentCurrentVersion", fields: [currentVersionId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  versions   AiAgentVersion[] @relation("AgentVersions")
+  executions AiExecution[]
+  approvals  AiApproval[]
+
+  @@map("ai_agents")
+}
+
+model AiAgentVersion {
+  id      String  @id @default(cuid())
+  agentId String
+  agent   AiAgent @relation("AgentVersions", fields: [agentId], references: [id], onDelete: Cascade)
+
+  version       Int
+  /// Identifier of the system-instruction text, so every execution is traceable to the exact prompt.
+  promptVersion String
+  systemPrompt  String               @db.Text
+  /// tools, allowedActions, prohibitedActions, autonomyLevel, provider/model/fallback, temperature, limits,
+  /// budget, approvalRequirements, escalationPolicy, audit.
+  config        Json
+  status        AiAgentVersionStatus @default(DRAFT)
+  changeNote    String?
+
+  createdByIdentityId String?
+  publishedAt         DateTime?
+  createdAt           DateTime  @default(now())
+
+  currentFor AiAgent?      @relation("AgentCurrentVersion")
+  executions AiExecution[]
+
+  @@unique([agentId, version])
+  @@map("ai_agent_versions")
+}
+
+model AiExecution {
+  id            String @id @default(cuid())
+  correlationId String
+
+  agentId        String
+  agent          AiAgent        @relation(fields: [agentId], references: [id], onDelete: Restrict)
+  agentVersionId String
+  agentVersion   AiAgentVersion @relation(fields: [agentVersionId], references: [id], onDelete: Restrict)
+  promptVersion  String
+
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  branchId  String?
+
+  initiatorIdentityId String?
+  customerId          String?
+  conversationId      String?
+  conversation        AiConversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+
+  parentExecutionId String?
+  parent            AiExecution?  @relation("ExecutionChain", fields: [parentExecutionId], references: [id], onDelete: SetNull)
+  children          AiExecution[] @relation("ExecutionChain")
+  depth             Int           @default(0)
+
+  /// PORTAL | STAFF | WHATSAPP | SYSTEM | WORKFLOW | EVENT | SIMULATION
+  channel   String
+  language  String  @default("en")
+  objective String  @db.Text
+  dryRun    Boolean @default(false)
+
+  status AiExecutionStatus @default(RUNNING)
+
+  provider String?
+  model    String?
+
+  stepCount        Int  @default(0)
+  toolCallCount    Int  @default(0)
+  promptTokens     Int  @default(0)
+  completionTokens Int  @default(0)
+  /// Estimated cost in millionths of a US dollar.
+  costMicros       Int  @default(0)
+  latencyMs        Int?
+
+  /// HIGH | MEDIUM | LOW | UNKNOWN
+  confidence String?
+  result     Json?
+  error      String?
+
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+
+  steps     AiExecutionStep[]
+  approvals AiApproval[]
+  feedback  AiFeedback[]
+
+  @@index([companyId, startedAt])
+  @@index([agentId, startedAt])
+  @@index([correlationId])
+  @@index([status])
+  @@index([conversationId])
+  @@map("ai_executions")
+}
+
+model AiExecutionStep {
+  id          String      @id @default(cuid())
+  executionId String
+  execution   AiExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  seq         Int
+
+  kind      AiStepKind
+  toolKey   String?
+  risk      AiRiskLevel?
+  status    AiStepStatus
+  /// Masked/redacted before storage; never holds secrets.
+  input     Json?
+  output    Json?
+  error     String?
+  latencyMs Int?
+
+  createdAt DateTime @default(now())
+
+  @@unique([executionId, seq])
+  @@map("ai_execution_steps")
+}
+
+/// One row per state-changing agent action: a repeated model answer finds this row and returns its result
+/// instead of acting again.
+model AiActionRecord {
+  id             String   @id @default(cuid())
+  companyId      String
+  idempotencyKey String
+  toolKey        String
+  executionId    String?
+  result         Json?
+  createdAt      DateTime @default(now())
+
+  @@unique([companyId, idempotencyKey])
+  @@map("ai_action_records")
+}
+
+model AiApproval {
+  id          String      @id @default(cuid())
+  executionId String
+  execution   AiExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  agentId     String
+  agent       AiAgent     @relation(fields: [agentId], references: [id], onDelete: Restrict)
+
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  branchId  String?
+
+  toolKey         String
+  risk            AiRiskLevel
+  resourceType    String?
+  resourceId      String?
+  reason          String      @db.Text
+  params          Json
+  editedParams    Json?
+  /// Structured action preview: what will happen, who is affected, financial/provider impact, risks.
+  preview         Json
+  financialImpact Json?
+  customerImpact  String?
+  requiredRole    String?
+
+  status AiApprovalStatus @default(PENDING)
+
+  /// The row in the existing approval engine (thresholds, self-approval prevention, multiple approvers).
+  approvalRequestId String? @unique
+
+  initiatorIdentityId String?
+  decidedByIdentityId String?
+  decidedAt           DateTime?
+  decisionNote        String?
+  executedAt          DateTime?
+  result              Json?
+
+  expiresAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([companyId, status])
+  @@index([executionId])
+  @@map("ai_approvals")
+}
+
+model AiMemory {
+  id        String       @id @default(cuid())
+  companyId String
+  company   Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  type      AiMemoryType
+
+  /// CUSTOMER | BOOKING | CONVERSATION | COMPANY
+  subjectType String
+  subjectId   String
+  /// Only keys on the allow-list for the memory type are accepted (see MemoryService).
+  key         String
+  value       Json
+  /// The agent (or "human") that wrote it.
+  source      String
+  confidence  String?
+
+  expiresAt DateTime?
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([companyId, type, subjectType, subjectId, key])
+  @@index([companyId, subjectType, subjectId])
+  @@map("ai_memories")
+}
+
+model AiKnowledgeSource {
+  id        String   @id @default(cuid())
+  /// null = platform-wide; otherwise this company's own.
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  branchId  String?
+
+  /// COMPANY_POLICY | TRAVEL_POLICY | VISA | HAJJ | UMRAH | PAYMENT | REFUND | SUPPORT | SUPPLIER | SOP
+  category    String
+  title       String
+  content     String @db.Text
+  version     Int    @default(1)
+  /// What a citation shows, e.g. "Refund policy v3".
+  sourceLabel String
+
+  effectiveFrom DateTime
+  effectiveTo   DateTime?
+  status        String    @default("PUBLISHED") // DRAFT | PUBLISHED | RETIRED
+
+  createdByIdentityId String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([companyId, category, status])
+  @@map("ai_knowledge_sources")
+}
+
+model AiFeedback {
+  id          String       @id @default(cuid())
+  companyId   String?
+  company     Company?     @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  executionId String?
+  execution   AiExecution? @relation(fields: [executionId], references: [id], onDelete: SetNull)
+  messageId   String?
+
+  rating            AiFeedbackRating
+  note              String?          @db.Text
+  ratedByIdentityId String?
+
+  createdAt DateTime @default(now())
+
+  @@index([companyId, createdAt])
+  @@index([executionId])
+  @@map("ai_feedback")
+}
+
+/// Kill switch, per-agent/tool switches, autonomy caps, feature flags and communication policy. `scopeKey` is
+/// "GLOBAL" or a company id; a company control can only make things stricter than the global one.
+model AiControl {
+  id              String        @id @default(cuid())
+  scopeKey        String
+  kind            AiControlKind
+  /// Agent key, tool key or feature key; empty when the control applies to everything.
+  targetKey       String        @default("")
+  value           Json?
+  reason          String?
+  setByIdentityId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([scopeKey, kind, targetKey])
+  @@map("ai_controls")
+}
+
+model AiBudget {
+  id               String         @id @default(cuid())
+  scopeKey         String
+  /// Empty = all agents.
+  agentKey         String         @default("")
+  period           AiBudgetPeriod
+  maxTokens        Int?
+  maxRequests      Int?
+  maxCostMicros    Int?
+  enabled          Boolean        @default(true)
+  /// Set when an 80% alert was sent for the current period, so it is sent once.
+  alertedPeriodKey String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([scopeKey, agentKey, period])
+  @@map("ai_budgets")
+}
+
+model AiConversation {
+  id         String    @id @default(cuid())
+  companyId  String
+  company    Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  identityId String?
+
+  /// PORTAL | WHATSAPP | STAFF
+  channel  String
+  language String               @default("en")
+  status   AiConversationStatus @default(AI_ACTIVE)
+
+  assignedStaffId String?
+  humanTakenAt    DateTime?
+  pausedAt        DateTime?
+  closedAt        DateTime?
+
+  startedAt     DateTime @default(now())
+  lastMessageAt DateTime @default(now())
+
+  messages   AiConversationMessage[]
+  executions AiExecution[]
+
+  @@index([companyId, status, lastMessageAt])
+  @@index([customerId])
+  @@map("ai_conversations")
+}
+
+model AiConversationMessage {
+  id             String         @id @default(cuid())
+  conversationId String
+  conversation   AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  role        AiMessageRole
+  content     String        @db.Text
+  language    String?
+  executionId String?
+  confidence  String?
+  /// What the answer was based on: [{ label, kind }].
+  sources     Json?
+  flagged     Boolean       @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@index([conversationId, createdAt])
+  @@map("ai_conversation_messages")
+}
+
+/// Recommendations and the exception queue. `dedupeKey` makes every daily scan idempotent: the same finding is
+/// one row (and at most one task) no matter how many times it is detected.
+model AiRecommendation {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  branchId  String?
+
+  agentKey  String
+  kind      String
+  dedupeKey String
+
+  title           String
+  reason          String @db.Text
+  /// The facts it is based on, with their source.
+  evidence        Json
+  /// HIGH | MEDIUM | LOW | UNKNOWN
+  confidence      String
+  suggestedAction Json?
+
+  priorityScore Int
+  /// CRITICAL | HIGH | MEDIUM | LOW
+  severity      String
+  status        AiRecommendationStatus @default(OPEN)
+
+  subjectType String?
+  subjectId   String?
+  dueAt       DateTime?
+  taskId      String?
+
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  resolvedAt DateTime?
+
+  @@unique([companyId, dedupeKey])
+  @@index([companyId, status, priorityScore])
+  @@map("ai_recommendations")
+}
+
+model AiSafetyEvent {
+  id          String   @id @default(cuid())
+  companyId   String?
+  company     Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  executionId String?
+  agentKey    String?
+  identityId  String?
+
+  kind               AiSafetyEventKind
+  /// LOW | MEDIUM | HIGH | CRITICAL
+  severity           String
+  evidence           Json
+  /// Set when it was escalated into the Phase 22 security incident register.
+  securityIncidentId String?
+
+  createdAt DateTime @default(now())
+
+  @@index([companyId, createdAt])
+  @@index([kind, createdAt])
+  @@map("ai_safety_events")
+}
+
+model AiBriefing {
+  id           String   @id @default(cuid())
+  companyId    String
+  company      Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  businessDate DateTime @db.Date
+  content      Json
+  createdAt    DateTime @default(now())
+
+  @@unique([companyId, businessDate])
+  @@map("ai_briefings")
 }

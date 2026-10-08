@@ -158,7 +158,7 @@ export class AiAnalyticsService {
     }
   }
 
-  private async execute(
+  async execute(
     queryName: string,
     params: Record<string, number>,
     tenantCompanyId: string | undefined,
