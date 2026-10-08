@@ -590,6 +590,84 @@ describe('BreakGlassService', () => {
     );
   });
 
+  describe('revoke (who may end a grant)', () => {
+    const grant = (status: string) => ({
+      id: 'g1',
+      identityId: 'holder',
+      roleId: 'role-fin',
+      roleName: 'FINANCE_OFFICER',
+      companyId: 'co-1',
+      status,
+    });
+    const svc = (prisma: unknown) =>
+      new BreakGlassService(prisma as never, audit() as never);
+
+    it("another user (e.g. another company's staff) cannot end someone else's grant, and is told it does not exist", async () => {
+      const prisma = fakePrisma({
+        breakGlassGrant: { findUnique: grant('ACTIVE') },
+      });
+      await expect(
+        svc(prisma).revoke('g1', { identityId: 'stranger' }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(prisma.breakGlassGrant.updateMany).not.toHaveBeenCalled();
+      expect(prisma.identityRole.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it('the holder can give an active grant back (role removed)', async () => {
+      const prisma = fakePrisma({
+        breakGlassGrant: {
+          findUnique: grant('ACTIVE'),
+          findUniqueOrThrow: grant('ACTIVE'),
+          updateMany: { count: 1 },
+        },
+      });
+      await svc(prisma).revoke('g1', { identityId: 'holder' });
+      expect(prisma.identityRole.deleteMany).toHaveBeenCalledWith({
+        where: { identityId: 'holder', roleId: 'role-fin' },
+      });
+    });
+
+    it('a Super Admin can end any grant', async () => {
+      const prisma = fakePrisma({
+        breakGlassGrant: {
+          findUnique: grant('ACTIVE'),
+          findUniqueOrThrow: grant('ACTIVE'),
+          updateMany: { count: 1 },
+        },
+      });
+      await svc(prisma).revoke('g1', {
+        identityId: 'root',
+        isSuperAdmin: true,
+      });
+      expect(prisma.identityRole.deleteMany).toHaveBeenCalled();
+    });
+
+    it('the holder can withdraw a request nobody has decided yet (no role is touched)', async () => {
+      const prisma = fakePrisma({
+        breakGlassGrant: {
+          findUnique: grant('REQUESTED'),
+          findUniqueOrThrow: grant('REVOKED'),
+          updateMany: { count: 1 },
+        },
+      });
+      await svc(prisma).revoke('g1', { identityId: 'holder' });
+      expect(prisma.breakGlassGrant.updateMany).toHaveBeenCalledWith({
+        where: { id: 'g1', status: 'REQUESTED' },
+        data: { status: 'REVOKED', endedAt: expect.any(Date) },
+      });
+      expect(prisma.identityRole.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it('an already finished grant cannot be revoked again', async () => {
+      const prisma = fakePrisma({
+        breakGlassGrant: { findUnique: grant('EXPIRED') },
+      });
+      await expect(
+        svc(prisma).revoke('g1', { identityId: 'holder' }),
+      ).rejects.toBeInstanceOf(ConflictException);
+    });
+  });
+
   it('does not remove a role if the grant was already ended by someone else', async () => {
     const due = {
       id: 'g1',

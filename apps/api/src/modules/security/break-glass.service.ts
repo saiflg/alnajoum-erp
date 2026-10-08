@@ -166,12 +166,41 @@ export class BreakGlassService {
     });
   }
 
-  /** Ends an active grant now (an approver, or the holder giving it back). */
-  async revoke(grantId: string, actor: { identityId: string }) {
+  /**
+   * Ends a grant now: the holder giving access back (or withdrawing a request that has not been decided), or a
+   * Super Admin. Anyone else is told the grant does not exist, so one company cannot probe or cancel another's.
+   */
+  async revoke(
+    grantId: string,
+    actor: { identityId: string; isSuperAdmin?: boolean },
+  ) {
     const grant = await this.prisma.breakGlassGrant.findUnique({
       where: { id: grantId },
     });
-    if (!grant) throw new NotFoundException('Grant not found');
+    if (
+      !grant ||
+      (grant.identityId !== actor.identityId && !actor.isSuperAdmin)
+    ) {
+      throw new NotFoundException('Grant not found');
+    }
+    if (grant.status === 'REQUESTED') {
+      const withdrawn = await this.prisma.breakGlassGrant.updateMany({
+        where: { id: grantId, status: 'REQUESTED' },
+        data: { status: 'REVOKED', endedAt: new Date() },
+      });
+      if (withdrawn.count === 0)
+        throw new ConflictException('This request has already been decided');
+      await this.audit.record({
+        identityId: actor.identityId,
+        companyId: grant.companyId,
+        action: 'security.break_glass_withdrawn',
+        entityType: 'BreakGlassGrant',
+        entityId: grantId,
+      });
+      return this.prisma.breakGlassGrant.findUniqueOrThrow({
+        where: { id: grantId },
+      });
+    }
     if (grant.status !== 'ACTIVE')
       throw new ConflictException('This grant is not active');
     await this.end(grant.id, 'REVOKED', actor.identityId);

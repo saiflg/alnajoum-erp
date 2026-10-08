@@ -281,6 +281,9 @@ export class SecurityController {
   @Post('break-glass/:id/revoke')
   @RequirePermissions(PERMISSIONS.SECURITY.BREAK_GLASS_REQUEST)
   revokeBreakGlass(@CurrentUser() user: AuthContext, @Param('id') id: string) {
-    return this.breakGlass.revoke(id, { identityId: user.sub });
+    return this.breakGlass.revoke(id, {
+      identityId: user.sub,
+      isSuperAdmin: user.roles.includes('SUPER_ADMIN'),
+    });
   }
 }

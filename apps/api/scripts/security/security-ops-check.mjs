@@ -189,8 +189,14 @@ const superAdmin = await login('admin@alnajoum.travel', 'Alnajoum@2026'); // dev
 
   const second = await raw('POST', '/security/break-glass', { token: finance, body: { roleId: bm.id, reason: 'Second request, to be revoked early', minutes: 20 } });
   await raw('POST', `/security/break-glass/${second.data.id}/approve`, { token: superAdmin, step: true });
+  const stranger = await raw('POST', `/security/break-glass/${second.data.id}/revoke`, { token: otherAdmin });
+  check("another company's staff cannot end someone else's break-glass grant (404)", stranger.status === 404 && (await rolesOf(finance)).includes('BRANCH_MANAGER'), String(stranger.status));
   const rev = await raw('POST', `/security/break-glass/${second.data.id}/revoke`, { token: finance });
   check('the holder can give it back early', rev.status === 201 && !(await rolesOf(finance)).includes('BRANCH_MANAGER'), String(rev.status));
+
+  const pending = await raw('POST', '/security/break-glass', { token: finance, body: { roleId: bm.id, reason: 'Request that will be withdrawn', minutes: 10 } });
+  const withdrawn = await raw('POST', `/security/break-glass/${pending.data.id}/revoke`, { token: finance });
+  check('the holder can withdraw a request nobody has decided yet', withdrawn.status === 201 && withdrawn.data?.status === 'REVOKED', String(withdrawn.status));
 
   const sa = roles.find((r) => r.name === 'SUPER_ADMIN');
   const forbidden = await raw('POST', '/security/break-glass', { token: finance, body: { roleId: sa.id, reason: 'Trying for Super Admin', minutes: 20 } });
