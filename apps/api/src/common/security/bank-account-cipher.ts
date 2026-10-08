@@ -16,6 +16,11 @@ export function sealBankAccount(
     : FieldCipher.default().encrypt(accountNumber, context(staffId));
 }
 
+/** Re-encrypts under the current key (or encrypts, if it is still legacy plaintext). */
+export function rotateBankAccount(staffId: string, stored: string): string {
+  return FieldCipher.default().rotate(stored, context(staffId));
+}
+
 export function openBankAccount(staffId: string, stored: string): string {
   return FieldCipher.default().decryptIfEncrypted(stored, context(staffId));
 }

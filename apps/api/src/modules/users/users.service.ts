@@ -145,6 +145,9 @@ export class UsersService {
         branchId,
         ...(tenantCompanyId !== undefined && { companyId: tenantCompanyId }),
       },
+      // Payout account numbers are never part of a staff list/detail (only the owner's own payout view and
+      // Finance's verification screen show them).
+      omit: { bankAccountNumber: true },
       include: { identity: { select: { email: true, status: true } } },
       orderBy: { createdAt: 'desc' },
     });
@@ -155,6 +158,7 @@ export class UsersService {
   async findOne(id: string, tenantCompanyId?: string) {
     const staff = await this.prisma.staff.findUnique({
       where: { id },
+      omit: { bankAccountNumber: true },
       include: {
         identity: {
           select: {

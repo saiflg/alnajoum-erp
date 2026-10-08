@@ -48,6 +48,15 @@ export class HajjPackagesService {
     return packages.map(({ internalCost: _internalCost, ...rest }) => rest);
   }
 
+  /** The public detail page: a package that is not PUBLISHED does not exist as far as the public is concerned. */
+  async findOnePublished(id: string) {
+    const pkg = await this.findOne(id, true);
+    if ((pkg as { status?: PackageStatus }).status !== PackageStatus.PUBLISHED) {
+      throw new NotFoundException('Hajj package not found');
+    }
+    return pkg;
+  }
+
   async findOne(id: string, hideCost = false) {
     const pkg = await this.prisma.hajjPackage.findUnique({ where: { id } });
     if (!pkg) {

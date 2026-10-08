@@ -43,17 +43,23 @@ export class TwoFactorService implements OnModuleInit {
    * encrypted once, at startup, so nobody has to re-enrol. */
   async onModuleInit(): Promise<void> {
     try {
-      const rows = await this.prisma.identity.findMany({
-        where: {
-          twoFactorSecret: { not: null },
-          NOT: { twoFactorSecret: { startsWith: 'enc:v1:' } },
-        },
+      // Plaintext rows are encrypted; rows under an older key id are re-encrypted under the current one
+      // (that is how a key rotation completes: add the new key, restart).
+      const cipher = FieldCipher.default();
+      const all = await this.prisma.identity.findMany({
+        where: { twoFactorSecret: { not: null } },
         select: { id: true, twoFactorSecret: true },
       });
+      const rows = all.filter((r) => cipher.needsRotation(r.twoFactorSecret!));
       for (const row of rows) {
         await this.prisma.identity.update({
           where: { id: row.id },
-          data: { twoFactorSecret: this.seal(row.id, row.twoFactorSecret!) },
+          data: {
+            twoFactorSecret: cipher.rotate(
+              row.twoFactorSecret!,
+              secretContext(row.id),
+            ),
+          },
         });
       }
       if (rows.length)

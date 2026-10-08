@@ -69,14 +69,6 @@ export class FinanceReportsController {
     );
   }
 
-  @Get('staff-incentive-statement/:staffId')
-  staffIncentiveStatement(
-    @CurrentUser() user: AuthContext,
-    @Param('staffId') staffId: string,
-  ) {
-    return this.reportsService.staffIncentiveStatement(user, staffId);
-  }
-
   /**
    * Own statement — a staff member viewing their own incentive earnings.
    * The bare @RequirePermissions() (empty array) overrides the class-level
@@ -93,6 +85,14 @@ export class FinanceReportsController {
       throw new ForbiddenException('Only staff have an incentive statement');
     }
     return this.reportsService.staffIncentiveStatement(user, staffId, true);
+  }
+
+  @Get('staff-incentive-statement/:staffId')
+  staffIncentiveStatement(
+    @CurrentUser() user: AuthContext,
+    @Param('staffId') staffId: string,
+  ) {
+    return this.reportsService.staffIncentiveStatement(user, staffId);
   }
 
   @Get('transaction/:sourceType/:sourceId')

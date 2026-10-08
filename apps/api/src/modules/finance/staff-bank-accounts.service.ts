@@ -8,8 +8,9 @@ import {
 } from '@nestjs/common';
 import {
   openBankAccount,
-  sealBankAccount,
+  rotateBankAccount,
 } from '../../common/security/bank-account-cipher';
+import { FieldCipher } from '../../common/security/field-cipher';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 
@@ -33,18 +34,22 @@ export class StaffBankAccountsService implements OnModuleInit {
   /** Phase 22 S-24: account numbers written before encryption existed are sealed once, at startup. */
   async onModuleInit(): Promise<void> {
     try {
-      const rows = await this.prisma.staff.findMany({
-        where: {
-          bankAccountNumber: { not: null },
-          NOT: { bankAccountNumber: { startsWith: 'enc:v1:' } },
-        },
+      // Plaintext rows are encrypted; rows under an older key id are re-encrypted under the current one.
+      const all = await this.prisma.staff.findMany({
+        where: { bankAccountNumber: { not: null } },
         select: { id: true, bankAccountNumber: true },
       });
+      const rows = all.filter((r) =>
+        FieldCipher.default().needsRotation(r.bankAccountNumber!),
+      );
       for (const row of rows) {
         await this.prisma.staff.update({
           where: { id: row.id },
           data: {
-            bankAccountNumber: sealBankAccount(row.id, row.bankAccountNumber!),
+            bankAccountNumber: rotateBankAccount(
+              row.id,
+              row.bankAccountNumber!,
+            ),
           },
         });
       }

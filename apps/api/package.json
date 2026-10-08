@@ -24,7 +24,7 @@
     "prisma:seed": "prisma db seed",
     "prisma:studio": "prisma studio",
     "db:seed:demo": "ts-node -P tsconfig.seed.json prisma/seed-demo.ts",
-    "db:reset:demo": "prisma migrate reset --force --skip-seed && npm run prisma:seed && npm run db:seed:demo"
+    "db:reset:demo": "node scripts/refuse-destructive-reset.cjs && prisma migrate reset --force --skip-seed && npm run prisma:seed && npm run db:seed:demo"
   },
   "prisma": {
     "seed": "ts-node --compiler-options {\"module\":\"commonjs\"} prisma/seed.ts"

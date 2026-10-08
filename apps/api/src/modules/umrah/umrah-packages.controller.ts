@@ -41,7 +41,7 @@ export class UmrahPackagesController {
   @Public()
   @Get(':id')
   findOne(@Param('id') id: string) {
-    return this.packagesService.findOne(id, true);
+    return this.packagesService.findOnePublished(id);
   }
 
   @Roles('SUPER_ADMIN')

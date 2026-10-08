@@ -1,0 +1,6404 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-10-08T14:43:33.042Z",
+    "component": {
+      "type": "application",
+      "name": "alnajoum-erp",
+      "version": "0.1.0"
+    },
+    "tools": [
+      {
+        "name": "scripts/sbom.mjs (pnpm list)"
+      }
+    ]
+  },
+  "components": [
+    {
+      "type": "library",
+      "name": "@babel/code-frame",
+      "version": "7.29.7",
+      "purl": "pkg:npm/%40babel/code-frame@7.29.7",
+      "bom-ref": "pkg:npm/%40babel/code-frame@7.29.7",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@babel/code-frame/-/code-frame-7.29.7.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@babel/compat-data",
+      "version": "7.29.7",
+      "purl": "pkg:npm/%40babel/compat-data@7.29.7",
+      "bom-ref": "pkg:npm/%40babel/compat-data@7.29.7",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@babel/compat-data/-/compat-data-7.29.7.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@babel/core",
+      "version": "7.29.7",
+      "purl": "pkg:npm/%40babel/core@7.29.7",
+      "bom-ref": "pkg:npm/%40babel/core@7.29.7",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@babel/core/-/core-7.29.7.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@babel/generator",
+      "version": "7.29.7",
+      "purl": "pkg:npm/%40babel/generator@7.29.7",
+      "bom-ref": "pkg:npm/%40babel/generator@7.29.7",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@babel/generator/-/generator-7.29.7.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@babel/helper-compilation-targets",
+      "version": "7.29.7",
+      "purl": "pkg:npm/%40babel/helper-compilation-targets@7.29.7",
+      "bom-ref": "pkg:npm/%40babel/helper-compilation-targets@7.29.7",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@babel/helper-compilation-targets/-/helper-compilation-targets-7.29.7.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@babel/helper-globals",
+      "version": "7.29.7",
+      "purl": "pkg:npm/%40babel/helper-globals@7.29.7",
+      "bom-ref": "pkg:npm/%40babel/helper-globals@7.29.7",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@babel/helper-globals/-/helper-globals-7.29.7.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@babel/helper-module-imports",
+      "version": "7.29.7",
+      "purl": "pkg:npm/%40babel/helper-module-imports@7.29.7",
+      "bom-ref": "pkg:npm/%40babel/helper-module-imports@7.29.7",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@babel/helper-module-imports/-/helper-module-imports-7.29.7.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@babel/helper-module-transforms",
+      "version": "7.29.7",
+      "purl": "pkg:npm/%40babel/helper-module-transforms@7.29.7",
+      "bom-ref": "pkg:npm/%40babel/helper-module-transforms@7.29.7",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@babel/helper-module-transforms/-/helper-module-transforms-7.29.7.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@babel/helper-string-parser",
+      "version": "7.29.7",
+      "purl": "pkg:npm/%40babel/helper-string-parser@7.29.7",
+      "bom-ref": "pkg:npm/%40babel/helper-string-parser@7.29.7",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@babel/helper-string-parser/-/helper-string-parser-7.29.7.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@babel/helper-validator-identifier",
+      "version": "7.29.7",
+      "purl": "pkg:npm/%40babel/helper-validator-identifier@7.29.7",
+      "bom-ref": "pkg:npm/%40babel/helper-validator-identifier@7.29.7",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@babel/helper-validator-identifier/-/helper-validator-identifier-7.29.7.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@babel/helper-validator-option",
+      "version": "7.29.7",
+      "purl": "pkg:npm/%40babel/helper-validator-option@7.29.7",
+      "bom-ref": "pkg:npm/%40babel/helper-validator-option@7.29.7",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@babel/helper-validator-option/-/helper-validator-option-7.29.7.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@babel/helpers",
+      "version": "7.29.7",
+      "purl": "pkg:npm/%40babel/helpers@7.29.7",
+      "bom-ref": "pkg:npm/%40babel/helpers@7.29.7",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@babel/helpers/-/helpers-7.29.7.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@babel/parser",
+      "version": "7.29.7",
+      "purl": "pkg:npm/%40babel/parser@7.29.7",
+      "bom-ref": "pkg:npm/%40babel/parser@7.29.7",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@babel/parser/-/parser-7.29.7.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@babel/template",
+      "version": "7.29.7",
+      "purl": "pkg:npm/%40babel/template@7.29.7",
+      "bom-ref": "pkg:npm/%40babel/template@7.29.7",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@babel/template/-/template-7.29.7.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@babel/traverse",
+      "version": "7.29.7",
+      "purl": "pkg:npm/%40babel/traverse@7.29.7",
+      "bom-ref": "pkg:npm/%40babel/traverse@7.29.7",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@babel/traverse/-/traverse-7.29.7.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@babel/types",
+      "version": "7.29.7",
+      "purl": "pkg:npm/%40babel/types@7.29.7",
+      "bom-ref": "pkg:npm/%40babel/types@7.29.7",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@babel/types/-/types-7.29.7.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@borewit/text-codec",
+      "version": "0.2.2",
+      "purl": "pkg:npm/%40borewit/text-codec@0.2.2",
+      "bom-ref": "pkg:npm/%40borewit/text-codec@0.2.2",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@borewit/text-codec/-/text-codec-0.2.2.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@emnapi/runtime",
+      "version": "1.11.3",
+      "purl": "pkg:npm/%40emnapi/runtime@1.11.3",
+      "bom-ref": "pkg:npm/%40emnapi/runtime@1.11.3",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@emnapi/runtime/-/runtime-1.11.3.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@epic-web/invariant",
+      "version": "1.0.0",
+      "purl": "pkg:npm/%40epic-web/invariant@1.0.0",
+      "bom-ref": "pkg:npm/%40epic-web/invariant@1.0.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@epic-web/invariant/-/invariant-1.0.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@img/colour",
+      "version": "1.1.0",
+      "purl": "pkg:npm/%40img/colour@1.1.0",
+      "bom-ref": "pkg:npm/%40img/colour@1.1.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@img/colour/-/colour-1.1.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api,web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@img/sharp-darwin-arm64",
+      "version": "0.35.5",
+      "purl": "pkg:npm/%40img/sharp-darwin-arm64@0.35.5",
+      "bom-ref": "pkg:npm/%40img/sharp-darwin-arm64@0.35.5",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@img/sharp-darwin-arm64/-/sharp-darwin-arm64-0.35.5.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api,web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@img/sharp-darwin-x64",
+      "version": "0.35.5",
+      "purl": "pkg:npm/%40img/sharp-darwin-x64@0.35.5",
+      "bom-ref": "pkg:npm/%40img/sharp-darwin-x64@0.35.5",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@img/sharp-darwin-x64/-/sharp-darwin-x64-0.35.5.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api,web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@img/sharp-freebsd-wasm32",
+      "version": "0.35.5",
+      "purl": "pkg:npm/%40img/sharp-freebsd-wasm32@0.35.5",
+      "bom-ref": "pkg:npm/%40img/sharp-freebsd-wasm32@0.35.5",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@img/sharp-freebsd-wasm32/-/sharp-freebsd-wasm32-0.35.5.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api,web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@img/sharp-libvips-darwin-arm64",
+      "version": "1.3.4",
+      "purl": "pkg:npm/%40img/sharp-libvips-darwin-arm64@1.3.4",
+      "bom-ref": "pkg:npm/%40img/sharp-libvips-darwin-arm64@1.3.4",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@img/sharp-libvips-darwin-arm64/-/sharp-libvips-darwin-arm64-1.3.4.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api,web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@img/sharp-libvips-darwin-x64",
+      "version": "1.3.4",
+      "purl": "pkg:npm/%40img/sharp-libvips-darwin-x64@1.3.4",
+      "bom-ref": "pkg:npm/%40img/sharp-libvips-darwin-x64@1.3.4",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@img/sharp-libvips-darwin-x64/-/sharp-libvips-darwin-x64-1.3.4.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api,web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@img/sharp-libvips-linux-arm",
+      "version": "1.3.4",
+      "purl": "pkg:npm/%40img/sharp-libvips-linux-arm@1.3.4",
+      "bom-ref": "pkg:npm/%40img/sharp-libvips-linux-arm@1.3.4",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@img/sharp-libvips-linux-arm/-/sharp-libvips-linux-arm-1.3.4.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api,web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@img/sharp-libvips-linux-arm64",
+      "version": "1.3.4",
+      "purl": "pkg:npm/%40img/sharp-libvips-linux-arm64@1.3.4",
+      "bom-ref": "pkg:npm/%40img/sharp-libvips-linux-arm64@1.3.4",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@img/sharp-libvips-linux-arm64/-/sharp-libvips-linux-arm64-1.3.4.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api,web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@img/sharp-libvips-linux-ppc64",
+      "version": "1.3.4",
+      "purl": "pkg:npm/%40img/sharp-libvips-linux-ppc64@1.3.4",
+      "bom-ref": "pkg:npm/%40img/sharp-libvips-linux-ppc64@1.3.4",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@img/sharp-libvips-linux-ppc64/-/sharp-libvips-linux-ppc64-1.3.4.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api,web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@img/sharp-libvips-linux-riscv64",
+      "version": "1.3.4",
+      "purl": "pkg:npm/%40img/sharp-libvips-linux-riscv64@1.3.4",
+      "bom-ref": "pkg:npm/%40img/sharp-libvips-linux-riscv64@1.3.4",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@img/sharp-libvips-linux-riscv64/-/sharp-libvips-linux-riscv64-1.3.4.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api,web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@img/sharp-libvips-linux-s390x",
+      "version": "1.3.4",
+      "purl": "pkg:npm/%40img/sharp-libvips-linux-s390x@1.3.4",
+      "bom-ref": "pkg:npm/%40img/sharp-libvips-linux-s390x@1.3.4",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@img/sharp-libvips-linux-s390x/-/sharp-libvips-linux-s390x-1.3.4.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api,web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@img/sharp-libvips-linux-x64",
+      "version": "1.3.4",
+      "purl": "pkg:npm/%40img/sharp-libvips-linux-x64@1.3.4",
+      "bom-ref": "pkg:npm/%40img/sharp-libvips-linux-x64@1.3.4",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@img/sharp-libvips-linux-x64/-/sharp-libvips-linux-x64-1.3.4.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api,web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@img/sharp-libvips-linuxmusl-arm64",
+      "version": "1.3.4",
+      "purl": "pkg:npm/%40img/sharp-libvips-linuxmusl-arm64@1.3.4",
+      "bom-ref": "pkg:npm/%40img/sharp-libvips-linuxmusl-arm64@1.3.4",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@img/sharp-libvips-linuxmusl-arm64/-/sharp-libvips-linuxmusl-arm64-1.3.4.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api,web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@img/sharp-libvips-linuxmusl-x64",
+      "version": "1.3.4",
+      "purl": "pkg:npm/%40img/sharp-libvips-linuxmusl-x64@1.3.4",
+      "bom-ref": "pkg:npm/%40img/sharp-libvips-linuxmusl-x64@1.3.4",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@img/sharp-libvips-linuxmusl-x64/-/sharp-libvips-linuxmusl-x64-1.3.4.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api,web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@img/sharp-linux-arm",
+      "version": "0.35.5",
+      "purl": "pkg:npm/%40img/sharp-linux-arm@0.35.5",
+      "bom-ref": "pkg:npm/%40img/sharp-linux-arm@0.35.5",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@img/sharp-linux-arm/-/sharp-linux-arm-0.35.5.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api,web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@img/sharp-linux-arm64",
+      "version": "0.35.5",
+      "purl": "pkg:npm/%40img/sharp-linux-arm64@0.35.5",
+      "bom-ref": "pkg:npm/%40img/sharp-linux-arm64@0.35.5",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@img/sharp-linux-arm64/-/sharp-linux-arm64-0.35.5.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api,web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@img/sharp-linux-ppc64",
+      "version": "0.35.5",
+      "purl": "pkg:npm/%40img/sharp-linux-ppc64@0.35.5",
+      "bom-ref": "pkg:npm/%40img/sharp-linux-ppc64@0.35.5",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@img/sharp-linux-ppc64/-/sharp-linux-ppc64-0.35.5.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api,web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@img/sharp-linux-riscv64",
+      "version": "0.35.5",
+      "purl": "pkg:npm/%40img/sharp-linux-riscv64@0.35.5",
+      "bom-ref": "pkg:npm/%40img/sharp-linux-riscv64@0.35.5",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@img/sharp-linux-riscv64/-/sharp-linux-riscv64-0.35.5.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api,web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@img/sharp-linux-s390x",
+      "version": "0.35.5",
+      "purl": "pkg:npm/%40img/sharp-linux-s390x@0.35.5",
+      "bom-ref": "pkg:npm/%40img/sharp-linux-s390x@0.35.5",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@img/sharp-linux-s390x/-/sharp-linux-s390x-0.35.5.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api,web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@img/sharp-linux-x64",
+      "version": "0.35.5",
+      "purl": "pkg:npm/%40img/sharp-linux-x64@0.35.5",
+      "bom-ref": "pkg:npm/%40img/sharp-linux-x64@0.35.5",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@img/sharp-linux-x64/-/sharp-linux-x64-0.35.5.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api,web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@img/sharp-linuxmusl-arm64",
+      "version": "0.35.5",
+      "purl": "pkg:npm/%40img/sharp-linuxmusl-arm64@0.35.5",
+      "bom-ref": "pkg:npm/%40img/sharp-linuxmusl-arm64@0.35.5",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@img/sharp-linuxmusl-arm64/-/sharp-linuxmusl-arm64-0.35.5.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api,web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@img/sharp-linuxmusl-x64",
+      "version": "0.35.5",
+      "purl": "pkg:npm/%40img/sharp-linuxmusl-x64@0.35.5",
+      "bom-ref": "pkg:npm/%40img/sharp-linuxmusl-x64@0.35.5",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@img/sharp-linuxmusl-x64/-/sharp-linuxmusl-x64-0.35.5.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api,web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@img/sharp-wasm32",
+      "version": "0.35.5",
+      "purl": "pkg:npm/%40img/sharp-wasm32@0.35.5",
+      "bom-ref": "pkg:npm/%40img/sharp-wasm32@0.35.5",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@img/sharp-wasm32/-/sharp-wasm32-0.35.5.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@img/sharp-webcontainers-wasm32",
+      "version": "0.35.5",
+      "purl": "pkg:npm/%40img/sharp-webcontainers-wasm32@0.35.5",
+      "bom-ref": "pkg:npm/%40img/sharp-webcontainers-wasm32@0.35.5",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@img/sharp-webcontainers-wasm32/-/sharp-webcontainers-wasm32-0.35.5.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api,web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@img/sharp-win32-arm64",
+      "version": "0.35.5",
+      "purl": "pkg:npm/%40img/sharp-win32-arm64@0.35.5",
+      "bom-ref": "pkg:npm/%40img/sharp-win32-arm64@0.35.5",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@img/sharp-win32-arm64/-/sharp-win32-arm64-0.35.5.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api,web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@img/sharp-win32-ia32",
+      "version": "0.35.5",
+      "purl": "pkg:npm/%40img/sharp-win32-ia32@0.35.5",
+      "bom-ref": "pkg:npm/%40img/sharp-win32-ia32@0.35.5",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@img/sharp-win32-ia32/-/sharp-win32-ia32-0.35.5.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api,web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@img/sharp-win32-x64",
+      "version": "0.35.5",
+      "purl": "pkg:npm/%40img/sharp-win32-x64@0.35.5",
+      "bom-ref": "pkg:npm/%40img/sharp-win32-x64@0.35.5",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@img/sharp-win32-x64/-/sharp-win32-x64-0.35.5.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api,web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@jridgewell/gen-mapping",
+      "version": "0.3.13",
+      "purl": "pkg:npm/%40jridgewell/gen-mapping@0.3.13",
+      "bom-ref": "pkg:npm/%40jridgewell/gen-mapping@0.3.13",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@jridgewell/gen-mapping/-/gen-mapping-0.3.13.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@jridgewell/remapping",
+      "version": "2.3.5",
+      "purl": "pkg:npm/%40jridgewell/remapping@2.3.5",
+      "bom-ref": "pkg:npm/%40jridgewell/remapping@2.3.5",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@jridgewell/remapping/-/remapping-2.3.5.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@jridgewell/resolve-uri",
+      "version": "3.1.2",
+      "purl": "pkg:npm/%40jridgewell/resolve-uri@3.1.2",
+      "bom-ref": "pkg:npm/%40jridgewell/resolve-uri@3.1.2",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@jridgewell/resolve-uri/-/resolve-uri-3.1.2.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@jridgewell/sourcemap-codec",
+      "version": "1.5.5",
+      "purl": "pkg:npm/%40jridgewell/sourcemap-codec@1.5.5",
+      "bom-ref": "pkg:npm/%40jridgewell/sourcemap-codec@1.5.5",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@jridgewell/sourcemap-codec/-/sourcemap-codec-1.5.5.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@jridgewell/trace-mapping",
+      "version": "0.3.31",
+      "purl": "pkg:npm/%40jridgewell/trace-mapping@0.3.31",
+      "bom-ref": "pkg:npm/%40jridgewell/trace-mapping@0.3.31",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@jridgewell/trace-mapping/-/trace-mapping-0.3.31.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@lukeed/csprng",
+      "version": "1.1.0",
+      "purl": "pkg:npm/%40lukeed/csprng@1.1.0",
+      "bom-ref": "pkg:npm/%40lukeed/csprng@1.1.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@lukeed/csprng/-/csprng-1.1.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@nestjs/common",
+      "version": "11.1.28",
+      "purl": "pkg:npm/%40nestjs/common@11.1.28",
+      "bom-ref": "pkg:npm/%40nestjs/common@11.1.28",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@nestjs/common/-/common-11.1.28.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@nestjs/config",
+      "version": "4.0.4",
+      "purl": "pkg:npm/%40nestjs/config@4.0.4",
+      "bom-ref": "pkg:npm/%40nestjs/config@4.0.4",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@nestjs/config/-/config-4.0.4.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@nestjs/core",
+      "version": "11.1.28",
+      "purl": "pkg:npm/%40nestjs/core@11.1.28",
+      "bom-ref": "pkg:npm/%40nestjs/core@11.1.28",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@nestjs/core/-/core-11.1.28.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@nestjs/event-emitter",
+      "version": "3.1.0",
+      "purl": "pkg:npm/%40nestjs/event-emitter@3.1.0",
+      "bom-ref": "pkg:npm/%40nestjs/event-emitter@3.1.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@nestjs/event-emitter/-/event-emitter-3.1.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@nestjs/jwt",
+      "version": "11.0.2",
+      "purl": "pkg:npm/%40nestjs/jwt@11.0.2",
+      "bom-ref": "pkg:npm/%40nestjs/jwt@11.0.2",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@nestjs/jwt/-/jwt-11.0.2.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@nestjs/mapped-types",
+      "version": "2.1.1",
+      "purl": "pkg:npm/%40nestjs/mapped-types@2.1.1",
+      "bom-ref": "pkg:npm/%40nestjs/mapped-types@2.1.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@nestjs/mapped-types/-/mapped-types-2.1.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@nestjs/passport",
+      "version": "11.0.5",
+      "purl": "pkg:npm/%40nestjs/passport@11.0.5",
+      "bom-ref": "pkg:npm/%40nestjs/passport@11.0.5",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@nestjs/passport/-/passport-11.0.5.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@nestjs/platform-express",
+      "version": "11.1.28",
+      "purl": "pkg:npm/%40nestjs/platform-express@11.1.28",
+      "bom-ref": "pkg:npm/%40nestjs/platform-express@11.1.28",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@nestjs/platform-express/-/platform-express-11.1.28.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@nestjs/schedule",
+      "version": "12.0.1",
+      "purl": "pkg:npm/%40nestjs/schedule@12.0.1",
+      "bom-ref": "pkg:npm/%40nestjs/schedule@12.0.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@nestjs/schedule/-/schedule-12.0.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@nestjs/throttler",
+      "version": "6.5.0",
+      "purl": "pkg:npm/%40nestjs/throttler@6.5.0",
+      "bom-ref": "pkg:npm/%40nestjs/throttler@6.5.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@nestjs/throttler/-/throttler-6.5.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@next/env",
+      "version": "16.3.8",
+      "purl": "pkg:npm/%40next/env@16.3.8",
+      "bom-ref": "pkg:npm/%40next/env@16.3.8",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@next/env/-/env-16.3.8.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@next/swc-darwin-arm64",
+      "version": "16.3.8",
+      "purl": "pkg:npm/%40next/swc-darwin-arm64@16.3.8",
+      "bom-ref": "pkg:npm/%40next/swc-darwin-arm64@16.3.8",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@next/swc-darwin-arm64/-/swc-darwin-arm64-16.3.8.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@next/swc-darwin-x64",
+      "version": "16.3.8",
+      "purl": "pkg:npm/%40next/swc-darwin-x64@16.3.8",
+      "bom-ref": "pkg:npm/%40next/swc-darwin-x64@16.3.8",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@next/swc-darwin-x64/-/swc-darwin-x64-16.3.8.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@next/swc-linux-arm64-gnu",
+      "version": "16.3.8",
+      "purl": "pkg:npm/%40next/swc-linux-arm64-gnu@16.3.8",
+      "bom-ref": "pkg:npm/%40next/swc-linux-arm64-gnu@16.3.8",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@next/swc-linux-arm64-gnu/-/swc-linux-arm64-gnu-16.3.8.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@next/swc-linux-arm64-musl",
+      "version": "16.3.8",
+      "purl": "pkg:npm/%40next/swc-linux-arm64-musl@16.3.8",
+      "bom-ref": "pkg:npm/%40next/swc-linux-arm64-musl@16.3.8",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@next/swc-linux-arm64-musl/-/swc-linux-arm64-musl-16.3.8.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@next/swc-linux-x64-gnu",
+      "version": "16.3.8",
+      "purl": "pkg:npm/%40next/swc-linux-x64-gnu@16.3.8",
+      "bom-ref": "pkg:npm/%40next/swc-linux-x64-gnu@16.3.8",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@next/swc-linux-x64-gnu/-/swc-linux-x64-gnu-16.3.8.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@next/swc-linux-x64-musl",
+      "version": "16.3.8",
+      "purl": "pkg:npm/%40next/swc-linux-x64-musl@16.3.8",
+      "bom-ref": "pkg:npm/%40next/swc-linux-x64-musl@16.3.8",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@next/swc-linux-x64-musl/-/swc-linux-x64-musl-16.3.8.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@next/swc-win32-arm64-msvc",
+      "version": "16.3.8",
+      "purl": "pkg:npm/%40next/swc-win32-arm64-msvc@16.3.8",
+      "bom-ref": "pkg:npm/%40next/swc-win32-arm64-msvc@16.3.8",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@next/swc-win32-arm64-msvc/-/swc-win32-arm64-msvc-16.3.8.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@next/swc-win32-x64-msvc",
+      "version": "16.3.8",
+      "purl": "pkg:npm/%40next/swc-win32-x64-msvc@16.3.8",
+      "bom-ref": "pkg:npm/%40next/swc-win32-x64-msvc@16.3.8",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@next/swc-win32-x64-msvc/-/swc-win32-x64-msvc-16.3.8.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@noble/ciphers",
+      "version": "1.3.0",
+      "purl": "pkg:npm/%40noble/ciphers@1.3.0",
+      "bom-ref": "pkg:npm/%40noble/ciphers@1.3.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@noble/ciphers/-/ciphers-1.3.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@noble/hashes",
+      "version": "1.8.0",
+      "purl": "pkg:npm/%40noble/hashes@1.8.0",
+      "bom-ref": "pkg:npm/%40noble/hashes@1.8.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@noble/hashes/-/hashes-1.8.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@otplib/core",
+      "version": "12.0.1",
+      "purl": "pkg:npm/%40otplib/core@12.0.1",
+      "bom-ref": "pkg:npm/%40otplib/core@12.0.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@otplib/core/-/core-12.0.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@otplib/plugin-crypto",
+      "version": "12.0.1",
+      "purl": "pkg:npm/%40otplib/plugin-crypto@12.0.1",
+      "bom-ref": "pkg:npm/%40otplib/plugin-crypto@12.0.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@otplib/plugin-crypto/-/plugin-crypto-12.0.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@otplib/plugin-thirty-two",
+      "version": "12.0.1",
+      "purl": "pkg:npm/%40otplib/plugin-thirty-two@12.0.1",
+      "bom-ref": "pkg:npm/%40otplib/plugin-thirty-two@12.0.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@otplib/plugin-thirty-two/-/plugin-thirty-two-12.0.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@otplib/preset-default",
+      "version": "12.0.1",
+      "purl": "pkg:npm/%40otplib/preset-default@12.0.1",
+      "bom-ref": "pkg:npm/%40otplib/preset-default@12.0.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@otplib/preset-default/-/preset-default-12.0.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@otplib/preset-v11",
+      "version": "12.0.1",
+      "purl": "pkg:npm/%40otplib/preset-v11@12.0.1",
+      "bom-ref": "pkg:npm/%40otplib/preset-v11@12.0.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@otplib/preset-v11/-/preset-v11-12.0.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@phc/format",
+      "version": "1.0.0",
+      "purl": "pkg:npm/%40phc/format@1.0.0",
+      "bom-ref": "pkg:npm/%40phc/format@1.0.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@phc/format/-/format-1.0.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@prisma/client",
+      "version": "6.19.3",
+      "purl": "pkg:npm/%40prisma/client@6.19.3",
+      "bom-ref": "pkg:npm/%40prisma/client@6.19.3",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@prisma/client/-/client-6.19.3.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@prisma/config",
+      "version": "6.19.3",
+      "purl": "pkg:npm/%40prisma/config@6.19.3",
+      "bom-ref": "pkg:npm/%40prisma/config@6.19.3",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@prisma/config/-/config-6.19.3.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@prisma/debug",
+      "version": "6.19.3",
+      "purl": "pkg:npm/%40prisma/debug@6.19.3",
+      "bom-ref": "pkg:npm/%40prisma/debug@6.19.3",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@prisma/debug/-/debug-6.19.3.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@prisma/engines-version",
+      "version": "7.1.1-3.c2990dca591cba766e3b7ef5d9e8a84796e47ab7",
+      "purl": "pkg:npm/%40prisma/engines-version@7.1.1-3.c2990dca591cba766e3b7ef5d9e8a84796e47ab7",
+      "bom-ref": "pkg:npm/%40prisma/engines-version@7.1.1-3.c2990dca591cba766e3b7ef5d9e8a84796e47ab7",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@prisma/engines-version/-/engines-version-7.1.1-3.c2990dca591cba766e3b7ef5d9e8a84796e47ab7.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@prisma/engines",
+      "version": "6.19.3",
+      "purl": "pkg:npm/%40prisma/engines@6.19.3",
+      "bom-ref": "pkg:npm/%40prisma/engines@6.19.3",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@prisma/engines/-/engines-6.19.3.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@prisma/fetch-engine",
+      "version": "6.19.3",
+      "purl": "pkg:npm/%40prisma/fetch-engine@6.19.3",
+      "bom-ref": "pkg:npm/%40prisma/fetch-engine@6.19.3",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@prisma/fetch-engine/-/fetch-engine-6.19.3.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@prisma/get-platform",
+      "version": "6.19.3",
+      "purl": "pkg:npm/%40prisma/get-platform@6.19.3",
+      "bom-ref": "pkg:npm/%40prisma/get-platform@6.19.3",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@prisma/get-platform/-/get-platform-6.19.3.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@standard-schema/spec",
+      "version": "1.1.0",
+      "purl": "pkg:npm/%40standard-schema/spec@1.1.0",
+      "bom-ref": "pkg:npm/%40standard-schema/spec@1.1.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@standard-schema/spec/-/spec-1.1.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@swc/helpers",
+      "version": "0.5.23",
+      "purl": "pkg:npm/%40swc/helpers@0.5.23",
+      "bom-ref": "pkg:npm/%40swc/helpers@0.5.23",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@swc/helpers/-/helpers-0.5.23.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api,web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@tokenizer/inflate",
+      "version": "0.4.1",
+      "purl": "pkg:npm/%40tokenizer/inflate@0.4.1",
+      "bom-ref": "pkg:npm/%40tokenizer/inflate@0.4.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@tokenizer/inflate/-/inflate-0.4.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@tokenizer/token",
+      "version": "0.3.0",
+      "purl": "pkg:npm/%40tokenizer/token@0.3.0",
+      "bom-ref": "pkg:npm/%40tokenizer/token@0.3.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@tokenizer/token/-/token-0.3.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@types/jsonwebtoken",
+      "version": "9.0.10",
+      "purl": "pkg:npm/%40types/jsonwebtoken@9.0.10",
+      "bom-ref": "pkg:npm/%40types/jsonwebtoken@9.0.10",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@types/jsonwebtoken/-/jsonwebtoken-9.0.10.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@types/luxon",
+      "version": "3.7.5",
+      "purl": "pkg:npm/%40types/luxon@3.7.5",
+      "bom-ref": "pkg:npm/%40types/luxon@3.7.5",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@types/luxon/-/luxon-3.7.5.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@types/ms",
+      "version": "2.1.0",
+      "purl": "pkg:npm/%40types/ms@2.1.0",
+      "bom-ref": "pkg:npm/%40types/ms@2.1.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@types/ms/-/ms-2.1.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@types/node",
+      "version": "20.19.43",
+      "purl": "pkg:npm/%40types/node@20.19.43",
+      "bom-ref": "pkg:npm/%40types/node@20.19.43",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@types/node/-/node-20.19.43.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@types/node",
+      "version": "24.13.3",
+      "purl": "pkg:npm/%40types/node@24.13.3",
+      "bom-ref": "pkg:npm/%40types/node@24.13.3",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@types/node/-/node-24.13.3.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "@types/validator",
+      "version": "13.15.10",
+      "purl": "pkg:npm/%40types/validator@13.15.10",
+      "bom-ref": "pkg:npm/%40types/validator@13.15.10",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@types/validator/-/validator-13.15.10.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "accepts",
+      "version": "2.0.0",
+      "purl": "pkg:npm/accepts@2.0.0",
+      "bom-ref": "pkg:npm/accepts@2.0.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/accepts/-/accepts-2.0.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "ansi-regex",
+      "version": "5.0.1",
+      "purl": "pkg:npm/ansi-regex@5.0.1",
+      "bom-ref": "pkg:npm/ansi-regex@5.0.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/ansi-regex/-/ansi-regex-5.0.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "ansi-styles",
+      "version": "4.3.0",
+      "purl": "pkg:npm/ansi-styles@4.3.0",
+      "bom-ref": "pkg:npm/ansi-styles@4.3.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/ansi-styles/-/ansi-styles-4.3.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "append-field",
+      "version": "1.0.0",
+      "purl": "pkg:npm/append-field@1.0.0",
+      "bom-ref": "pkg:npm/append-field@1.0.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/append-field/-/append-field-1.0.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "argon2",
+      "version": "0.45.1",
+      "purl": "pkg:npm/argon2@0.45.1",
+      "bom-ref": "pkg:npm/argon2@0.45.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/argon2/-/argon2-0.45.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "base64-js",
+      "version": "0.0.8",
+      "purl": "pkg:npm/base64-js@0.0.8",
+      "bom-ref": "pkg:npm/base64-js@0.0.8",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/base64-js/-/base64-js-0.0.8.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "base64-js",
+      "version": "1.5.1",
+      "purl": "pkg:npm/base64-js@1.5.1",
+      "bom-ref": "pkg:npm/base64-js@1.5.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/base64-js/-/base64-js-1.5.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "baseline-browser-mapping",
+      "version": "2.11.7",
+      "purl": "pkg:npm/baseline-browser-mapping@2.11.7",
+      "bom-ref": "pkg:npm/baseline-browser-mapping@2.11.7",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/baseline-browser-mapping/-/baseline-browser-mapping-2.11.7.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "body-parser",
+      "version": "2.3.0",
+      "purl": "pkg:npm/body-parser@2.3.0",
+      "bom-ref": "pkg:npm/body-parser@2.3.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/body-parser/-/body-parser-2.3.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "brotli",
+      "version": "1.3.3",
+      "purl": "pkg:npm/brotli@1.3.3",
+      "bom-ref": "pkg:npm/brotli@1.3.3",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/brotli/-/brotli-1.3.3.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "browserslist",
+      "version": "4.28.7",
+      "purl": "pkg:npm/browserslist@4.28.7",
+      "bom-ref": "pkg:npm/browserslist@4.28.7",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/browserslist/-/browserslist-4.28.7.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "buffer-equal-constant-time",
+      "version": "1.0.1",
+      "purl": "pkg:npm/buffer-equal-constant-time@1.0.1",
+      "bom-ref": "pkg:npm/buffer-equal-constant-time@1.0.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/buffer-equal-constant-time/-/buffer-equal-constant-time-1.0.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "busboy",
+      "version": "1.6.0",
+      "purl": "pkg:npm/busboy@1.6.0",
+      "bom-ref": "pkg:npm/busboy@1.6.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/busboy/-/busboy-1.6.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "bytes",
+      "version": "3.1.2",
+      "purl": "pkg:npm/bytes@3.1.2",
+      "bom-ref": "pkg:npm/bytes@3.1.2",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/bytes/-/bytes-3.1.2.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "c12",
+      "version": "3.1.0",
+      "purl": "pkg:npm/c12@3.1.0",
+      "bom-ref": "pkg:npm/c12@3.1.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/c12/-/c12-3.1.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "call-bind-apply-helpers",
+      "version": "1.0.2",
+      "purl": "pkg:npm/call-bind-apply-helpers@1.0.2",
+      "bom-ref": "pkg:npm/call-bind-apply-helpers@1.0.2",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/call-bind-apply-helpers/-/call-bind-apply-helpers-1.0.2.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "call-bound",
+      "version": "1.0.4",
+      "purl": "pkg:npm/call-bound@1.0.4",
+      "bom-ref": "pkg:npm/call-bound@1.0.4",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/call-bound/-/call-bound-1.0.4.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "camelcase",
+      "version": "5.3.1",
+      "purl": "pkg:npm/camelcase@5.3.1",
+      "bom-ref": "pkg:npm/camelcase@5.3.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/camelcase/-/camelcase-5.3.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "caniuse-lite",
+      "version": "1.0.30001806",
+      "purl": "pkg:npm/caniuse-lite@1.0.30001806",
+      "bom-ref": "pkg:npm/caniuse-lite@1.0.30001806",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/caniuse-lite/-/caniuse-lite-1.0.30001806.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "chokidar",
+      "version": "4.0.3",
+      "purl": "pkg:npm/chokidar@4.0.3",
+      "bom-ref": "pkg:npm/chokidar@4.0.3",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/chokidar/-/chokidar-4.0.3.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "citty",
+      "version": "0.1.6",
+      "purl": "pkg:npm/citty@0.1.6",
+      "bom-ref": "pkg:npm/citty@0.1.6",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/citty/-/citty-0.1.6.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "citty",
+      "version": "0.2.2",
+      "purl": "pkg:npm/citty@0.2.2",
+      "bom-ref": "pkg:npm/citty@0.2.2",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/citty/-/citty-0.2.2.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "class-transformer",
+      "version": "0.5.1",
+      "purl": "pkg:npm/class-transformer@0.5.1",
+      "bom-ref": "pkg:npm/class-transformer@0.5.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/class-transformer/-/class-transformer-0.5.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "class-validator",
+      "version": "0.15.1",
+      "purl": "pkg:npm/class-validator@0.15.1",
+      "bom-ref": "pkg:npm/class-validator@0.15.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/class-validator/-/class-validator-0.15.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "client-only",
+      "version": "0.0.1",
+      "purl": "pkg:npm/client-only@0.0.1",
+      "bom-ref": "pkg:npm/client-only@0.0.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/client-only/-/client-only-0.0.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "cliui",
+      "version": "6.0.0",
+      "purl": "pkg:npm/cliui@6.0.0",
+      "bom-ref": "pkg:npm/cliui@6.0.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/cliui/-/cliui-6.0.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "clone",
+      "version": "2.1.2",
+      "purl": "pkg:npm/clone@2.1.2",
+      "bom-ref": "pkg:npm/clone@2.1.2",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/clone/-/clone-2.1.2.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "color-convert",
+      "version": "2.0.1",
+      "purl": "pkg:npm/color-convert@2.0.1",
+      "bom-ref": "pkg:npm/color-convert@2.0.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/color-convert/-/color-convert-2.0.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "color-name",
+      "version": "1.1.4",
+      "purl": "pkg:npm/color-name@1.1.4",
+      "bom-ref": "pkg:npm/color-name@1.1.4",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/color-name/-/color-name-1.1.4.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "confbox",
+      "version": "0.2.4",
+      "purl": "pkg:npm/confbox@0.2.4",
+      "bom-ref": "pkg:npm/confbox@0.2.4",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/confbox/-/confbox-0.2.4.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "consola",
+      "version": "3.4.2",
+      "purl": "pkg:npm/consola@3.4.2",
+      "bom-ref": "pkg:npm/consola@3.4.2",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/consola/-/consola-3.4.2.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "content-disposition",
+      "version": "1.1.0",
+      "purl": "pkg:npm/content-disposition@1.1.0",
+      "bom-ref": "pkg:npm/content-disposition@1.1.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/content-disposition/-/content-disposition-1.1.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "content-type",
+      "version": "1.0.5",
+      "purl": "pkg:npm/content-type@1.0.5",
+      "bom-ref": "pkg:npm/content-type@1.0.5",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/content-type/-/content-type-1.0.5.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "content-type",
+      "version": "2.0.0",
+      "purl": "pkg:npm/content-type@2.0.0",
+      "bom-ref": "pkg:npm/content-type@2.0.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/content-type/-/content-type-2.0.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "convert-source-map",
+      "version": "2.0.0",
+      "purl": "pkg:npm/convert-source-map@2.0.0",
+      "bom-ref": "pkg:npm/convert-source-map@2.0.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/convert-source-map/-/convert-source-map-2.0.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "cookie-parser",
+      "version": "1.4.7",
+      "purl": "pkg:npm/cookie-parser@1.4.7",
+      "bom-ref": "pkg:npm/cookie-parser@1.4.7",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/cookie-parser/-/cookie-parser-1.4.7.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "cookie-signature",
+      "version": "1.0.6",
+      "purl": "pkg:npm/cookie-signature@1.0.6",
+      "bom-ref": "pkg:npm/cookie-signature@1.0.6",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/cookie-signature/-/cookie-signature-1.0.6.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "cookie-signature",
+      "version": "1.2.2",
+      "purl": "pkg:npm/cookie-signature@1.2.2",
+      "bom-ref": "pkg:npm/cookie-signature@1.2.2",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/cookie-signature/-/cookie-signature-1.2.2.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "cookie",
+      "version": "0.7.2",
+      "purl": "pkg:npm/cookie@0.7.2",
+      "bom-ref": "pkg:npm/cookie@0.7.2",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/cookie/-/cookie-0.7.2.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "cors",
+      "version": "2.8.6",
+      "purl": "pkg:npm/cors@2.8.6",
+      "bom-ref": "pkg:npm/cors@2.8.6",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/cors/-/cors-2.8.6.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "cron",
+      "version": "4.4.0",
+      "purl": "pkg:npm/cron@4.4.0",
+      "bom-ref": "pkg:npm/cron@4.4.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/cron/-/cron-4.4.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "cross-env",
+      "version": "10.1.0",
+      "purl": "pkg:npm/cross-env@10.1.0",
+      "bom-ref": "pkg:npm/cross-env@10.1.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/cross-env/-/cross-env-10.1.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "cross-spawn",
+      "version": "7.0.6",
+      "purl": "pkg:npm/cross-spawn@7.0.6",
+      "bom-ref": "pkg:npm/cross-spawn@7.0.6",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/cross-spawn/-/cross-spawn-7.0.6.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "debug",
+      "version": "4.4.3",
+      "purl": "pkg:npm/debug@4.4.3",
+      "bom-ref": "pkg:npm/debug@4.4.3",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/debug/-/debug-4.4.3.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api,web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "decamelize",
+      "version": "1.2.0",
+      "purl": "pkg:npm/decamelize@1.2.0",
+      "bom-ref": "pkg:npm/decamelize@1.2.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/decamelize/-/decamelize-1.2.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "deepmerge-ts",
+      "version": "7.1.5",
+      "purl": "pkg:npm/deepmerge-ts@7.1.5",
+      "bom-ref": "pkg:npm/deepmerge-ts@7.1.5",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/deepmerge-ts/-/deepmerge-ts-7.1.5.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "defu",
+      "version": "6.1.7",
+      "purl": "pkg:npm/defu@6.1.7",
+      "bom-ref": "pkg:npm/defu@6.1.7",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/defu/-/defu-6.1.7.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "depd",
+      "version": "2.0.0",
+      "purl": "pkg:npm/depd@2.0.0",
+      "bom-ref": "pkg:npm/depd@2.0.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/depd/-/depd-2.0.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "destr",
+      "version": "2.0.5",
+      "purl": "pkg:npm/destr@2.0.5",
+      "bom-ref": "pkg:npm/destr@2.0.5",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/destr/-/destr-2.0.5.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "detect-libc",
+      "version": "2.1.2",
+      "purl": "pkg:npm/detect-libc@2.1.2",
+      "bom-ref": "pkg:npm/detect-libc@2.1.2",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/detect-libc/-/detect-libc-2.1.2.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api,web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "dfa",
+      "version": "1.2.0",
+      "purl": "pkg:npm/dfa@1.2.0",
+      "bom-ref": "pkg:npm/dfa@1.2.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/dfa/-/dfa-1.2.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "dijkstrajs",
+      "version": "1.0.3",
+      "purl": "pkg:npm/dijkstrajs@1.0.3",
+      "bom-ref": "pkg:npm/dijkstrajs@1.0.3",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/dijkstrajs/-/dijkstrajs-1.0.3.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "dotenv-expand",
+      "version": "12.0.3",
+      "purl": "pkg:npm/dotenv-expand@12.0.3",
+      "bom-ref": "pkg:npm/dotenv-expand@12.0.3",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/dotenv-expand/-/dotenv-expand-12.0.3.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "dotenv",
+      "version": "16.6.1",
+      "purl": "pkg:npm/dotenv@16.6.1",
+      "bom-ref": "pkg:npm/dotenv@16.6.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/dotenv/-/dotenv-16.6.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "dotenv",
+      "version": "17.4.1",
+      "purl": "pkg:npm/dotenv@17.4.1",
+      "bom-ref": "pkg:npm/dotenv@17.4.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/dotenv/-/dotenv-17.4.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "dunder-proto",
+      "version": "1.0.1",
+      "purl": "pkg:npm/dunder-proto@1.0.1",
+      "bom-ref": "pkg:npm/dunder-proto@1.0.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/dunder-proto/-/dunder-proto-1.0.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "ecdsa-sig-formatter",
+      "version": "1.0.11",
+      "purl": "pkg:npm/ecdsa-sig-formatter@1.0.11",
+      "bom-ref": "pkg:npm/ecdsa-sig-formatter@1.0.11",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/ecdsa-sig-formatter/-/ecdsa-sig-formatter-1.0.11.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "ee-first",
+      "version": "1.1.1",
+      "purl": "pkg:npm/ee-first@1.1.1",
+      "bom-ref": "pkg:npm/ee-first@1.1.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/ee-first/-/ee-first-1.1.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "effect",
+      "version": "3.21.0",
+      "purl": "pkg:npm/effect@3.21.0",
+      "bom-ref": "pkg:npm/effect@3.21.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/effect/-/effect-3.21.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "electron-to-chromium",
+      "version": "1.5.398",
+      "purl": "pkg:npm/electron-to-chromium@1.5.398",
+      "bom-ref": "pkg:npm/electron-to-chromium@1.5.398",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/electron-to-chromium/-/electron-to-chromium-1.5.398.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "emoji-regex",
+      "version": "8.0.0",
+      "purl": "pkg:npm/emoji-regex@8.0.0",
+      "bom-ref": "pkg:npm/emoji-regex@8.0.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/emoji-regex/-/emoji-regex-8.0.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "empathic",
+      "version": "2.0.0",
+      "purl": "pkg:npm/empathic@2.0.0",
+      "bom-ref": "pkg:npm/empathic@2.0.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/empathic/-/empathic-2.0.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "encodeurl",
+      "version": "2.0.0",
+      "purl": "pkg:npm/encodeurl@2.0.0",
+      "bom-ref": "pkg:npm/encodeurl@2.0.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/encodeurl/-/encodeurl-2.0.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "es-define-property",
+      "version": "1.0.1",
+      "purl": "pkg:npm/es-define-property@1.0.1",
+      "bom-ref": "pkg:npm/es-define-property@1.0.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/es-define-property/-/es-define-property-1.0.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "es-errors",
+      "version": "1.3.0",
+      "purl": "pkg:npm/es-errors@1.3.0",
+      "bom-ref": "pkg:npm/es-errors@1.3.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/es-errors/-/es-errors-1.3.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "es-object-atoms",
+      "version": "1.1.2",
+      "purl": "pkg:npm/es-object-atoms@1.1.2",
+      "bom-ref": "pkg:npm/es-object-atoms@1.1.2",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/es-object-atoms/-/es-object-atoms-1.1.2.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "escalade",
+      "version": "3.2.0",
+      "purl": "pkg:npm/escalade@3.2.0",
+      "bom-ref": "pkg:npm/escalade@3.2.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/escalade/-/escalade-3.2.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "escape-html",
+      "version": "1.0.3",
+      "purl": "pkg:npm/escape-html@1.0.3",
+      "bom-ref": "pkg:npm/escape-html@1.0.3",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/escape-html/-/escape-html-1.0.3.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "etag",
+      "version": "1.8.1",
+      "purl": "pkg:npm/etag@1.8.1",
+      "bom-ref": "pkg:npm/etag@1.8.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/etag/-/etag-1.8.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "eventemitter2",
+      "version": "6.4.9",
+      "purl": "pkg:npm/eventemitter2@6.4.9",
+      "bom-ref": "pkg:npm/eventemitter2@6.4.9",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/eventemitter2/-/eventemitter2-6.4.9.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "express",
+      "version": "5.2.1",
+      "purl": "pkg:npm/express@5.2.1",
+      "bom-ref": "pkg:npm/express@5.2.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/express/-/express-5.2.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "exsolve",
+      "version": "1.1.1",
+      "purl": "pkg:npm/exsolve@1.1.1",
+      "bom-ref": "pkg:npm/exsolve@1.1.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/exsolve/-/exsolve-1.1.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "fast-check",
+      "version": "3.23.2",
+      "purl": "pkg:npm/fast-check@3.23.2",
+      "bom-ref": "pkg:npm/fast-check@3.23.2",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/fast-check/-/fast-check-3.23.2.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "fast-deep-equal",
+      "version": "3.1.3",
+      "purl": "pkg:npm/fast-deep-equal@3.1.3",
+      "bom-ref": "pkg:npm/fast-deep-equal@3.1.3",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/fast-deep-equal/-/fast-deep-equal-3.1.3.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "fast-safe-stringify",
+      "version": "2.1.1",
+      "purl": "pkg:npm/fast-safe-stringify@2.1.1",
+      "bom-ref": "pkg:npm/fast-safe-stringify@2.1.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/fast-safe-stringify/-/fast-safe-stringify-2.1.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "fflate",
+      "version": "0.8.3",
+      "purl": "pkg:npm/fflate@0.8.3",
+      "bom-ref": "pkg:npm/fflate@0.8.3",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/fflate/-/fflate-0.8.3.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "file-type",
+      "version": "21.3.4",
+      "purl": "pkg:npm/file-type@21.3.4",
+      "bom-ref": "pkg:npm/file-type@21.3.4",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/file-type/-/file-type-21.3.4.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "finalhandler",
+      "version": "2.1.1",
+      "purl": "pkg:npm/finalhandler@2.1.1",
+      "bom-ref": "pkg:npm/finalhandler@2.1.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/finalhandler/-/finalhandler-2.1.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "find-up",
+      "version": "4.1.0",
+      "purl": "pkg:npm/find-up@4.1.0",
+      "bom-ref": "pkg:npm/find-up@4.1.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/find-up/-/find-up-4.1.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "fontkit",
+      "version": "2.0.4",
+      "purl": "pkg:npm/fontkit@2.0.4",
+      "bom-ref": "pkg:npm/fontkit@2.0.4",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/fontkit/-/fontkit-2.0.4.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "forwarded",
+      "version": "0.2.0",
+      "purl": "pkg:npm/forwarded@0.2.0",
+      "bom-ref": "pkg:npm/forwarded@0.2.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/forwarded/-/forwarded-0.2.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "framer-motion",
+      "version": "13.1.0",
+      "purl": "pkg:npm/framer-motion@13.1.0",
+      "bom-ref": "pkg:npm/framer-motion@13.1.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/framer-motion/-/framer-motion-13.1.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "fresh",
+      "version": "2.0.0",
+      "purl": "pkg:npm/fresh@2.0.0",
+      "bom-ref": "pkg:npm/fresh@2.0.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/fresh/-/fresh-2.0.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "function-bind",
+      "version": "1.1.2",
+      "purl": "pkg:npm/function-bind@1.1.2",
+      "bom-ref": "pkg:npm/function-bind@1.1.2",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/function-bind/-/function-bind-1.1.2.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "gensync",
+      "version": "1.0.0-beta.2",
+      "purl": "pkg:npm/gensync@1.0.0-beta.2",
+      "bom-ref": "pkg:npm/gensync@1.0.0-beta.2",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/gensync/-/gensync-1.0.0-beta.2.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "get-caller-file",
+      "version": "2.0.5",
+      "purl": "pkg:npm/get-caller-file@2.0.5",
+      "bom-ref": "pkg:npm/get-caller-file@2.0.5",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/get-caller-file/-/get-caller-file-2.0.5.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "get-intrinsic",
+      "version": "1.3.0",
+      "purl": "pkg:npm/get-intrinsic@1.3.0",
+      "bom-ref": "pkg:npm/get-intrinsic@1.3.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/get-intrinsic/-/get-intrinsic-1.3.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "get-proto",
+      "version": "1.0.1",
+      "purl": "pkg:npm/get-proto@1.0.1",
+      "bom-ref": "pkg:npm/get-proto@1.0.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/get-proto/-/get-proto-1.0.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "giget",
+      "version": "2.0.0",
+      "purl": "pkg:npm/giget@2.0.0",
+      "bom-ref": "pkg:npm/giget@2.0.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/giget/-/giget-2.0.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "gopd",
+      "version": "1.2.0",
+      "purl": "pkg:npm/gopd@1.2.0",
+      "bom-ref": "pkg:npm/gopd@1.2.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/gopd/-/gopd-1.2.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "has-flag",
+      "version": "4.0.0",
+      "purl": "pkg:npm/has-flag@4.0.0",
+      "bom-ref": "pkg:npm/has-flag@4.0.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/has-flag/-/has-flag-4.0.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "has-symbols",
+      "version": "1.1.0",
+      "purl": "pkg:npm/has-symbols@1.1.0",
+      "bom-ref": "pkg:npm/has-symbols@1.1.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/has-symbols/-/has-symbols-1.1.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "hasown",
+      "version": "2.0.4",
+      "purl": "pkg:npm/hasown@2.0.4",
+      "bom-ref": "pkg:npm/hasown@2.0.4",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/hasown/-/hasown-2.0.4.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "helmet",
+      "version": "8.3.0",
+      "purl": "pkg:npm/helmet@8.3.0",
+      "bom-ref": "pkg:npm/helmet@8.3.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/helmet/-/helmet-8.3.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "http-errors",
+      "version": "2.0.1",
+      "purl": "pkg:npm/http-errors@2.0.1",
+      "bom-ref": "pkg:npm/http-errors@2.0.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/http-errors/-/http-errors-2.0.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "iconv-lite",
+      "version": "0.7.3",
+      "purl": "pkg:npm/iconv-lite@0.7.3",
+      "bom-ref": "pkg:npm/iconv-lite@0.7.3",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/iconv-lite/-/iconv-lite-0.7.3.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "ieee754",
+      "version": "1.2.1",
+      "purl": "pkg:npm/ieee754@1.2.1",
+      "bom-ref": "pkg:npm/ieee754@1.2.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/ieee754/-/ieee754-1.2.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "inherits",
+      "version": "2.0.4",
+      "purl": "pkg:npm/inherits@2.0.4",
+      "bom-ref": "pkg:npm/inherits@2.0.4",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/inherits/-/inherits-2.0.4.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "ipaddr.js",
+      "version": "1.9.1",
+      "purl": "pkg:npm/ipaddr.js@1.9.1",
+      "bom-ref": "pkg:npm/ipaddr.js@1.9.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/ipaddr.js/-/ipaddr.js-1.9.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "is-fullwidth-code-point",
+      "version": "3.0.0",
+      "purl": "pkg:npm/is-fullwidth-code-point@3.0.0",
+      "bom-ref": "pkg:npm/is-fullwidth-code-point@3.0.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/is-fullwidth-code-point/-/is-fullwidth-code-point-3.0.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "is-promise",
+      "version": "4.0.0",
+      "purl": "pkg:npm/is-promise@4.0.0",
+      "bom-ref": "pkg:npm/is-promise@4.0.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/is-promise/-/is-promise-4.0.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "isexe",
+      "version": "2.0.0",
+      "purl": "pkg:npm/isexe@2.0.0",
+      "bom-ref": "pkg:npm/isexe@2.0.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/isexe/-/isexe-2.0.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "iterare",
+      "version": "1.2.1",
+      "purl": "pkg:npm/iterare@1.2.1",
+      "bom-ref": "pkg:npm/iterare@1.2.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/iterare/-/iterare-1.2.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "jiti",
+      "version": "2.7.0",
+      "purl": "pkg:npm/jiti@2.7.0",
+      "bom-ref": "pkg:npm/jiti@2.7.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/jiti/-/jiti-2.7.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "js-tokens",
+      "version": "4.0.0",
+      "purl": "pkg:npm/js-tokens@4.0.0",
+      "bom-ref": "pkg:npm/js-tokens@4.0.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/js-tokens/-/js-tokens-4.0.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "jsesc",
+      "version": "3.1.0",
+      "purl": "pkg:npm/jsesc@3.1.0",
+      "bom-ref": "pkg:npm/jsesc@3.1.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/jsesc/-/jsesc-3.1.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "json5",
+      "version": "2.2.3",
+      "purl": "pkg:npm/json5@2.2.3",
+      "bom-ref": "pkg:npm/json5@2.2.3",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/json5/-/json5-2.2.3.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "jsonwebtoken",
+      "version": "9.0.3",
+      "purl": "pkg:npm/jsonwebtoken@9.0.3",
+      "bom-ref": "pkg:npm/jsonwebtoken@9.0.3",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/jsonwebtoken/-/jsonwebtoken-9.0.3.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "jwa",
+      "version": "2.0.1",
+      "purl": "pkg:npm/jwa@2.0.1",
+      "bom-ref": "pkg:npm/jwa@2.0.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/jwa/-/jwa-2.0.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "jws",
+      "version": "4.0.1",
+      "purl": "pkg:npm/jws@4.0.1",
+      "bom-ref": "pkg:npm/jws@4.0.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/jws/-/jws-4.0.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "libphonenumber-js",
+      "version": "1.13.10",
+      "purl": "pkg:npm/libphonenumber-js@1.13.10",
+      "bom-ref": "pkg:npm/libphonenumber-js@1.13.10",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/libphonenumber-js/-/libphonenumber-js-1.13.10.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "linebreak",
+      "version": "1.1.0",
+      "purl": "pkg:npm/linebreak@1.1.0",
+      "bom-ref": "pkg:npm/linebreak@1.1.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/linebreak/-/linebreak-1.1.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "load-esm",
+      "version": "1.0.3",
+      "purl": "pkg:npm/load-esm@1.0.3",
+      "bom-ref": "pkg:npm/load-esm@1.0.3",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/load-esm/-/load-esm-1.0.3.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "locate-path",
+      "version": "5.0.0",
+      "purl": "pkg:npm/locate-path@5.0.0",
+      "bom-ref": "pkg:npm/locate-path@5.0.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/locate-path/-/locate-path-5.0.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "lodash.includes",
+      "version": "4.3.0",
+      "purl": "pkg:npm/lodash.includes@4.3.0",
+      "bom-ref": "pkg:npm/lodash.includes@4.3.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/lodash.includes/-/lodash.includes-4.3.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "lodash.isboolean",
+      "version": "3.0.3",
+      "purl": "pkg:npm/lodash.isboolean@3.0.3",
+      "bom-ref": "pkg:npm/lodash.isboolean@3.0.3",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/lodash.isboolean/-/lodash.isboolean-3.0.3.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "lodash.isinteger",
+      "version": "4.0.4",
+      "purl": "pkg:npm/lodash.isinteger@4.0.4",
+      "bom-ref": "pkg:npm/lodash.isinteger@4.0.4",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/lodash.isinteger/-/lodash.isinteger-4.0.4.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "lodash.isnumber",
+      "version": "3.0.3",
+      "purl": "pkg:npm/lodash.isnumber@3.0.3",
+      "bom-ref": "pkg:npm/lodash.isnumber@3.0.3",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/lodash.isnumber/-/lodash.isnumber-3.0.3.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "lodash.isplainobject",
+      "version": "4.0.6",
+      "purl": "pkg:npm/lodash.isplainobject@4.0.6",
+      "bom-ref": "pkg:npm/lodash.isplainobject@4.0.6",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/lodash.isplainobject/-/lodash.isplainobject-4.0.6.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "lodash.isstring",
+      "version": "4.0.1",
+      "purl": "pkg:npm/lodash.isstring@4.0.1",
+      "bom-ref": "pkg:npm/lodash.isstring@4.0.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/lodash.isstring/-/lodash.isstring-4.0.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "lodash.once",
+      "version": "4.1.1",
+      "purl": "pkg:npm/lodash.once@4.1.1",
+      "bom-ref": "pkg:npm/lodash.once@4.1.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/lodash.once/-/lodash.once-4.1.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "lodash",
+      "version": "4.18.1",
+      "purl": "pkg:npm/lodash@4.18.1",
+      "bom-ref": "pkg:npm/lodash@4.18.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/lodash/-/lodash-4.18.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "lru-cache",
+      "version": "5.1.1",
+      "purl": "pkg:npm/lru-cache@5.1.1",
+      "bom-ref": "pkg:npm/lru-cache@5.1.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/lru-cache/-/lru-cache-5.1.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "luxon",
+      "version": "3.7.2",
+      "purl": "pkg:npm/luxon@3.7.2",
+      "bom-ref": "pkg:npm/luxon@3.7.2",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/luxon/-/luxon-3.7.2.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "math-intrinsics",
+      "version": "1.1.0",
+      "purl": "pkg:npm/math-intrinsics@1.1.0",
+      "bom-ref": "pkg:npm/math-intrinsics@1.1.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/math-intrinsics/-/math-intrinsics-1.1.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "media-typer",
+      "version": "0.3.0",
+      "purl": "pkg:npm/media-typer@0.3.0",
+      "bom-ref": "pkg:npm/media-typer@0.3.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/media-typer/-/media-typer-0.3.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "media-typer",
+      "version": "1.1.1",
+      "purl": "pkg:npm/media-typer@1.1.1",
+      "bom-ref": "pkg:npm/media-typer@1.1.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/media-typer/-/media-typer-1.1.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "merge-descriptors",
+      "version": "2.0.0",
+      "purl": "pkg:npm/merge-descriptors@2.0.0",
+      "bom-ref": "pkg:npm/merge-descriptors@2.0.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/merge-descriptors/-/merge-descriptors-2.0.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "mime-db",
+      "version": "1.52.0",
+      "purl": "pkg:npm/mime-db@1.52.0",
+      "bom-ref": "pkg:npm/mime-db@1.52.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/mime-db/-/mime-db-1.52.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "mime-db",
+      "version": "1.54.0",
+      "purl": "pkg:npm/mime-db@1.54.0",
+      "bom-ref": "pkg:npm/mime-db@1.54.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/mime-db/-/mime-db-1.54.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "mime-types",
+      "version": "2.1.35",
+      "purl": "pkg:npm/mime-types@2.1.35",
+      "bom-ref": "pkg:npm/mime-types@2.1.35",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/mime-types/-/mime-types-2.1.35.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "mime-types",
+      "version": "3.0.2",
+      "purl": "pkg:npm/mime-types@3.0.2",
+      "bom-ref": "pkg:npm/mime-types@3.0.2",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/mime-types/-/mime-types-3.0.2.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "motion-dom",
+      "version": "13.0.0",
+      "purl": "pkg:npm/motion-dom@13.0.0",
+      "bom-ref": "pkg:npm/motion-dom@13.0.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/motion-dom/-/motion-dom-13.0.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "motion-utils",
+      "version": "13.0.0",
+      "purl": "pkg:npm/motion-utils@13.0.0",
+      "bom-ref": "pkg:npm/motion-utils@13.0.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/motion-utils/-/motion-utils-13.0.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "ms",
+      "version": "2.1.3",
+      "purl": "pkg:npm/ms@2.1.3",
+      "bom-ref": "pkg:npm/ms@2.1.3",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/ms/-/ms-2.1.3.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "multer",
+      "version": "2.4.0",
+      "purl": "pkg:npm/multer@2.4.0",
+      "bom-ref": "pkg:npm/multer@2.4.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/multer/-/multer-2.4.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "nanoid",
+      "version": "3.3.20",
+      "purl": "pkg:npm/nanoid@3.3.20",
+      "bom-ref": "pkg:npm/nanoid@3.3.20",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/nanoid/-/nanoid-3.3.20.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "negotiator",
+      "version": "1.0.0",
+      "purl": "pkg:npm/negotiator@1.0.0",
+      "bom-ref": "pkg:npm/negotiator@1.0.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/negotiator/-/negotiator-1.0.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "next",
+      "version": "16.3.8",
+      "purl": "pkg:npm/next@16.3.8",
+      "bom-ref": "pkg:npm/next@16.3.8",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/next/-/next-16.3.8.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "node-addon-api",
+      "version": "8.9.0",
+      "purl": "pkg:npm/node-addon-api@8.9.0",
+      "bom-ref": "pkg:npm/node-addon-api@8.9.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/node-addon-api/-/node-addon-api-8.9.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "node-fetch-native",
+      "version": "1.6.7",
+      "purl": "pkg:npm/node-fetch-native@1.6.7",
+      "bom-ref": "pkg:npm/node-fetch-native@1.6.7",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/node-fetch-native/-/node-fetch-native-1.6.7.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "node-gyp-build",
+      "version": "4.8.4",
+      "purl": "pkg:npm/node-gyp-build@4.8.4",
+      "bom-ref": "pkg:npm/node-gyp-build@4.8.4",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/node-gyp-build/-/node-gyp-build-4.8.4.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "node-releases",
+      "version": "2.0.51",
+      "purl": "pkg:npm/node-releases@2.0.51",
+      "bom-ref": "pkg:npm/node-releases@2.0.51",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/node-releases/-/node-releases-2.0.51.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "nodemailer",
+      "version": "10.0.15",
+      "purl": "pkg:npm/nodemailer@10.0.15",
+      "bom-ref": "pkg:npm/nodemailer@10.0.15",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/nodemailer/-/nodemailer-10.0.15.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "nypm",
+      "version": "0.6.9",
+      "purl": "pkg:npm/nypm@0.6.9",
+      "bom-ref": "pkg:npm/nypm@0.6.9",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/nypm/-/nypm-0.6.9.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "object-assign",
+      "version": "4.1.1",
+      "purl": "pkg:npm/object-assign@4.1.1",
+      "bom-ref": "pkg:npm/object-assign@4.1.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/object-assign/-/object-assign-4.1.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "object-inspect",
+      "version": "1.13.4",
+      "purl": "pkg:npm/object-inspect@1.13.4",
+      "bom-ref": "pkg:npm/object-inspect@1.13.4",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/object-inspect/-/object-inspect-1.13.4.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "ohash",
+      "version": "2.0.11",
+      "purl": "pkg:npm/ohash@2.0.11",
+      "bom-ref": "pkg:npm/ohash@2.0.11",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/ohash/-/ohash-2.0.11.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "on-finished",
+      "version": "2.4.1",
+      "purl": "pkg:npm/on-finished@2.4.1",
+      "bom-ref": "pkg:npm/on-finished@2.4.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/on-finished/-/on-finished-2.4.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "once",
+      "version": "1.4.0",
+      "purl": "pkg:npm/once@1.4.0",
+      "bom-ref": "pkg:npm/once@1.4.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/once/-/once-1.4.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "otplib",
+      "version": "12.0.1",
+      "purl": "pkg:npm/otplib@12.0.1",
+      "bom-ref": "pkg:npm/otplib@12.0.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/otplib/-/otplib-12.0.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "p-limit",
+      "version": "2.3.0",
+      "purl": "pkg:npm/p-limit@2.3.0",
+      "bom-ref": "pkg:npm/p-limit@2.3.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/p-limit/-/p-limit-2.3.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "p-locate",
+      "version": "4.1.0",
+      "purl": "pkg:npm/p-locate@4.1.0",
+      "bom-ref": "pkg:npm/p-locate@4.1.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/p-locate/-/p-locate-4.1.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "p-try",
+      "version": "2.2.0",
+      "purl": "pkg:npm/p-try@2.2.0",
+      "bom-ref": "pkg:npm/p-try@2.2.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/p-try/-/p-try-2.2.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "pako",
+      "version": "0.2.9",
+      "purl": "pkg:npm/pako@0.2.9",
+      "bom-ref": "pkg:npm/pako@0.2.9",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/pako/-/pako-0.2.9.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "parseurl",
+      "version": "1.3.3",
+      "purl": "pkg:npm/parseurl@1.3.3",
+      "bom-ref": "pkg:npm/parseurl@1.3.3",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/parseurl/-/parseurl-1.3.3.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "passport-jwt",
+      "version": "4.0.1",
+      "purl": "pkg:npm/passport-jwt@4.0.1",
+      "bom-ref": "pkg:npm/passport-jwt@4.0.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/passport-jwt/-/passport-jwt-4.0.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "passport-strategy",
+      "version": "1.0.0",
+      "purl": "pkg:npm/passport-strategy@1.0.0",
+      "bom-ref": "pkg:npm/passport-strategy@1.0.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/passport-strategy/-/passport-strategy-1.0.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "passport",
+      "version": "0.7.0",
+      "purl": "pkg:npm/passport@0.7.0",
+      "bom-ref": "pkg:npm/passport@0.7.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/passport/-/passport-0.7.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "path-exists",
+      "version": "4.0.0",
+      "purl": "pkg:npm/path-exists@4.0.0",
+      "bom-ref": "pkg:npm/path-exists@4.0.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/path-exists/-/path-exists-4.0.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "path-key",
+      "version": "3.1.1",
+      "purl": "pkg:npm/path-key@3.1.1",
+      "bom-ref": "pkg:npm/path-key@3.1.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/path-key/-/path-key-3.1.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "path-to-regexp",
+      "version": "8.4.2",
+      "purl": "pkg:npm/path-to-regexp@8.4.2",
+      "bom-ref": "pkg:npm/path-to-regexp@8.4.2",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/path-to-regexp/-/path-to-regexp-8.4.2.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "pathe",
+      "version": "2.0.3",
+      "purl": "pkg:npm/pathe@2.0.3",
+      "bom-ref": "pkg:npm/pathe@2.0.3",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/pathe/-/pathe-2.0.3.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "pause",
+      "version": "0.0.1",
+      "purl": "pkg:npm/pause@0.0.1",
+      "bom-ref": "pkg:npm/pause@0.0.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/pause/-/pause-0.0.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "pdfkit",
+      "version": "0.20.1",
+      "purl": "pkg:npm/pdfkit@0.20.1",
+      "bom-ref": "pkg:npm/pdfkit@0.20.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/pdfkit/-/pdfkit-0.20.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "perfect-debounce",
+      "version": "1.0.0",
+      "purl": "pkg:npm/perfect-debounce@1.0.0",
+      "bom-ref": "pkg:npm/perfect-debounce@1.0.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/perfect-debounce/-/perfect-debounce-1.0.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "picocolors",
+      "version": "1.1.1",
+      "purl": "pkg:npm/picocolors@1.1.1",
+      "bom-ref": "pkg:npm/picocolors@1.1.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/picocolors/-/picocolors-1.1.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "pkg-types",
+      "version": "2.3.1",
+      "purl": "pkg:npm/pkg-types@2.3.1",
+      "bom-ref": "pkg:npm/pkg-types@2.3.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/pkg-types/-/pkg-types-2.3.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "png-js",
+      "version": "2.0.0",
+      "purl": "pkg:npm/png-js@2.0.0",
+      "bom-ref": "pkg:npm/png-js@2.0.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/png-js/-/png-js-2.0.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "pngjs",
+      "version": "5.0.0",
+      "purl": "pkg:npm/pngjs@5.0.0",
+      "bom-ref": "pkg:npm/pngjs@5.0.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/pngjs/-/pngjs-5.0.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "postcss",
+      "version": "8.5.23",
+      "purl": "pkg:npm/postcss@8.5.23",
+      "bom-ref": "pkg:npm/postcss@8.5.23",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/postcss/-/postcss-8.5.23.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "prisma",
+      "version": "6.19.3",
+      "purl": "pkg:npm/prisma@6.19.3",
+      "bom-ref": "pkg:npm/prisma@6.19.3",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/prisma/-/prisma-6.19.3.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "proxy-addr",
+      "version": "2.0.8",
+      "purl": "pkg:npm/proxy-addr@2.0.8",
+      "bom-ref": "pkg:npm/proxy-addr@2.0.8",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/proxy-addr/-/proxy-addr-2.0.8.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "pure-rand",
+      "version": "6.1.0",
+      "purl": "pkg:npm/pure-rand@6.1.0",
+      "bom-ref": "pkg:npm/pure-rand@6.1.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/pure-rand/-/pure-rand-6.1.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "qrcode",
+      "version": "1.5.4",
+      "purl": "pkg:npm/qrcode@1.5.4",
+      "bom-ref": "pkg:npm/qrcode@1.5.4",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/qrcode/-/qrcode-1.5.4.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "qs",
+      "version": "6.16.0",
+      "purl": "pkg:npm/qs@6.16.0",
+      "bom-ref": "pkg:npm/qs@6.16.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/qs/-/qs-6.16.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "range-parser",
+      "version": "1.3.0",
+      "purl": "pkg:npm/range-parser@1.3.0",
+      "bom-ref": "pkg:npm/range-parser@1.3.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/range-parser/-/range-parser-1.3.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "raw-body",
+      "version": "3.0.2",
+      "purl": "pkg:npm/raw-body@3.0.2",
+      "bom-ref": "pkg:npm/raw-body@3.0.2",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/raw-body/-/raw-body-3.0.2.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "rc9",
+      "version": "2.1.2",
+      "purl": "pkg:npm/rc9@2.1.2",
+      "bom-ref": "pkg:npm/rc9@2.1.2",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/rc9/-/rc9-2.1.2.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "react-dom",
+      "version": "19.2.4",
+      "purl": "pkg:npm/react-dom@19.2.4",
+      "bom-ref": "pkg:npm/react-dom@19.2.4",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/react-dom/-/react-dom-19.2.4.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "react",
+      "version": "19.2.4",
+      "purl": "pkg:npm/react@19.2.4",
+      "bom-ref": "pkg:npm/react@19.2.4",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/react/-/react-19.2.4.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "readdirp",
+      "version": "4.1.2",
+      "purl": "pkg:npm/readdirp@4.1.2",
+      "bom-ref": "pkg:npm/readdirp@4.1.2",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/readdirp/-/readdirp-4.1.2.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "reflect-metadata",
+      "version": "0.2.2",
+      "purl": "pkg:npm/reflect-metadata@0.2.2",
+      "bom-ref": "pkg:npm/reflect-metadata@0.2.2",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/reflect-metadata/-/reflect-metadata-0.2.2.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "require-directory",
+      "version": "2.1.1",
+      "purl": "pkg:npm/require-directory@2.1.1",
+      "bom-ref": "pkg:npm/require-directory@2.1.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/require-directory/-/require-directory-2.1.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "require-main-filename",
+      "version": "2.0.0",
+      "purl": "pkg:npm/require-main-filename@2.0.0",
+      "bom-ref": "pkg:npm/require-main-filename@2.0.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/require-main-filename/-/require-main-filename-2.0.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "restructure",
+      "version": "3.0.2",
+      "purl": "pkg:npm/restructure@3.0.2",
+      "bom-ref": "pkg:npm/restructure@3.0.2",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/restructure/-/restructure-3.0.2.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "router",
+      "version": "2.2.0",
+      "purl": "pkg:npm/router@2.2.0",
+      "bom-ref": "pkg:npm/router@2.2.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/router/-/router-2.2.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "rxjs",
+      "version": "7.8.2",
+      "purl": "pkg:npm/rxjs@7.8.2",
+      "bom-ref": "pkg:npm/rxjs@7.8.2",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/rxjs/-/rxjs-7.8.2.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "safe-buffer",
+      "version": "5.2.1",
+      "purl": "pkg:npm/safe-buffer@5.2.1",
+      "bom-ref": "pkg:npm/safe-buffer@5.2.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/safe-buffer/-/safe-buffer-5.2.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "safer-buffer",
+      "version": "2.1.2",
+      "purl": "pkg:npm/safer-buffer@2.1.2",
+      "bom-ref": "pkg:npm/safer-buffer@2.1.2",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/safer-buffer/-/safer-buffer-2.1.2.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "scheduler",
+      "version": "0.27.0",
+      "purl": "pkg:npm/scheduler@0.27.0",
+      "bom-ref": "pkg:npm/scheduler@0.27.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/scheduler/-/scheduler-0.27.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "semver",
+      "version": "6.3.1",
+      "purl": "pkg:npm/semver@6.3.1",
+      "bom-ref": "pkg:npm/semver@6.3.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/semver/-/semver-6.3.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "semver",
+      "version": "7.8.5",
+      "purl": "pkg:npm/semver@7.8.5",
+      "bom-ref": "pkg:npm/semver@7.8.5",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/semver/-/semver-7.8.5.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api,web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "send",
+      "version": "1.2.1",
+      "purl": "pkg:npm/send@1.2.1",
+      "bom-ref": "pkg:npm/send@1.2.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/send/-/send-1.2.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "serve-static",
+      "version": "2.2.1",
+      "purl": "pkg:npm/serve-static@2.2.1",
+      "bom-ref": "pkg:npm/serve-static@2.2.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/serve-static/-/serve-static-2.2.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "set-blocking",
+      "version": "2.0.0",
+      "purl": "pkg:npm/set-blocking@2.0.0",
+      "bom-ref": "pkg:npm/set-blocking@2.0.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/set-blocking/-/set-blocking-2.0.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "setprototypeof",
+      "version": "1.2.0",
+      "purl": "pkg:npm/setprototypeof@1.2.0",
+      "bom-ref": "pkg:npm/setprototypeof@1.2.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/setprototypeof/-/setprototypeof-1.2.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "sharp",
+      "version": "0.35.5",
+      "purl": "pkg:npm/sharp@0.35.5",
+      "bom-ref": "pkg:npm/sharp@0.35.5",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/sharp/-/sharp-0.35.5.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api,web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "shebang-command",
+      "version": "2.0.0",
+      "purl": "pkg:npm/shebang-command@2.0.0",
+      "bom-ref": "pkg:npm/shebang-command@2.0.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/shebang-command/-/shebang-command-2.0.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "shebang-regex",
+      "version": "3.0.0",
+      "purl": "pkg:npm/shebang-regex@3.0.0",
+      "bom-ref": "pkg:npm/shebang-regex@3.0.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/shebang-regex/-/shebang-regex-3.0.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "side-channel-list",
+      "version": "1.0.1",
+      "purl": "pkg:npm/side-channel-list@1.0.1",
+      "bom-ref": "pkg:npm/side-channel-list@1.0.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/side-channel-list/-/side-channel-list-1.0.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "side-channel-map",
+      "version": "1.0.1",
+      "purl": "pkg:npm/side-channel-map@1.0.1",
+      "bom-ref": "pkg:npm/side-channel-map@1.0.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/side-channel-map/-/side-channel-map-1.0.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "side-channel-weakmap",
+      "version": "1.0.2",
+      "purl": "pkg:npm/side-channel-weakmap@1.0.2",
+      "bom-ref": "pkg:npm/side-channel-weakmap@1.0.2",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/side-channel-weakmap/-/side-channel-weakmap-1.0.2.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "side-channel",
+      "version": "1.1.1",
+      "purl": "pkg:npm/side-channel@1.1.1",
+      "bom-ref": "pkg:npm/side-channel@1.1.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/side-channel/-/side-channel-1.1.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "source-map-js",
+      "version": "1.2.2",
+      "purl": "pkg:npm/source-map-js@1.2.2",
+      "bom-ref": "pkg:npm/source-map-js@1.2.2",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/source-map-js/-/source-map-js-1.2.2.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "statuses",
+      "version": "2.0.2",
+      "purl": "pkg:npm/statuses@2.0.2",
+      "bom-ref": "pkg:npm/statuses@2.0.2",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/statuses/-/statuses-2.0.2.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "streamsearch",
+      "version": "1.1.0",
+      "purl": "pkg:npm/streamsearch@1.1.0",
+      "bom-ref": "pkg:npm/streamsearch@1.1.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/streamsearch/-/streamsearch-1.1.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "string-width",
+      "version": "4.2.3",
+      "purl": "pkg:npm/string-width@4.2.3",
+      "bom-ref": "pkg:npm/string-width@4.2.3",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/string-width/-/string-width-4.2.3.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "strip-ansi",
+      "version": "6.0.1",
+      "purl": "pkg:npm/strip-ansi@6.0.1",
+      "bom-ref": "pkg:npm/strip-ansi@6.0.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/strip-ansi/-/strip-ansi-6.0.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "strtok3",
+      "version": "10.3.5",
+      "purl": "pkg:npm/strtok3@10.3.5",
+      "bom-ref": "pkg:npm/strtok3@10.3.5",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/strtok3/-/strtok3-10.3.5.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "styled-jsx",
+      "version": "5.1.6",
+      "purl": "pkg:npm/styled-jsx@5.1.6",
+      "bom-ref": "pkg:npm/styled-jsx@5.1.6",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/styled-jsx/-/styled-jsx-5.1.6.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "supports-color",
+      "version": "8.1.1",
+      "purl": "pkg:npm/supports-color@8.1.1",
+      "bom-ref": "pkg:npm/supports-color@8.1.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/supports-color/-/supports-color-8.1.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "thirty-two",
+      "version": "1.0.2",
+      "purl": "pkg:npm/thirty-two@1.0.2",
+      "bom-ref": "pkg:npm/thirty-two@1.0.2",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/thirty-two/-/thirty-two-1.0.2.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "tiny-inflate",
+      "version": "1.0.3",
+      "purl": "pkg:npm/tiny-inflate@1.0.3",
+      "bom-ref": "pkg:npm/tiny-inflate@1.0.3",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/tiny-inflate/-/tiny-inflate-1.0.3.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "tinyexec",
+      "version": "1.2.4",
+      "purl": "pkg:npm/tinyexec@1.2.4",
+      "bom-ref": "pkg:npm/tinyexec@1.2.4",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/tinyexec/-/tinyexec-1.2.4.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "toidentifier",
+      "version": "1.0.1",
+      "purl": "pkg:npm/toidentifier@1.0.1",
+      "bom-ref": "pkg:npm/toidentifier@1.0.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/toidentifier/-/toidentifier-1.0.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "token-types",
+      "version": "6.1.2",
+      "purl": "pkg:npm/token-types@6.1.2",
+      "bom-ref": "pkg:npm/token-types@6.1.2",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/token-types/-/token-types-6.1.2.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "tslib",
+      "version": "2.8.1",
+      "purl": "pkg:npm/tslib@2.8.1",
+      "bom-ref": "pkg:npm/tslib@2.8.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/tslib/-/tslib-2.8.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api,web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "type-is",
+      "version": "1.6.18",
+      "purl": "pkg:npm/type-is@1.6.18",
+      "bom-ref": "pkg:npm/type-is@1.6.18",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/type-is/-/type-is-1.6.18.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "type-is",
+      "version": "2.1.0",
+      "purl": "pkg:npm/type-is@2.1.0",
+      "bom-ref": "pkg:npm/type-is@2.1.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/type-is/-/type-is-2.1.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "typescript",
+      "version": "5.9.3",
+      "purl": "pkg:npm/typescript@5.9.3",
+      "bom-ref": "pkg:npm/typescript@5.9.3",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/typescript/-/typescript-5.9.3.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "uid",
+      "version": "2.0.2",
+      "purl": "pkg:npm/uid@2.0.2",
+      "bom-ref": "pkg:npm/uid@2.0.2",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/uid/-/uid-2.0.2.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "uint8array-extras",
+      "version": "1.5.0",
+      "purl": "pkg:npm/uint8array-extras@1.5.0",
+      "bom-ref": "pkg:npm/uint8array-extras@1.5.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/uint8array-extras/-/uint8array-extras-1.5.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "undici-types",
+      "version": "6.21.0",
+      "purl": "pkg:npm/undici-types@6.21.0",
+      "bom-ref": "pkg:npm/undici-types@6.21.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/undici-types/-/undici-types-6.21.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "undici-types",
+      "version": "7.18.2",
+      "purl": "pkg:npm/undici-types@7.18.2",
+      "bom-ref": "pkg:npm/undici-types@7.18.2",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/undici-types/-/undici-types-7.18.2.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "unicode-properties",
+      "version": "1.4.1",
+      "purl": "pkg:npm/unicode-properties@1.4.1",
+      "bom-ref": "pkg:npm/unicode-properties@1.4.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/unicode-properties/-/unicode-properties-1.4.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "unicode-trie",
+      "version": "2.0.0",
+      "purl": "pkg:npm/unicode-trie@2.0.0",
+      "bom-ref": "pkg:npm/unicode-trie@2.0.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/unicode-trie/-/unicode-trie-2.0.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "unpipe",
+      "version": "1.0.0",
+      "purl": "pkg:npm/unpipe@1.0.0",
+      "bom-ref": "pkg:npm/unpipe@1.0.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/unpipe/-/unpipe-1.0.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "update-browserslist-db",
+      "version": "1.2.3",
+      "purl": "pkg:npm/update-browserslist-db@1.2.3",
+      "bom-ref": "pkg:npm/update-browserslist-db@1.2.3",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/update-browserslist-db/-/update-browserslist-db-1.2.3.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "utils-merge",
+      "version": "1.0.1",
+      "purl": "pkg:npm/utils-merge@1.0.1",
+      "bom-ref": "pkg:npm/utils-merge@1.0.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/utils-merge/-/utils-merge-1.0.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "validator",
+      "version": "13.15.35",
+      "purl": "pkg:npm/validator@13.15.35",
+      "bom-ref": "pkg:npm/validator@13.15.35",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/validator/-/validator-13.15.35.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "vary",
+      "version": "1.1.2",
+      "purl": "pkg:npm/vary@1.1.2",
+      "bom-ref": "pkg:npm/vary@1.1.2",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/vary/-/vary-1.1.2.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "which-module",
+      "version": "2.0.1",
+      "purl": "pkg:npm/which-module@2.0.1",
+      "bom-ref": "pkg:npm/which-module@2.0.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/which-module/-/which-module-2.0.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "which",
+      "version": "2.0.2",
+      "purl": "pkg:npm/which@2.0.2",
+      "bom-ref": "pkg:npm/which@2.0.2",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/which/-/which-2.0.2.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "wrap-ansi",
+      "version": "6.2.0",
+      "purl": "pkg:npm/wrap-ansi@6.2.0",
+      "bom-ref": "pkg:npm/wrap-ansi@6.2.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/wrap-ansi/-/wrap-ansi-6.2.0.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "wrappy",
+      "version": "1.0.2",
+      "purl": "pkg:npm/wrappy@1.0.2",
+      "bom-ref": "pkg:npm/wrappy@1.0.2",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/wrappy/-/wrappy-1.0.2.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "y18n",
+      "version": "4.0.3",
+      "purl": "pkg:npm/y18n@4.0.3",
+      "bom-ref": "pkg:npm/y18n@4.0.3",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/y18n/-/y18n-4.0.3.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "yallist",
+      "version": "3.1.1",
+      "purl": "pkg:npm/yallist@3.1.1",
+      "bom-ref": "pkg:npm/yallist@3.1.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/yallist/-/yallist-3.1.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "yargs-parser",
+      "version": "18.1.3",
+      "purl": "pkg:npm/yargs-parser@18.1.3",
+      "bom-ref": "pkg:npm/yargs-parser@18.1.3",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/yargs-parser/-/yargs-parser-18.1.3.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "yargs",
+      "version": "15.4.1",
+      "purl": "pkg:npm/yargs@15.4.1",
+      "bom-ref": "pkg:npm/yargs@15.4.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/yargs/-/yargs-15.4.1.tgz"
+        }
+      ],
+      "properties": [
+        {
+          "name": "alnajoum:used-by",
+          "value": "api"
+        }
+      ]
+    }
+  ]
+}
