@@ -34,11 +34,14 @@ import { UpdateFamilyMemberDto } from './dto/update-family-member.dto';
 import { FamilyMembersService } from './family-members.service';
 
 import { TenantScoped } from '../../../common/tenancy/tenant-scoped.decorator';
+import { contentDisposition } from '../../../common/documents/file-signature';
+import { AuditService } from '../../audit/audit.service';
 @Controller('customers/:customerId/family-members')
 export class CustomerAdminFamilyMembersController {
   constructor(
     private readonly familyMembersService: FamilyMembersService,
     private readonly documentsService: FamilyMemberDocumentsService,
+    private readonly auditService: AuditService,
   ) {}
 
   @TenantScoped({ kind: 'customer', param: 'customerId' })
@@ -137,6 +140,7 @@ export class CustomerAdminFamilyMembersController {
   @Get(':memberId/documents/:documentId/file')
   @RequirePermissions(PERMISSIONS.CUSTOMER.READ)
   async downloadDocument(
+    @CurrentUser() user: AuthContext,
     @Param('customerId') customerId: string,
     @Param('memberId') memberId: string,
     @Param('documentId') documentId: string,
@@ -147,9 +151,20 @@ export class CustomerAdminFamilyMembersController {
       documentId,
       memberId,
     );
+    await this.auditService.record({
+      identityId: user.sub,
+      action: 'family_member_document.downloaded',
+      entityType: 'FamilyMemberDocument',
+      entityId: documentId,
+      companyId: user.companyId ?? undefined,
+      metadata: { customerId, memberId, type: document.type },
+    });
     res.set({
       'Content-Type': document.mimeType,
-      'Content-Disposition': `inline; filename="${document.originalFileName}"`,
+      'Content-Disposition': contentDisposition(
+        'inline',
+        document.originalFileName,
+      ),
     });
     return new StreamableFile(
       fs.createReadStream(

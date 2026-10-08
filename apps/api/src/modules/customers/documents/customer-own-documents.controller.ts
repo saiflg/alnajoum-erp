@@ -24,6 +24,7 @@ import { CustomersService } from '../customers.service';
 import { UploadDocumentQueryDto } from './dto/upload-document-query.dto';
 import { CustomerDocumentsService } from './customer-documents.service';
 
+import { contentDisposition } from '../../../common/documents/file-signature';
 const NAMESPACE = 'customer-documents';
 
 @Controller('customers/me/documents')
@@ -82,7 +83,10 @@ export class CustomerOwnDocumentsController {
     );
     res.set({
       'Content-Type': document.mimeType,
-      'Content-Disposition': `inline; filename="${document.originalFileName}"`,
+      'Content-Disposition': contentDisposition(
+        'inline',
+        document.originalFileName,
+      ),
     });
     return new StreamableFile(
       fs.createReadStream(documentFilePath(NAMESPACE, document.storedFileName)),

@@ -16,11 +16,16 @@ import { PERMISSIONS } from '../../rbac/constants/permissions.constant';
 import { CustomerDocumentsService } from './customer-documents.service';
 
 import { TenantScoped } from '../../../common/tenancy/tenant-scoped.decorator';
+import { contentDisposition } from '../../../common/documents/file-signature';
+import { AuditService } from '../../audit/audit.service';
 const NAMESPACE = 'customer-documents';
 
 @Controller('customers/:customerId/documents')
 export class CustomerAdminDocumentsController {
-  constructor(private readonly documentsService: CustomerDocumentsService) {}
+  constructor(
+    private readonly documentsService: CustomerDocumentsService,
+    private readonly auditService: AuditService,
+  ) {}
 
   @TenantScoped({ kind: 'customer', param: 'customerId' })
   @Get()
@@ -33,6 +38,7 @@ export class CustomerAdminDocumentsController {
   @Get(':documentId/file')
   @RequirePermissions(PERMISSIONS.CUSTOMER.READ)
   async download(
+    @CurrentUser() user: AuthContext,
     @Param('customerId') customerId: string,
     @Param('documentId') documentId: string,
     @Res({ passthrough: true }) res: Response,
@@ -41,9 +47,21 @@ export class CustomerAdminDocumentsController {
       documentId,
       customerId,
     );
+    // Passports and visas: every staff access is on the record.
+    await this.auditService.record({
+      identityId: user.sub,
+      action: 'customer_document.downloaded',
+      entityType: 'CustomerDocument',
+      entityId: documentId,
+      companyId: user.companyId ?? undefined,
+      metadata: { customerId, type: document.type },
+    });
     res.set({
       'Content-Type': document.mimeType,
-      'Content-Disposition': `inline; filename="${document.originalFileName}"`,
+      'Content-Disposition': contentDisposition(
+        'inline',
+        document.originalFileName,
+      ),
     });
     return new StreamableFile(
       fs.createReadStream(documentFilePath(NAMESPACE, document.storedFileName)),

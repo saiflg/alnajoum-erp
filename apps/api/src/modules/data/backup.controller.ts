@@ -16,6 +16,7 @@ import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { BackupService } from './backup.service';
 
 import { Roles } from '../../common/decorators/roles.decorator';
+import { contentDisposition } from '../../common/documents/file-signature';
 // A backup contains every company's data, so the whole controller is platform-administrator only.
 @Roles('SUPER_ADMIN')
 @Controller('backups')
@@ -41,7 +42,7 @@ export class BackupController {
     const filePath = this.service.getFilePath(filename);
     res.set({
       'Content-Type': 'application/octet-stream',
-      'Content-Disposition': `attachment; filename="${filename}"`,
+      'Content-Disposition': contentDisposition('attachment', filename),
     });
     return new StreamableFile(fs.createReadStream(filePath));
   }

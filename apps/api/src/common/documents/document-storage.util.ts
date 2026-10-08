@@ -1,9 +1,15 @@
 import { BadRequestException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import * as fs from 'fs';
-import { diskStorage, FileFilterCallback } from 'multer';
+import type { FileFilterCallback, StorageEngine } from 'multer';
 import * as path from 'path';
 import { Request } from 'express';
+import { Transform, TransformCallback } from 'stream';
+import {
+  detectMime,
+  EXTENSION_BY_MIME,
+  SIGNATURE_BYTES,
+} from './file-signature';
 
 export const ALLOWED_DOCUMENT_MIME_TYPES = [
   'image/jpeg',
@@ -29,27 +35,107 @@ export function documentFilePath(
   return path.join(documentsUploadRoot(namespace), storedFileName);
 }
 
+/**
+ * Holds the first bytes of the upload, decides what the file really is, and only then lets anything
+ * through to disk. The file is accepted only when its content matches the type the client declared.
+ */
+class SignatureGate extends Transform {
+  private head = Buffer.alloc(0);
+  private decided = false;
+  constructor(private readonly declaredMime: string) {
+    super();
+  }
+
+  private decide(): Error | null {
+    this.decided = true;
+    const real = detectMime(this.head);
+    if (!real || real !== this.declaredMime) {
+      return new BadRequestException(
+        'The file content does not match its declared type. Only genuine JPEG, PNG or PDF files are accepted.',
+      );
+    }
+    return null;
+  }
+
+  _transform(chunk: Buffer, _enc: BufferEncoding, cb: TransformCallback) {
+    if (this.decided) return cb(null, chunk);
+    this.head = Buffer.concat([this.head, chunk]);
+    if (this.head.length < SIGNATURE_BYTES) return cb(); // not enough to judge yet
+    const err = this.decide();
+    if (err) return cb(err);
+    const out = this.head;
+    this.head = Buffer.alloc(0);
+    cb(null, out);
+  }
+
+  _flush(cb: TransformCallback) {
+    if (this.decided) return cb();
+    const err = this.decide(); // a tiny file: judge what there is
+    if (err) return cb(err);
+    this.push(this.head);
+    cb();
+  }
+}
+
+/**
+ * Multer disk storage that (a) names the file from its VERIFIED type, never the client's file name (a
+ * client-chosen extension such as .html was kept before), and (b) refuses content that is not what it
+ * claims to be. Same random-UUID naming and folder layout as before.
+ */
+class VerifiedDiskStorage implements StorageEngine {
+  constructor(private readonly namespace: string) {}
+
+  _handleFile(
+    _req: Request,
+    file: Express.Multer.File,
+    callback: (error?: unknown, info?: Partial<Express.Multer.File>) => void,
+  ): void {
+    const dir = documentsUploadRoot(this.namespace);
+    fs.mkdirSync(dir, { recursive: true });
+    const ext =
+      EXTENSION_BY_MIME[file.mimetype as keyof typeof EXTENSION_BY_MIME] ?? '';
+    const filename = `${randomUUID()}${ext}`;
+    const finalPath = path.join(dir, filename);
+    const out = fs.createWriteStream(finalPath);
+    const gate = new SignatureGate(file.mimetype);
+
+    let settled = false;
+    const fail = (error: unknown) => {
+      if (settled) return;
+      settled = true;
+      file.stream.unpipe();
+      out.destroy();
+      fs.unlink(finalPath, () => callback(error));
+    };
+
+    gate.on('error', fail);
+    out.on('error', fail);
+    file.stream.on('error', fail);
+    out.on('finish', () => {
+      if (settled) return;
+      settled = true;
+      callback(null, {
+        destination: dir,
+        filename,
+        path: finalPath,
+        size: out.bytesWritten,
+      });
+    });
+    file.stream.pipe(gate).pipe(out);
+  }
+
+  _removeFile(
+    _req: Request,
+    file: Express.Multer.File,
+    callback: (error: Error | null) => void,
+  ): void {
+    fs.unlink(file.path, (err) => callback(err && err.code !== 'ENOENT' ? err : null));
+  }
+}
+
 export function createDocumentMulterOptions(namespace: string) {
   return {
-    storage: diskStorage({
-      destination: (
-        _req: Request,
-        _file: Express.Multer.File,
-        callback: (error: Error | null, destination: string) => void,
-      ) => {
-        const dir = documentsUploadRoot(namespace);
-        fs.mkdirSync(dir, { recursive: true });
-        callback(null, dir);
-      },
-      filename: (
-        _req: Request,
-        file: Express.Multer.File,
-        callback: (error: Error | null, filename: string) => void,
-      ) => {
-        const ext = path.extname(file.originalname);
-        callback(null, `${randomUUID()}${ext}`);
-      },
-    }),
+    storage: new VerifiedDiskStorage(namespace),
     limits: { fileSize: MAX_DOCUMENT_SIZE_BYTES },
     fileFilter: (
       _req: Request,

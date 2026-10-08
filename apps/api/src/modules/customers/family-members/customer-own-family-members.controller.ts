@@ -32,6 +32,7 @@ import { CreateFamilyMemberDto } from './dto/create-family-member.dto';
 import { UpdateFamilyMemberDto } from './dto/update-family-member.dto';
 import { FamilyMembersService } from './family-members.service';
 
+import { contentDisposition } from '../../../common/documents/file-signature';
 @Controller('customers/me/family-members')
 export class CustomerOwnFamilyMembersController {
   constructor(
@@ -154,7 +155,10 @@ export class CustomerOwnFamilyMembersController {
     );
     res.set({
       'Content-Type': document.mimeType,
-      'Content-Disposition': `inline; filename="${document.originalFileName}"`,
+      'Content-Disposition': contentDisposition(
+        'inline',
+        document.originalFileName,
+      ),
     });
     return new StreamableFile(
       fs.createReadStream(
