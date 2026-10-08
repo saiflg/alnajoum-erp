@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { AppShell } from '@/components/AppShell';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { ADMIN_NAV } from '@/lib/admin-nav';
-import { apiFileUrl, apiRequest, ApiError } from '@/lib/api';
+import { apiDownload, apiRequest, ApiError } from '@/lib/api';
 import { formatDateTime } from '@/lib/format';
 
 interface BackupInfo {
@@ -118,12 +118,16 @@ export default function BackupsPage() {
                   <td className="px-4 py-2 text-xs text-slate-500">{formatDateTime(b.createdAt)}</td>
                   <td className="px-4 py-2 text-right">
                     <div className="flex justify-end gap-4">
-                      <a
-                        href={apiFileUrl(`/backups/${b.filename}/download`)}
+                      <button
+                        onClick={() =>
+                          apiDownload(`/backups/${b.filename}/download`, b.filename).catch((err) =>
+                            setError(err instanceof ApiError ? err.message : 'Download failed'),
+                          )
+                        }
                         className="text-xs font-medium text-amber-700 hover:underline"
                       >
                         Download
-                      </a>
+                      </button>
                       <button
                         onClick={() => handleDelete(b.filename)}
                         disabled={deletingFilename === b.filename}

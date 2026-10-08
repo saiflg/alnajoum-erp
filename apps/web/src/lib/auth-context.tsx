@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { apiRequest, ApiError } from './api';
+import { apiRequest, ApiError, clearStepUp } from './api';
 import { clearOfflineCache } from './offline-cache';
 import { CurrentUser } from './types';
 
@@ -118,6 +118,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // offline check-ins for this identity, alongside the normal cookie
     // invalidation above.
     if (user) await clearOfflineCache(user.id);
+    clearStepUp();
     setUser(null);
   }, [user]);
 
