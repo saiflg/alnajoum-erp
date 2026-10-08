@@ -9,6 +9,7 @@ import { RegisterUmrahDto } from './dto/register-umrah.dto';
 import { UmrahRegistrationsService } from './umrah-registrations.service';
 import { RequireFeature } from '../../common/decorators/require-feature.decorator';
 
+import { TenantScoped } from '../../common/tenancy/tenant-scoped.decorator';
 @RequireFeature('ENABLE_UMRAH')
 @Controller('umrah/registrations')
 export class UmrahRegistrationsAdminController {
@@ -41,6 +42,7 @@ export class UmrahRegistrationsAdminController {
   }
 
   /** Staff registering a customer on their behalf (walk-in / phone booking). */
+  @TenantScoped({ kind: 'customer', param: 'customerId' })
   @Post('for/:customerId')
   @RequirePermissions(PERMISSIONS.UMRAH_REGISTRATION.CREATE)
   async registerFor(

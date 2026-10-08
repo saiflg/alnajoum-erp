@@ -477,6 +477,7 @@ model Company {
   companyInvestments CompanyInvestment[]
   journalEntries JournalEntry[]
   dailyClosings DailyClosing[]
+  corporateAccounts CorporateAccount[]
 
   @@map("companies")
 }
@@ -3771,6 +3772,10 @@ enum CorporateBookingStatus {
 
 model CorporateAccount {
   id   String @id @default(cuid())
+
+  // Phase 22 - the agency (tenant) this corporate client belongs to.
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: Restrict)
   name String
 
   registrationNumber String?
@@ -3809,6 +3814,7 @@ model CorporateAccount {
   flightBookings FlightBooking[]
 
   @@index([managedBranchId])
+  @@index([companyId])
   @@map("corporate_accounts")
 }
 

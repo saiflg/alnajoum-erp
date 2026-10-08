@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { JournalEntryStatus, Prisma } from '@prisma/client';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
@@ -333,7 +338,7 @@ export class LedgerService {
     });
     // Another company's entry is indistinguishable from a missing one.
     if (!original || (tenant !== undefined && original.companyId !== tenant)) {
-      throw new BadRequestException('Journal entry not found');
+      throw new NotFoundException('Journal entry not found');
     }
     if (original.status === JournalEntryStatus.REVERSED) {
       throw new BadRequestException('This journal entry was already reversed');

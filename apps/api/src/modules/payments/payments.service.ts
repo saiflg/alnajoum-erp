@@ -299,6 +299,12 @@ export class PaymentsService {
     reference: string,
     result: VerifyCheckoutResult,
   ) {
+    // Wallet top-ups share the provider and the webhook endpoint but are not invoice intents; hand them
+    // to the wallet (decoupled by an event, since the wallet module itself depends on payments).
+    if (reference.startsWith('WDEP-')) {
+      this.eventEmitter.emit('wallet.deposit.webhook', { reference, result });
+      return;
+    }
     const intent = await this.prisma.paymentIntent.findUnique({
       where: { reference },
     });

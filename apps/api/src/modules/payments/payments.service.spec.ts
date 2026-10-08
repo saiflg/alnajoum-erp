@@ -724,6 +724,23 @@ describe('PaymentsService', () => {
   });
 
   describe('handleProviderWebhookEvent', () => {
+    it('hands a wallet top-up (WDEP-) to the wallet instead of treating it as an unknown invoice intent', async () => {
+      const result = {
+        reference: 'WDEP-1',
+        success: true,
+        amount: 1000,
+        currency: 'NGN',
+      };
+
+      await service.handleProviderWebhookEvent('WDEP-1', result);
+
+      expect(eventEmitter.emit).toHaveBeenCalledWith('wallet.deposit.webhook', {
+        reference: 'WDEP-1',
+        result,
+      });
+      expect(prisma.paymentIntent.findUnique).not.toHaveBeenCalled();
+    });
+
     it('silently ignores a reference it does not recognize', async () => {
       prisma.paymentIntent.findUnique.mockResolvedValue(null);
 

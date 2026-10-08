@@ -5,8 +5,10 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { OnEvent } from '@nestjs/event-emitter';
 import {
   InvoiceStatus,
   PaymentMethod,
@@ -63,6 +65,8 @@ const isUniqueViolation = (error: unknown): boolean =>
 
 @Injectable()
 export class WalletService {
+  private readonly logger = new Logger(WalletService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
@@ -186,6 +190,31 @@ export class WalletService {
     };
   }
 
+  /**
+   * The provider's server-to-server notification for a wallet top-up (forwarded by PaymentsService,
+   * which owns the webhook endpoint). Before this, a top-up was credited only if the customer's
+   * browser came back after paying; closing the tab lost the money until someone noticed.
+   */
+  @OnEvent('wallet.deposit.webhook')
+  async onDepositWebhook(payload: {
+    reference: string;
+    result: VerifyCheckoutResult;
+  }): Promise<void> {
+    try {
+      const transaction = await this.prisma.walletTransaction.findUnique({
+        where: { reference: payload.reference },
+      });
+      if (!transaction || transaction.type !== WalletTransactionType.DEPOSIT) {
+        return;
+      }
+      await this.finalizeDeposit(transaction.id, payload.result);
+    } catch (error) {
+      this.logger.error(
+        `Wallet deposit webhook for ${payload.reference} failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
   /** Called when the browser returns from the provider's hosted checkout page. */
   async verifyDeposit(customerId: string, reference: string) {
     const transaction = await this.prisma.walletTransaction.findUnique({
@@ -250,26 +279,36 @@ export class WalletService {
     // ledger-affecting write elsewhere. Only the caller whose update
     // actually changes a row (count 1) proceeds; a concurrent loser sees
     // count 0 and quietly backs off.
-    const claim = await this.prisma.walletTransaction.updateMany({
-      where: { id: transactionId, status: WalletTransactionStatus.PENDING },
-      data: {
-        status: succeeded
-          ? WalletTransactionStatus.COMPLETED
-          : WalletTransactionStatus.FAILED,
-      },
+    //
+    // The claim and the ledger entry are ONE transaction: a crash between them can no longer leave a
+    // wallet credited (the balance is the sum of its transactions) with nothing in the books.
+    const completed = await this.prisma.$transaction(async (tx) => {
+      const claim = await tx.walletTransaction.updateMany({
+        where: { id: transactionId, status: WalletTransactionStatus.PENDING },
+        data: {
+          status: succeeded
+            ? WalletTransactionStatus.COMPLETED
+            : WalletTransactionStatus.FAILED,
+        },
+      });
+      if (claim.count === 0 || !succeeded) return false;
+      await this.ledgerService.post(
+        {
+          debitCode: ACCOUNT_CODES.BANK_ACCOUNTS,
+          creditCode: ACCOUNT_CODES.CUSTOMER_WALLET_LIABILITY,
+          amount: transaction.amount,
+          currency: transaction.currency,
+          reference: transaction.reference,
+          description: transaction.description,
+          sourceModule: 'WALLET',
+          sourceId: transaction.id,
+          companyId: transaction.wallet.customer.companyId,
+        },
+        tx,
+      );
+      return true;
     });
-    if (claim.count === 0 || !succeeded) return;
-
-    await this.ledgerService.post({
-      debitCode: ACCOUNT_CODES.BANK_ACCOUNTS,
-      creditCode: ACCOUNT_CODES.CUSTOMER_WALLET_LIABILITY,
-      amount: transaction.amount,
-      currency: transaction.currency,
-      reference: transaction.reference,
-      description: transaction.description,
-      sourceModule: 'WALLET',
-      sourceId: transaction.id,
-    });
+    if (!completed) return;
 
     await this.notificationsService.sendWalletUpdate(
       transaction.wallet.customer.identity.email,

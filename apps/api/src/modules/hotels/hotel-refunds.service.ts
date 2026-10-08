@@ -131,8 +131,25 @@ export class HotelRefundsService {
 
     const preview = await this.previewRefund(bookingId);
 
-    const [refund] = await this.prisma.$transaction([
-      this.prisma.hotelRefund.create({
+    // The status flip is the claim, taken first and inside the same transaction as the refund row: of
+    // two simultaneous requests only one finds the booking not yet refunded, so the refund (and its
+    // ledger entry below) can happen only once.
+    const refund = await this.prisma.$transaction(async (tx) => {
+      const claim = await tx.hotelBooking.updateMany({
+        where: {
+          id: bookingId,
+          status: {
+            notIn: [HotelBookingStatus.REFUNDED, HotelBookingStatus.CANCELLED],
+          },
+        },
+        data: { status: HotelBookingStatus.REFUNDED },
+      });
+      if (claim.count === 0) {
+        throw new ConflictException(
+          'This booking has already been cancelled/refunded',
+        );
+      }
+      return tx.hotelRefund.create({
         data: {
           bookingId,
           requestedByStaffId: opts.requestedByStaffId,
@@ -146,12 +163,8 @@ export class HotelRefundsService {
           reason: opts.reason,
           completedAt: new Date(),
         },
-      }),
-      this.prisma.hotelBooking.update({
-        where: { id: bookingId },
-        data: { status: HotelBookingStatus.REFUNDED },
-      }),
-    ]);
+      });
+    });
 
     await this.invoicesService.voidHotelBookingIfUnpaid(bookingId);
 

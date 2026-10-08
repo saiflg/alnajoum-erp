@@ -7,6 +7,8 @@ import { CustomersService } from '../customers/customers.service';
 import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { ReferralsService } from './referrals.service';
 
+import { TenantScoped } from '../../common/tenancy/tenant-scoped.decorator';
+import { resolveTenantFilter } from '../../common/utils/tenant.util';
 @Controller('crm/referrals')
 export class ReferralsController {
   constructor(
@@ -32,10 +34,14 @@ export class ReferralsController {
 
   @Get()
   @RequirePermissions(PERMISSIONS.CRM.REFERRAL_MANAGE)
-  listAll(@Query('status') status?: ReferralStatus) {
-    return this.referralsService.listAll({ status });
+  listAll(
+    @CurrentUser() user: AuthContext,
+    @Query('status') status?: ReferralStatus,
+  ) {
+    return this.referralsService.listAll({ status }, resolveTenantFilter(user));
   }
 
+  @TenantScoped('referral')
   @Post(':id/qualify')
   @RequirePermissions(PERMISSIONS.CRM.REFERRAL_MANAGE)
   markQualified(
@@ -55,6 +61,7 @@ export class ReferralsController {
     );
   }
 
+  @TenantScoped('referral')
   @Post(':id/reward')
   @RequirePermissions(PERMISSIONS.CRM.REFERRAL_MANAGE)
   markRewarded(

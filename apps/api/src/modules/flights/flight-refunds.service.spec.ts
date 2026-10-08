@@ -27,12 +27,17 @@ jest.mock('@nestjs/schedule', () => ({
 describe('FlightRefundsService', () => {
   let service: FlightRefundsService;
   let prisma: {
-    flightBooking: { findUnique: jest.Mock; update: jest.Mock };
+    flightBooking: {
+      findUnique: jest.Mock;
+      update: jest.Mock;
+      updateMany: jest.Mock;
+    };
     flightRefund: {
       create: jest.Mock;
       findMany: jest.Mock;
       findUnique: jest.Mock;
       update: jest.Mock;
+      updateMany: jest.Mock;
     };
     customer: { findUnique: jest.Mock };
     approvalRequest: { findMany: jest.Mock };
@@ -60,12 +65,17 @@ describe('FlightRefundsService', () => {
 
   beforeEach(async () => {
     prisma = {
-      flightBooking: { findUnique: jest.fn(), update: jest.fn() },
+      flightBooking: {
+        findUnique: jest.fn(),
+        update: jest.fn(),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
       flightRefund: {
         create: jest.fn(),
         findMany: jest.fn(),
         findUnique: jest.fn(),
         update: jest.fn(),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       customer: {
         findUnique: jest.fn().mockResolvedValue({ companyId: 'company-1' }),
@@ -226,10 +236,40 @@ describe('FlightRefundsService', () => {
         requestedByIdentityId: 'identity-1',
       });
 
-      expect(prisma.flightBooking.update).toHaveBeenCalledWith(
+      expect(prisma.flightBooking.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
           data: { status: FlightBookingStatus.REFUND_REQUESTED },
         }),
+      );
+    });
+
+    it('a second simultaneous request is refused before any refund or approval is created', async () => {
+      prisma.flightBooking.findUnique.mockResolvedValue(booking);
+      prisma.flightBooking.updateMany.mockResolvedValue({ count: 0 }); // already REFUND_REQUESTED
+
+      await expect(
+        service.requestRefund('booking-1', {
+          requestedByIdentityId: 'identity-1',
+        }),
+      ).rejects.toThrow(/already been requested/);
+      expect(prisma.flightRefund.create).not.toHaveBeenCalled();
+    });
+
+    it('the claim excludes bookings already refunded, cancelled or awaiting refund', async () => {
+      prisma.flightBooking.findUnique.mockResolvedValue(booking);
+      prisma.flightRefund.create.mockResolvedValue({ id: 'refund-1' });
+
+      await service.requestRefund('booking-1', {
+        requestedByIdentityId: 'identity-1',
+      });
+
+      const where = prisma.flightBooking.updateMany.mock.calls[0][0].where;
+      expect(where.status.notIn).toEqual(
+        expect.arrayContaining([
+          FlightBookingStatus.REFUNDED,
+          FlightBookingStatus.CANCELLED,
+          FlightBookingStatus.REFUND_REQUESTED,
+        ]),
       );
     });
   });

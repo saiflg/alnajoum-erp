@@ -27,13 +27,17 @@ export class CorporateTravelService {
   // Corporate accounts (the client company)
   // ---------------------------------------------------------------------
 
-  createAccount(dto: CreateCorporateAccountDto) {
-    return this.prisma.corporateAccount.create({ data: dto });
+  createAccount(dto: CreateCorporateAccountDto, companyId?: string) {
+    return this.prisma.corporateAccount.create({ data: { ...dto, companyId } });
   }
 
-  listAccounts(filters: { managedBranchId?: string; isActive?: boolean }) {
+  listAccounts(
+    filters: { managedBranchId?: string; isActive?: boolean },
+    tenant?: string,
+  ) {
     return this.prisma.corporateAccount.findMany({
-      where: filters,
+      where: { ...filters, ...(tenant !== undefined && { companyId: tenant }) },
+      take: 500,
       include: { managedBranch: { select: { name: true } } },
       orderBy: { createdAt: 'desc' },
     });
@@ -141,12 +145,21 @@ export class CorporateTravelService {
     return booking;
   }
 
-  listBookings(filters: {
-    corporateAccountId?: string;
-    status?: CorporateBookingStatus;
-  }) {
+  listBookings(
+    filters: {
+      corporateAccountId?: string;
+      status?: CorporateBookingStatus;
+    },
+    tenant?: string,
+  ) {
     return this.prisma.corporateBooking.findMany({
-      where: filters,
+      where: {
+        ...filters,
+        ...(tenant !== undefined && {
+          corporateAccount: { companyId: tenant },
+        }),
+      },
+      take: 500,
       include: {
         corporateAccount: { select: { name: true } },
         travelers: { include: { traveler: true } },

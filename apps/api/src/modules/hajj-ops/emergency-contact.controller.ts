@@ -4,6 +4,7 @@ import { RequirePermissions } from '../../common/decorators/permissions.decorato
 import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { PilgrimLookupService } from './pilgrim-lookup.service';
 
+import { TenantScoped } from '../../common/tenancy/tenant-scoped.decorator';
 /**
  * Spec #27 — emergency contact access restricted to authorized personnel.
  * Reuses Customer/FamilyMember's existing emergencyContactName/Phone fields
@@ -14,6 +15,15 @@ import { PilgrimLookupService } from './pilgrim-lookup.service';
 export class EmergencyContactController {
   constructor(private readonly pilgrimLookup: PilgrimLookupService) {}
 
+  @TenantScoped({
+    kindBy: {
+      param: 'type',
+      map: {
+        HAJJ: 'hajjRegistrationPilgrim',
+        UMRAH: 'umrahRegistrationPilgrim',
+      },
+    },
+  })
   @Get(':type/:id')
   @RequirePermissions(PERMISSIONS.HAJJ_OPS.EMERGENCY_CONTACT_VIEW)
   async get(

@@ -1,14 +1,14 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Inject,
   Injectable,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { IncentiveStatus, PayoutStatus } from '@prisma/client';
-import { randomBytes } from 'crypto';
+import { IncentiveStatus, PayoutStatus, StaffPayout } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { FinancePostingService } from '../finance/finance-posting.service';
@@ -19,10 +19,6 @@ import { STAFF_PAYOUT_PROVIDER } from './providers/staff-payout-provider.port';
 import type { StaffPayoutProviderPort } from './providers/staff-payout-provider.port';
 
 import { tenantWhere } from '../../common/tenancy/tenant-guard.service';
-function generatePayoutReference(): string {
-  return `PAYOUT-${randomBytes(4).toString('hex').toUpperCase()}`;
-}
-
 /**
  * Turns an APPROVED StaffIncentive into money moved, following the exact
  * ten-step flow the spec lays out: verify bank details, check the
@@ -91,27 +87,62 @@ export class StaffPayoutsService {
       );
     }
 
-    // Reuse the existing payout row on retry rather than creating a second
-    // one — StaffPayout.incentiveId is unique, so a fresh create() would
-    // fail on retry anyway; this makes that the intended path rather than
-    // an error case.
-    const payout = await this.prisma.staffPayout.upsert({
-      where: { incentiveId },
-      create: {
-        incentiveId,
-        staffId: staff.id,
-        amount: incentive.amount,
-        currency: incentive.currency,
-        status: PayoutStatus.PENDING,
-        provider: 'mock',
-        requestedByStaffId,
-      },
-      update: {
-        status: PayoutStatus.PENDING,
-        providerError: null,
-        requestedByStaffId,
-      },
-    });
+    // Segregation of duties: nobody triggers the transfer of money to their own bank account.
+    // (The automatic sweep passes null and is governed by its own per-company flag.)
+    if (requestedByStaffId && requestedByStaffId === staff.id) {
+      throw new ForbiddenException(
+        'You cannot request a payout to your own bank account',
+      );
+    }
+
+    // The payout row is the claim. At most ONE caller may move it into PENDING (in flight) before the
+    // provider is contacted, so a double click, the 30-minute sweep racing a manual click, or a retry
+    // can never send the same incentive twice:
+    //  - no row yet: create it PENDING (StaffPayout.incentiveId is unique, so a simultaneous second
+    //    create fails and that caller backs off);
+    //  - a FAILED row: atomically flip FAILED -> PENDING (only one retrier wins);
+    //  - a PENDING row: a payout is already in flight (or a previous attempt died mid-flight and needs a
+    //    human to reconcile it with the provider) - never send again.
+    let payout: StaffPayout;
+    if (!incentive.payout) {
+      try {
+        payout = await this.prisma.staffPayout.create({
+          data: {
+            incentiveId,
+            staffId: staff.id,
+            amount: incentive.amount,
+            currency: incentive.currency,
+            status: PayoutStatus.PENDING,
+            provider: 'mock',
+            requestedByStaffId,
+          },
+        });
+      } catch (error) {
+        if ((error as { code?: string })?.code === 'P2002') {
+          throw new ConflictException(
+            'A payout for this incentive is already being processed',
+          );
+        }
+        throw error;
+      }
+    } else {
+      const claim = await this.prisma.staffPayout.updateMany({
+        where: { id: incentive.payout.id, status: PayoutStatus.FAILED },
+        data: {
+          status: PayoutStatus.PENDING,
+          providerError: null,
+          requestedByStaffId,
+        },
+      });
+      if (claim.count === 0) {
+        throw new ConflictException(
+          'A payout for this incentive is already being processed or has completed',
+        );
+      }
+      payout = await this.prisma.staffPayout.findUniqueOrThrow({
+        where: { id: incentive.payout.id },
+      });
+    }
 
     await this.auditService.record({
       action: 'staff_payout.requested',
@@ -126,7 +157,8 @@ export class StaffPayoutsService {
       bankName: staff.bankName,
       bankAccountNumber: staff.bankAccountNumber,
       bankAccountName: staff.bankAccountName,
-      reference: generatePayoutReference(),
+      // Stable per payout row, so a provider that supports idempotency keys can recognise a repeat.
+      reference: `PAYOUT-${payout.id}`,
     });
 
     if (result.success) {

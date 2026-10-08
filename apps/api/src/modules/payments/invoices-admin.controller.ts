@@ -21,6 +21,7 @@ import { InvoicesService } from './invoices.service';
 import { PaymentsService } from './payments.service';
 import { ReceiptsService } from './receipts.service';
 
+import { TenantScoped } from '../../common/tenancy/tenant-scoped.decorator';
 @Controller('invoices')
 export class InvoicesAdminController {
   constructor(
@@ -53,6 +54,7 @@ export class InvoicesAdminController {
     );
   }
 
+  @TenantScoped('invoice')
   @Post(':id/payments')
   @RequirePermissions(PERMISSIONS.PAYMENT.RECORD)
   async recordPayment(
@@ -65,6 +67,7 @@ export class InvoicesAdminController {
   }
 
   /** Streams a PDF receipt for any payment (Finance/admin view). */
+  @TenantScoped({ kind: 'payment', param: 'paymentId' })
   @Get('payments/:paymentId/receipt.pdf')
   @RequirePermissions(PERMISSIONS.INVOICE.READ)
   async downloadReceipt(

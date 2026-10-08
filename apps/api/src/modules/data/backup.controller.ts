@@ -15,6 +15,9 @@ import type { AuthContext } from '../../common/interfaces/auth-context.interface
 import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { BackupService } from './backup.service';
 
+import { Roles } from '../../common/decorators/roles.decorator';
+// A backup contains every company's data, so the whole controller is platform-administrator only.
+@Roles('SUPER_ADMIN')
 @Controller('backups')
 @RequirePermissions(PERMISSIONS.BACKUP.MANAGE)
 export class BackupController {

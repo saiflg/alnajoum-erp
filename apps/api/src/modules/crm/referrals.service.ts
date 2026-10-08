@@ -7,6 +7,7 @@ import { ReferralStatus } from '@prisma/client';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 
+import { tenantWhere } from '../../common/tenancy/tenant-guard.service';
 function generateReferralCode(): string {
   return `REF${randomBytes(3).toString('hex').toUpperCase()}`;
 }
@@ -52,9 +53,10 @@ export class ReferralsService {
     });
   }
 
-  listAll(filters: { status?: ReferralStatus }) {
+  listAll(filters: { status?: ReferralStatus }, tenant?: string) {
     return this.prisma.referral.findMany({
-      where: filters,
+      where: { ...filters, ...tenantWhere('referral', tenant) },
+      take: 500,
       include: {
         referredCustomer: { select: { firstName: true, lastName: true } },
         referralCode: {

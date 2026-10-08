@@ -109,6 +109,22 @@ export const TENANT_SCOPES = {
     model: 'umrahRegistrationPilgrim',
     scope: (c: string) => ({ registration: { customer: { companyId: c } } }),
   },
+  payment: {
+    model: 'payment',
+    scope: (c: string) => ({
+      invoice: {
+        OR: [
+          { customer: { companyId: c } },
+          { issuedByStaff: { companyId: c } },
+          { corporateBooking: { corporateAccount: { companyId: c } } },
+        ],
+      },
+    }),
+  },
+  referral: {
+    model: 'referral',
+    scope: (c: string) => ({ referredCustomer: { companyId: c } }),
+  },
   staffIncentive: {
     model: 'staffIncentive',
     scope: (c: string) => ({ staff: { companyId: c } }),
@@ -127,11 +143,11 @@ export const TENANT_SCOPES = {
   },
   corporateBooking: {
     model: 'corporateBooking',
-    scope: (c: string) => ({ bookedByStaff: { companyId: c } }),
+    scope: (c: string) => ({ corporateAccount: { companyId: c } }),
   },
   corporateAccount: {
     model: 'corporateAccount',
-    scope: (c: string) => ({ managedBranch: { companyId: c } }),
+    scope: (c: string) => ({ companyId: c }),
   },
   lead: {
     model: 'lead',
@@ -149,7 +165,7 @@ export const TENANT_SCOPES = {
       OR: [
         { customer: { companyId: c } },
         { issuedByStaff: { companyId: c } },
-        { corporateBooking: { bookedByStaff: { companyId: c } } },
+        { corporateBooking: { corporateAccount: { companyId: c } } },
       ],
     }),
   },

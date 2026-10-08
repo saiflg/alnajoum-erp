@@ -209,10 +209,26 @@ export class FlightRefundsService {
     // REFUND_REQUESTED and the original status is otherwise lost.
     const originalBookingStatus = booking.status;
 
-    await this.prisma.flightBooking.update({
-      where: { id: bookingId },
+    // Atomic claim: only ONE request can move the booking into REFUND_REQUESTED, so a double click or a
+    // second staff member cannot open two refunds (and two approvals) for the same ticket.
+    const claim = await this.prisma.flightBooking.updateMany({
+      where: {
+        id: bookingId,
+        status: {
+          notIn: [
+            FlightBookingStatus.REFUNDED,
+            FlightBookingStatus.CANCELLED,
+            FlightBookingStatus.REFUND_REQUESTED,
+          ],
+        },
+      },
       data: { status: FlightBookingStatus.REFUND_REQUESTED },
     });
+    if (claim.count === 0) {
+      throw new ConflictException(
+        'A refund has already been requested for this booking, or it is already cancelled/refunded',
+      );
+    }
 
     const refund = await this.prisma.flightRefund.create({
       data: {
@@ -272,6 +288,14 @@ export class FlightRefundsService {
       include: { booking: true },
     });
     if (!refund || refund.status !== FlightRefundStatus.REQUESTED) return;
+
+    // Atomic REQUESTED -> PROCESSING before the provider is contacted: two sweeps (or a sweep and a
+    // retry) can never both send the refund to the airline.
+    const claimed = await this.prisma.flightRefund.updateMany({
+      where: { id: refundId, status: FlightRefundStatus.REQUESTED },
+      data: { status: FlightRefundStatus.PROCESSING },
+    });
+    if (claimed.count === 0) return;
 
     const { booking } = refund;
     const originalBookingStatus =

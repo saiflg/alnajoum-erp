@@ -9,6 +9,7 @@ import { RegisterHajjDto } from './dto/register-hajj.dto';
 import { HajjRegistrationsService } from './hajj-registrations.service';
 import { RequireFeature } from '../../common/decorators/require-feature.decorator';
 
+import { TenantScoped } from '../../common/tenancy/tenant-scoped.decorator';
 @RequireFeature('ENABLE_HAJJ')
 @Controller('hajj/registrations')
 export class HajjRegistrationsAdminController {
@@ -41,6 +42,7 @@ export class HajjRegistrationsAdminController {
   }
 
   /** Staff registering a customer on their behalf (walk-in / phone booking). */
+  @TenantScoped({ kind: 'customer', param: 'customerId' })
   @Post('for/:customerId')
   @RequirePermissions(PERMISSIONS.HAJJ_REGISTRATION.CREATE)
   async registerFor(

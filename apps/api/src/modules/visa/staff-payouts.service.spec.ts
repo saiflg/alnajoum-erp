@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -28,7 +29,13 @@ describe('StaffPayoutsService', () => {
       update: jest.Mock;
       findMany: jest.Mock;
     };
-    staffPayout: { upsert: jest.Mock; update: jest.Mock; findMany: jest.Mock };
+    staffPayout: {
+      create: jest.Mock;
+      update: jest.Mock;
+      updateMany: jest.Mock;
+      findUniqueOrThrow: jest.Mock;
+      findMany: jest.Mock;
+    };
     staff: { findUnique: jest.Mock };
     identity: { findMany: jest.Mock };
     $transaction: jest.Mock;
@@ -69,8 +76,10 @@ describe('StaffPayoutsService', () => {
         findMany: jest.fn(),
       },
       staffPayout: {
-        upsert: jest.fn(),
+        create: jest.fn(),
         update: jest.fn(),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        findUniqueOrThrow: jest.fn(),
         findMany: jest.fn(),
       },
       staff: { findUnique: jest.fn() },
@@ -102,7 +111,11 @@ describe('StaffPayoutsService', () => {
     service = module.get(StaffPayoutsService);
 
     prisma.staffIncentive.findUnique.mockResolvedValue(approvedIncentive);
-    prisma.staffPayout.upsert.mockResolvedValue({
+    prisma.staffPayout.create.mockResolvedValue({
+      id: 'payout-1',
+      status: PayoutStatus.PENDING,
+    });
+    prisma.staffPayout.findUniqueOrThrow.mockResolvedValue({
       id: 'payout-1',
       status: PayoutStatus.PENDING,
     });
@@ -232,7 +245,13 @@ describe('StaffPayoutsService', () => {
   });
 
   describe('retryPayout', () => {
-    it('reuses the same payout row via upsert rather than creating a second one', async () => {
+    const failedRow = { id: 'payout-1', status: PayoutStatus.FAILED };
+
+    it('reuses the failed payout row (atomic FAILED -> PENDING) rather than creating a second one', async () => {
+      prisma.staffIncentive.findUnique.mockResolvedValue({
+        ...approvedIncentive,
+        payout: failedRow,
+      });
       provider.sendPayout.mockResolvedValue({
         success: true,
         providerReference: 'MOCKPAY-2',
@@ -244,9 +263,68 @@ describe('StaffPayoutsService', () => {
 
       await service.retryPayout('inc-1', 'requester-1');
 
-      expect(prisma.staffPayout.upsert).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { incentiveId: 'inc-1' } }),
+      expect(prisma.staffPayout.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'payout-1', status: PayoutStatus.FAILED },
+        }),
       );
+      expect(prisma.staffPayout.create).not.toHaveBeenCalled();
+    });
+
+    it('two simultaneous retries send the money once: the loser is refused before the provider is called', async () => {
+      prisma.staffIncentive.findUnique.mockResolvedValue({
+        ...approvedIncentive,
+        payout: failedRow,
+      });
+      prisma.staffPayout.updateMany.mockResolvedValue({ count: 0 }); // somebody else claimed it
+      await expect(service.retryPayout('inc-1', 'requester-1')).rejects.toThrow(
+        ConflictException,
+      );
+      expect(provider.sendPayout).not.toHaveBeenCalled();
+    });
+
+    it('never re-sends while a payout is already PENDING (in flight or awaiting reconciliation)', async () => {
+      prisma.staffIncentive.findUnique.mockResolvedValue({
+        ...approvedIncentive,
+        payout: { id: 'payout-1', status: PayoutStatus.PENDING },
+      });
+      prisma.staffPayout.updateMany.mockResolvedValue({ count: 0 });
+      await expect(
+        service.attemptPayout('inc-1', 'requester-1'),
+      ).rejects.toThrow(ConflictException);
+      expect(provider.sendPayout).not.toHaveBeenCalled();
+    });
+
+    it('a simultaneous first attempt loses cleanly on the unique incentive constraint', async () => {
+      prisma.staffPayout.create.mockRejectedValue(
+        Object.assign(new Error('dup'), { code: 'P2002' }),
+      );
+      await expect(
+        service.attemptPayout('inc-1', 'requester-1'),
+      ).rejects.toThrow(ConflictException);
+      expect(provider.sendPayout).not.toHaveBeenCalled();
+    });
+
+    it('sends with a reference derived from the payout row, stable across retries', async () => {
+      provider.sendPayout.mockResolvedValue({
+        success: true,
+        providerReference: 'X',
+      });
+      prisma.staffPayout.update.mockResolvedValue({
+        id: 'payout-1',
+        status: PayoutStatus.SUCCESSFUL,
+      });
+      await service.attemptPayout('inc-1', 'requester-1');
+      expect(provider.sendPayout).toHaveBeenCalledWith(
+        expect.objectContaining({ reference: 'PAYOUT-payout-1' }),
+      );
+    });
+
+    it('refuses to let a staff member request a payout to their own bank account', async () => {
+      await expect(service.attemptPayout('inc-1', 'staff-1')).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(provider.sendPayout).not.toHaveBeenCalled();
     });
   });
 
@@ -291,9 +369,9 @@ describe('StaffPayoutsService', () => {
       expect(prisma.staffIncentive.findUnique).toHaveBeenCalledWith(
         expect.objectContaining({ where: { id: 'inc-1' } }),
       );
-      expect(prisma.staffPayout.upsert).toHaveBeenCalledWith(
+      expect(prisma.staffPayout.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          create: expect.objectContaining({ requestedByStaffId: null }),
+          data: expect.objectContaining({ requestedByStaffId: null }),
         }),
       );
       expect(result).toEqual({ considered: 1, paidOut: 1, failed: 0 });

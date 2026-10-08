@@ -19,6 +19,8 @@ try {
   $flags = @('--per-route', '12', '--out', "$Out.json")
   if ($ReadsOnly) { $flags += '--reads-only' }
   node scripts/security/cross-tenant-attack.mjs @flags | Tee-Object -FilePath "$Out.txt"
+  node scripts/security/targeted-tenant-checks.mjs | Tee-Object -FilePath "$Out.targeted.txt"
+  node scripts/security/concurrency-check.mjs | Tee-Object -FilePath "$Out.concurrency.txt"
 } finally {
   Stop-Process -Id $api.Id -Force -ErrorAction SilentlyContinue
 }

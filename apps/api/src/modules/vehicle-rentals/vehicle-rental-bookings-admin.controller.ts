@@ -40,12 +40,14 @@ export class VehicleRentalBookingsAdminController {
     return this.vehicleRentalsService.listAll({ customerId, status });
   }
 
+  @TenantScoped('vehicleRental')
   @Get(':id')
   @RequirePermissions(PERMISSIONS.VEHICLE_RENTAL.READ)
   findOne(@Param('id') id: string) {
     return this.vehicleRentalsService.getBooking(id);
   }
 
+  @TenantScoped('vehicleRental')
   @Post(':id/cancel')
   @RequirePermissions(PERMISSIONS.VEHICLE_RENTAL.CANCEL)
   cancel(@Param('id') id: string) {

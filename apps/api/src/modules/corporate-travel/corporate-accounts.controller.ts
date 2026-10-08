@@ -20,6 +20,8 @@ import { CreateCorporateTravelerDto } from './dto/create-corporate-traveler.dto'
 import { UpdateCorporateAccountDto } from './dto/update-corporate-account.dto';
 import { RequireFeature } from '../../common/decorators/require-feature.decorator';
 
+import { TenantScoped } from '../../common/tenancy/tenant-scoped.decorator';
+import { resolveTenantFilter } from '../../common/utils/tenant.util';
 @RequireFeature('ENABLE_CORPORATE_TRAVEL')
 @Controller('corporate-travel/accounts')
 export class CorporateAccountsController {
@@ -28,30 +30,48 @@ export class CorporateAccountsController {
     private readonly usersService: UsersService,
   ) {}
 
+  @TenantScoped({ kind: 'branch', param: 'managedBranchId', source: 'body' })
   @Post()
   @RequirePermissions(PERMISSIONS.CORPORATE_TRAVEL.MANAGE)
-  create(@Body() dto: CreateCorporateAccountDto) {
-    return this.corporateTravelService.createAccount(dto);
+  create(
+    @CurrentUser() user: AuthContext,
+    @Body() dto: CreateCorporateAccountDto,
+  ) {
+    return this.corporateTravelService.createAccount(
+      dto,
+      user.companyId ?? undefined,
+    );
   }
 
+  @TenantScoped({ kind: 'branch', param: 'managedBranchId', source: 'query' })
   @Get()
   @RequirePermissions(PERMISSIONS.CORPORATE_TRAVEL.READ)
-  list(@Query('managedBranchId') managedBranchId?: string) {
-    return this.corporateTravelService.listAccounts({ managedBranchId });
+  list(
+    @CurrentUser() user: AuthContext,
+    @Query('managedBranchId') managedBranchId?: string,
+  ) {
+    return this.corporateTravelService.listAccounts(
+      { managedBranchId },
+      resolveTenantFilter(user),
+    );
   }
 
+  @TenantScoped('corporateAccount')
   @Get(':id')
   @RequirePermissions(PERMISSIONS.CORPORATE_TRAVEL.READ)
   findOne(@Param('id') id: string) {
     return this.corporateTravelService.getAccount(id);
   }
 
+  @TenantScoped('corporateAccount')
+  @TenantScoped({ kind: 'branch', param: 'managedBranchId', source: 'body' })
   @Patch(':id')
   @RequirePermissions(PERMISSIONS.CORPORATE_TRAVEL.MANAGE)
   update(@Param('id') id: string, @Body() dto: UpdateCorporateAccountDto) {
     return this.corporateTravelService.updateAccount(id, dto);
   }
 
+  @TenantScoped('corporateAccount')
   @Post(':id/travelers')
   @RequirePermissions(PERMISSIONS.CORPORATE_TRAVEL.MANAGE)
   addTraveler(
@@ -61,12 +81,14 @@ export class CorporateAccountsController {
     return this.corporateTravelService.addTraveler(id, dto);
   }
 
+  @TenantScoped('corporateAccount')
   @Get(':id/travelers')
   @RequirePermissions(PERMISSIONS.CORPORATE_TRAVEL.READ)
   listTravelers(@Param('id') id: string) {
     return this.corporateTravelService.listTravelers(id);
   }
 
+  @TenantScoped('corporateAccount')
   @Post(':id/bookings')
   @RequirePermissions(PERMISSIONS.CORPORATE_TRAVEL.MANAGE)
   async createBooking(

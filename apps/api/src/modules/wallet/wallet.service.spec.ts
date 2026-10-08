@@ -349,6 +349,79 @@ describe('WalletService', () => {
     });
   });
 
+  describe('top-up webhook (credited even if the browser never returns)', () => {
+    const tx = {
+      id: 'txn-9',
+      walletId: 'wallet-1',
+      type: WalletTransactionType.DEPOSIT,
+      status: WalletTransactionStatus.PENDING,
+      amount: 5000,
+      currency: 'NGN',
+      reference: 'WDEP-HOOK',
+      description: 'Online wallet top-up',
+    };
+
+    it("credits the wallet and posts the ledger entry in one transaction, with the customer's company", async () => {
+      prisma.walletTransaction.findUnique.mockResolvedValue(tx);
+      prisma.walletTransaction.findUniqueOrThrow.mockResolvedValue({
+        ...tx,
+        wallet: {
+          customerId: 'customer-1',
+          customer: {
+            companyId: 'company-7',
+            identityId: 'identity-1',
+            identity: { email: 'a@b.co' },
+          },
+        },
+      });
+      prisma.walletTransaction.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.onDepositWebhook({
+        reference: 'WDEP-HOOK',
+        result: {
+          reference: 'WDEP-HOOK',
+          success: true,
+          amount: 5000,
+          currency: 'NGN',
+        },
+      });
+
+      expect(prisma.$transaction).toHaveBeenCalled();
+      expect(ledgerService.post).toHaveBeenCalledWith(
+        expect.objectContaining({
+          companyId: 'company-7',
+          sourceModule: 'WALLET',
+          amount: 5000,
+        }),
+        prisma,
+      );
+    });
+
+    it('ignores a reference that is not a deposit, and never throws into the webhook caller', async () => {
+      prisma.walletTransaction.findUnique.mockResolvedValue({
+        ...tx,
+        type: WalletTransactionType.PAYMENT,
+      });
+      await expect(
+        service.onDepositWebhook({
+          reference: 'X',
+          result: { reference: 'X', success: true, amount: 1, currency: 'NGN' },
+        }),
+      ).resolves.toBeUndefined();
+      expect(ledgerService.post).not.toHaveBeenCalled();
+
+      prisma.walletTransaction.findUnique.mockRejectedValue(
+        new Error('db down'),
+      );
+      await expect(
+        service.onDepositWebhook({
+          reference: 'X',
+          result: { reference: 'X', success: true, amount: 1, currency: 'NGN' },
+        }),
+      ).resolves.toBeUndefined();
+    });
+  });
+
   describe('finalizeDeposit (via verifyDeposit)', () => {
     const pendingTransaction = {
       id: 'txn-1',

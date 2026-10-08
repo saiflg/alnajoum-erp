@@ -12,7 +12,11 @@ import { HotelRefundsService } from './hotel-refunds.service';
 describe('HotelRefundsService', () => {
   let service: HotelRefundsService;
   let prisma: {
-    hotelBooking: { findUnique: jest.Mock; update: jest.Mock };
+    hotelBooking: {
+      findUnique: jest.Mock;
+      update: jest.Mock;
+      updateMany: jest.Mock;
+    };
     hotelRefund: { create: jest.Mock; findMany: jest.Mock };
     customer: { findUnique: jest.Mock };
     $transaction: jest.Mock;
@@ -31,11 +35,17 @@ describe('HotelRefundsService', () => {
 
   beforeEach(async () => {
     prisma = {
-      hotelBooking: { findUnique: jest.fn(), update: jest.fn() },
+      hotelBooking: {
+        findUnique: jest.fn(),
+        update: jest.fn(),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
       hotelRefund: { create: jest.fn(), findMany: jest.fn() },
       customer: { findUnique: jest.fn() },
-      $transaction: jest.fn((ops: unknown[]) =>
-        Promise.all(ops as Promise<unknown>[]),
+      $transaction: jest.fn((arg: unknown) =>
+        typeof arg === 'function'
+          ? (arg as (tx: unknown) => Promise<unknown>)(prisma)
+          : Promise.all(arg as Promise<unknown>[]),
       ),
     };
     integrationsService = {
@@ -59,7 +69,10 @@ describe('HotelRefundsService', () => {
         { provide: AuditService, useValue: { record: jest.fn() } },
         {
           provide: FinancePostingService,
-          useValue: { postRefund: jest.fn(), cancelIncentivesForSource: jest.fn() },
+          useValue: {
+            postRefund: jest.fn(),
+            cancelIncentivesForSource: jest.fn(),
+          },
         },
       ],
     }).compile();
@@ -120,11 +133,24 @@ describe('HotelRefundsService', () => {
           }),
         }),
       );
-      expect(prisma.hotelBooking.update).toHaveBeenCalledWith(
+      expect(prisma.hotelBooking.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
           data: { status: HotelBookingStatus.REFUNDED },
         }),
       );
+    });
+
+    it('a second simultaneous refund finds the booking already refunded and creates nothing', async () => {
+      prisma.hotelBooking.findUnique.mockResolvedValue({
+        ...booking,
+        checkInDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000),
+      });
+      prisma.hotelBooking.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        service.requestRefund('booking-1', { requestedByStaffId: 'staff-1' }),
+      ).rejects.toThrow(/already been cancelled\/refunded/);
+      expect(prisma.hotelRefund.create).not.toHaveBeenCalled();
     });
   });
 });

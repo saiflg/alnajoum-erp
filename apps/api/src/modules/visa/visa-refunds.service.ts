@@ -139,27 +139,39 @@ export class VisaRefundsService {
 
     const preview = await this.previewRefund(applicationId);
 
-    const [refund] = await this.prisma.$transaction([
-      this.prisma.visaRefund.create({
-        data: {
-          applicationId,
-          requestedByStaffId: opts.requestedByStaffId,
-          requestedByCustomer: opts.requestedByCustomer ?? false,
-          amountPaid: preview.amountPaid,
-          supplierPenalty: preview.supplierPenalty,
-          agencyFee: preview.agencyFee,
-          refundAmount: preview.refundAmount,
-          currency: preview.currency,
-          status: VisaRefundStatus.COMPLETED,
-          reason: opts.reason,
-          completedAt: new Date(),
-        },
-      }),
-      this.prisma.visaApplication.update({
-        where: { id: applicationId },
-        data: { status: VisaApplicationStatus.CANCELLED },
-      }),
-    ]);
+    // One refund per application (VisaRefund.applicationId is unique): a simultaneous second request
+    // fails on that constraint, which is reported as the conflict it is rather than a server error.
+    let refund;
+    try {
+      [refund] = await this.prisma.$transaction([
+        this.prisma.visaRefund.create({
+          data: {
+            applicationId,
+            requestedByStaffId: opts.requestedByStaffId,
+            requestedByCustomer: opts.requestedByCustomer ?? false,
+            amountPaid: preview.amountPaid,
+            supplierPenalty: preview.supplierPenalty,
+            agencyFee: preview.agencyFee,
+            refundAmount: preview.refundAmount,
+            currency: preview.currency,
+            status: VisaRefundStatus.COMPLETED,
+            reason: opts.reason,
+            completedAt: new Date(),
+          },
+        }),
+        this.prisma.visaApplication.update({
+          where: { id: applicationId },
+          data: { status: VisaApplicationStatus.CANCELLED },
+        }),
+      ]);
+    } catch (error) {
+      if ((error as { code?: string })?.code === 'P2002') {
+        throw new ConflictException(
+          'This application has already been refunded',
+        );
+      }
+      throw error;
+    }
 
     await this.invoicesService.voidVisaApplicationIfUnpaid(applicationId);
 

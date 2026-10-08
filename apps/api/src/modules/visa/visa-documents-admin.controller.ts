@@ -33,6 +33,7 @@ import {
 } from './visa-documents.service';
 import { RequireFeature } from '../../common/decorators/require-feature.decorator';
 
+import { TenantScoped } from '../../common/tenancy/tenant-scoped.decorator';
 @RequireFeature('ENABLE_VISA')
 @Controller('visa/documents')
 export class VisaDocumentsAdminController {
@@ -42,6 +43,7 @@ export class VisaDocumentsAdminController {
   ) {}
 
   /** Staff uploading a provider/embassy document, or one on the customer's behalf. */
+  @TenantScoped({ kind: 'visaApplication', param: 'applicationId' })
   @Post('for-application/:applicationId')
   @RequirePermissions(PERMISSIONS.VISA.EDIT)
   @UseInterceptors(
@@ -65,6 +67,7 @@ export class VisaDocumentsAdminController {
     );
   }
 
+  @TenantScoped({ kind: 'guarantor', param: 'guarantorId' })
   @Post('for-guarantor/:guarantorId')
   @RequirePermissions(PERMISSIONS.VISA.EDIT)
   @UseInterceptors(
