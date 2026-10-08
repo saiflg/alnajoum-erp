@@ -8,6 +8,7 @@ import * as argon2 from 'argon2';
 import { randomBytes } from 'crypto';
 import * as fs from 'fs';
 import { documentFilePath } from '../../common/documents/document-storage.util';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 
@@ -322,6 +323,22 @@ export class PrivacyService {
           twoFactorEnabled: false,
           twoFactorSecret: null,
         },
+      });
+      // Phase 23: what the AI layer holds about this person goes too — conversations, memory, and the free text in
+      // execution traces and feedback. (The audit log keeps the fact that an AI action happened, not the content.)
+      await tx.aiMemory.deleteMany({
+        where: { companyId: customer.companyId, subjectType: 'CUSTOMER', subjectId: customerId },
+      });
+      await tx.aiConversationMessage.deleteMany({ where: { conversation: { customerId } } });
+      await tx.aiConversation.deleteMany({ where: { customerId } });
+      await tx.aiFeedback.updateMany({ where: { execution: { customerId } }, data: { note: null } });
+      await tx.aiExecutionStep.updateMany({
+        where: { execution: { customerId } },
+        data: { input: Prisma.JsonNull, output: Prisma.JsonNull },
+      });
+      await tx.aiExecution.updateMany({
+        where: { customerId },
+        data: { objective: '[erased]', result: Prisma.JsonNull },
       });
       await tx.refreshToken.updateMany({
         where: { identityId: customer.identityId, revokedAt: null },

@@ -49,6 +49,7 @@ export class OperationsScannerService {
         ['supplier', (c) => this.supplier(c)],
         ['security', (c) => this.security(c)],
         ['operations', (c) => this.operations(c)],
+        ['journey', (c) => this.journey(c)],
       ];
     const reports: ScanReport[] = [];
     for (const [name, fn] of scanners) {
@@ -954,6 +955,98 @@ export class OperationsScannerService {
         subjectId: b.id,
         dueAt: b.holdExpiresAt,
       });
+    return out;
+  }
+
+  // ------------------------------------------------------------------------------------ customer journey
+  /**
+   * Cross-sell, kept deliberately light: a customer with a confirmed flight soon and no hotel for those dates
+   * gets ONE low-priority suggestion for staff to consider. Customers who switched personalisation off are
+   * skipped, and nothing is sent to the customer by this scan.
+   */
+  async journey(companyId: string): Promise<RecommendationInput[]> {
+    const out: RecommendationInput[] = [];
+    const flights = await this.prisma.flightBooking.findMany({
+      where: {
+        customer: { companyId },
+        status: { in: ['CONFIRMED', 'TICKETED'] },
+        departureAt: {
+          gte: new Date(),
+          lte: new Date(Date.now() + 60 * 24 * HOURS),
+        },
+      },
+      select: {
+        id: true,
+        bookingReference: true,
+        destination: true,
+        departureAt: true,
+        customerId: true,
+        customer: {
+          select: {
+            assignedBranchId: true,
+            hotelBookings: {
+              select: { checkInDate: true, checkOutDate: true },
+            },
+          },
+        },
+      },
+      take: 100,
+    });
+    const optedOut = new Set(
+      (
+        await this.prisma.aiMemory.findMany({
+          where: {
+            companyId,
+            type: 'PREFERENCE',
+            key: 'personalization',
+            subjectType: 'CUSTOMER',
+            deletedAt: null,
+          },
+          select: { subjectId: true, value: true },
+        })
+      )
+        .filter(
+          (m) => (m.value as { enabled?: boolean } | null)?.enabled === false,
+        )
+        .map((m) => m.subjectId),
+    );
+    for (const f of flights) {
+      if (optedOut.has(f.customerId)) continue;
+      const dep = f.departureAt.getTime();
+      const covered = f.customer.hotelBookings.some(
+        (h) =>
+          h.checkInDate.getTime() <= dep + 3 * 24 * HOURS &&
+          h.checkOutDate.getTime() >= dep,
+      );
+      if (covered) continue;
+      out.push({
+        companyId,
+        branchId: f.customer.assignedBranchId,
+        agentKey: 'sales_agent',
+        kind: 'CROSS_SELL_HOTEL',
+        dedupeKey: `xsell-hotel:${f.id}`,
+        title: `Offer a hotel to the customer flying to ${f.destination} on ${f.departureAt.toISOString().slice(0, 10)}`,
+        reason: `Booking ${f.bookingReference} has no hotel for those dates. Prices must come from the pricing engine; contact only if the customer has not opted out of suggestions.`,
+        evidence: [
+          {
+            label: 'Flight without a hotel',
+            source: 'Flight and hotel bookings',
+            value: f.bookingReference,
+          },
+        ],
+        confidence: 'MEDIUM',
+        suggestedAction: { type: 'OFFER_HOTEL', bookingId: f.id },
+        factors: {
+          hoursToDeadline: hoursUntil(f.departureAt),
+          customerImpact: 0,
+          regulatoryImpact: 0,
+          dependency: 0,
+          risk: 0,
+        },
+        subjectType: 'CUSTOMER',
+        subjectId: f.customerId,
+      });
+    }
     return out;
   }
 }

@@ -14,6 +14,7 @@ const PORTAL_LINKS: NavLink[] = [
   { href: '/portal/vehicle-rentals', label: 'Car, Van & Bus', icon: 'car' },
   { href: '/portal/visa', label: 'Visa Applications', icon: 'visa' },
   { href: '/portal/invoices', label: 'My Invoices', icon: 'invoice' },
+  { href: '/portal/assistant', label: 'AI Assistant', icon: 'sparkle' },
   { href: '/portal/support', label: 'Support', icon: 'bell' },
   { href: '/portal/notifications', label: 'Notifications', icon: 'bell' },
 ];
@@ -22,5 +23,5 @@ export const PORTAL_NAV: NavLink[] = assignGroups(PORTAL_LINKS, {
   'Travel': ['/portal/flights/search', '/portal/flights', '/portal/hotels', '/portal/vehicle-rentals', '/portal/visa'],
   'Hajj & Umrah': ['/portal/hajj', '/portal/umrah'],
   'My Account': ['/portal/profile', '/portal/family', '/portal/wallet', '/portal/invoices'],
-  'Help & Alerts': ['/portal/support', '/portal/notifications'],
+  'Help & Alerts': ['/portal/assistant', '/portal/support', '/portal/notifications'],
 });

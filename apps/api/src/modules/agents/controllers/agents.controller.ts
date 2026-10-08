@@ -25,6 +25,10 @@ import { PERMISSIONS } from '../../rbac/constants/permissions.constant';
 import { AGENT_BY_KEY } from '../agent-catalog';
 import {
   AgentStatusDto,
+  ApplyPassportDto,
+  CallDto,
+  ProposeDocumentDto,
+  TriageDto,
   AssistantMessageDto,
   BudgetDto,
   ClearControlDto,
@@ -46,6 +50,7 @@ import {
 import { AgentAdminService } from '../services/agent-admin.service';
 import { AgentRunnerService } from '../services/agent-runner.service';
 import { AiApprovalsService } from '../services/ai-approvals.service';
+import { AiAssistService } from '../services/assist.service';
 import { AiBudgetService } from '../services/budget.service';
 import { ConversationsService } from '../services/conversations.service';
 import { AiControlsService, GLOBAL } from '../services/controls.service';
@@ -89,6 +94,7 @@ export class AgentsController {
     private readonly principals: PrincipalService,
     private readonly integrations: IntegrationsService,
     private readonly faults: MockAiFaultService,
+    private readonly assist: AiAssistService,
   ) {}
 
   // ================================================================== customer assistant
@@ -222,6 +228,34 @@ export class AgentsController {
       principal,
       language: dto.language,
     });
+  }
+
+  // ================================================================== document, email and call assistants (proposals only)
+  @Post('documents/propose')
+  @RequirePermissions(P.COPILOT_USE)
+  proposeDocument(
+    @CurrentUser() user: AuthContext,
+    @Body() dto: ProposeDocumentDto,
+  ) {
+    return this.assist.proposeDocument(user, dto);
+  }
+  @Post('documents/apply-passport')
+  @RequirePermissions(P.COPILOT_USE, PERMISSIONS.CUSTOMER.UPDATE)
+  applyPassport(
+    @CurrentUser() user: AuthContext,
+    @Body() dto: ApplyPassportDto,
+  ) {
+    return this.assist.applyPassport(user, dto);
+  }
+  @Post('email/triage')
+  @RequirePermissions(P.COPILOT_USE)
+  triageEmail(@CurrentUser() user: AuthContext, @Body() dto: TriageDto) {
+    return this.assist.triageEmail(user, dto);
+  }
+  @Post('voice/transcript')
+  @RequirePermissions(P.COPILOT_USE)
+  processCall(@CurrentUser() user: AuthContext, @Body() dto: CallDto) {
+    return this.assist.processCall(user, dto);
   }
 
   // ================================================================== approvals

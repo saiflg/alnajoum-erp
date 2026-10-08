@@ -20,8 +20,13 @@ import { AiModelClient } from './runtime/model-client';
 import { AgentAdminService } from './services/agent-admin.service';
 import { AgentRunnerService } from './services/agent-runner.service';
 import { AiApprovalsService } from './services/ai-approvals.service';
+import { AI_DAILY_SCAN } from '../workflows/actions/ai-scan.action';
+import { AI_WHATSAPP_BRIDGE } from '../whatsapp/ai-whatsapp-bridge.port';
+import { AgentWhatsAppBridge } from './services/whatsapp-bridge.service';
+import { AiAssistService } from './services/assist.service';
 import { AiBudgetService } from './services/budget.service';
 import { ConversationsService } from './services/conversations.service';
+import { CommunicationPolicyService } from './services/communication-policy.service';
 import { AiControlsService } from './services/controls.service';
 import { DailyOperationsService } from './services/daily-operations.service';
 import { AgentEventReactor } from './services/event-reactor.service';
@@ -62,12 +67,17 @@ import { ToolRegistryService } from './tools/tool-registry.service';
   ],
   controllers: [AgentsController],
   providers: [
+    CommunicationPolicyService,
     ToolRegistryService,
     AiModelClient,
     PrincipalService,
     AgentAdminService,
     AgentRunnerService,
     AiApprovalsService,
+    AiAssistService,
+    AgentWhatsAppBridge,
+    { provide: AI_DAILY_SCAN, useExisting: DailyOperationsService },
+    { provide: AI_WHATSAPP_BRIDGE, useExisting: AgentWhatsAppBridge },
     AiBudgetService,
     AiControlsService,
     AiSafetyService,
@@ -82,6 +92,8 @@ import { ToolRegistryService } from './tools/tool-registry.service';
     AgentEventReactor,
   ],
   exports: [
+    AI_WHATSAPP_BRIDGE,
+    AI_DAILY_SCAN,
     AgentRunnerService,
     AiMemoryService,
     DailyOperationsService,

@@ -352,6 +352,17 @@ describe('PrivacyService', () => {
     expect(ident.passwordHash).not.toBe('');
     expect(prisma.customerDocument.deleteMany).toHaveBeenCalled();
     expect(prisma.refreshToken.updateMany).toHaveBeenCalled();
+    // What the AI layer holds about the person goes too: conversations, memory and execution text.
+    expect(prisma.aiMemory.deleteMany).toHaveBeenCalledWith({
+      where: { companyId: 'co-1', subjectType: 'CUSTOMER', subjectId: 'c1' },
+    });
+    expect(prisma.aiConversationMessage.deleteMany).toHaveBeenCalled();
+    expect(prisma.aiConversation.deleteMany).toHaveBeenCalledWith({
+      where: { customerId: 'c1' },
+    });
+    expect(prisma.aiExecution.updateMany.mock.calls[0][0].data.objective).toBe(
+      '[erased]',
+    );
     // Financial tables are never touched.
     expect(prisma.invoice.deleteMany).not.toHaveBeenCalled();
     expect(prisma.payment.deleteMany).not.toHaveBeenCalled();

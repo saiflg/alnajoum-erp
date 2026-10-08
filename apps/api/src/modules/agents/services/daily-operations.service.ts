@@ -55,6 +55,13 @@ export class DailyOperationsService {
     }[] = [];
     for (const c of companies) results.push(await this.runForCompany(c.id));
     await this.memory.purgeExpired();
+    // Retention: closed conversations are kept 180 days (their messages go with them), then deleted.
+    await this.prisma.aiConversation.deleteMany({
+      where: {
+        status: 'CLOSED',
+        closedAt: { lt: new Date(Date.now() - 180 * 86_400_000) },
+      },
+    });
     return results;
   }
 

@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { createHash } from 'crypto';
 import {
@@ -7,6 +7,8 @@ import {
   WhatsAppMessageType,
 } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
+import { AI_WHATSAPP_BRIDGE } from './ai-whatsapp-bridge.port';
+import type { AiWhatsAppBridge } from './ai-whatsapp-bridge.port';
 import { normalizePhoneNumber } from './phone-number.util';
 import { NormalizedInboundEvent } from './providers/whatsapp-provider.port';
 import { WhatsAppProviderRouter } from './providers/whatsapp-provider.router';
@@ -60,6 +62,9 @@ export class WhatsAppWebhookService {
     private readonly selfService: WhatsAppSelfServiceService,
     private readonly paymentLinkService: WhatsAppPaymentLinkService,
     private readonly providerRouter: WhatsAppProviderRouter,
+    @Optional()
+    @Inject(AI_WHATSAPP_BRIDGE)
+    private readonly aiBridge?: AiWhatsAppBridge,
   ) {}
 
   /** Spec #13 — the idempotency gate itself: a unique (provider, eventId)
@@ -310,6 +315,32 @@ export class WhatsAppWebhookService {
           : "We couldn't find an account linked to this number. Please contact our staff or register through the customer portal first.",
       );
       return;
+    }
+
+    // Phase 23: a verified, opted-in customer's free-text message may be answered by the AI assistant, when an
+    // administrator has switched that on. Anything the assistant is not eligible for falls through to the menu.
+    if (customer && this.aiBridge) {
+      try {
+        const ai = await this.aiBridge.tryReply({
+          companyId,
+          customerId: customer.id,
+          phoneNumber,
+          text,
+        });
+        if (ai.handled && ai.message) {
+          await this.reply(phoneNumber, ai.message);
+          if (ai.handoff)
+            await this.conversationsService.setStatus(
+              conversation.id,
+              'WAITING_STAFF',
+            );
+          return;
+        }
+      } catch (error) {
+        this.logger.error(
+          `AI WhatsApp reply failed, using the menu: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
     }
 
     // Fallback — same away/unrecognized-message reply either way for

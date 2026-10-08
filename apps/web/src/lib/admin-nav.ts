@@ -59,6 +59,10 @@ const ADMIN_LINKS: NavLink[] = [
   { href: '/admin/data-export-import', label: 'Data Export & Import', icon: 'transfer' },
   { href: '/admin/backups', label: 'Backup Management', icon: 'backup' },
   { href: '/admin/ai-analytics', label: 'AI Analytics', icon: 'sparkle' },
+  { href: '/admin/control-tower', label: 'Control Tower', icon: 'dashboard' },
+  { href: '/admin/ai-copilot', label: 'AI Copilot', icon: 'sparkle' },
+  { href: '/admin/ai-executive', label: 'Executive AI', icon: 'sparkle' },
+  { href: '/admin/ai', label: 'AI Control Center', icon: 'shield' },
   { href: '/admin/workflows', label: 'Workflows', icon: 'flag' },
   { href: '/admin/automation', label: 'Automation Centre', icon: 'gear' },
   { href: '/admin/whatsapp', label: 'WhatsApp Inbox', icon: 'chat' },
@@ -85,6 +89,8 @@ const FINANCE_LINKS: NavLink[] = [
   { href: '/admin/notifications', label: 'Notifications', icon: 'bell' },
   { href: '/admin/api-keys', label: 'API Keys', icon: 'key' },
   { href: '/admin/security', label: 'Emergency Access', icon: 'shield' },
+  { href: '/admin/control-tower', label: 'Control Tower', icon: 'dashboard' },
+  { href: '/admin/ai-copilot', label: 'AI Copilot', icon: 'sparkle' },
   { href: '/admin/account', label: 'My Account', icon: 'account' },
 ];
 
@@ -96,11 +102,11 @@ export const ADMIN_NAV: NavLink[] = assignGroups(ADMIN_LINKS, {
   'Visa': ['/admin/visa-operations', '/admin/visa-applications', '/admin/visa-country-rules', '/admin/visa-services', '/admin/visa-incentives', '/admin/visa-reports'],
   'Hajj & Umrah': ['/admin/hajj-packages', '/admin/umrah-packages', '/admin/hajj-ops-dashboard', '/admin/hajj-groups', '/admin/umrah-groups', '/admin/hajj-ops-fleet', '/admin/hajj-ops-checkin'],
   'Finance': ['/admin/invoices', '/admin/manual-payments', '/admin/wallets', '/admin/finance-dashboard', '/admin/chart-of-accounts', '/admin/expenses', '/admin/investments', '/admin/supplier-payables', '/admin/daily-closing', '/admin/staff-bank-verification'],
-  'System': ['/admin/notifications', '/admin/roles', '/admin/approvals', '/admin/audit-log', '/admin/security', '/admin/feature-flags', '/admin/system-settings', '/admin/api-keys', '/admin/data-export-import', '/admin/backups', '/admin/ai-analytics', '/admin/workflows', '/admin/automation', '/admin/whatsapp', '/admin/integrations'],
+  'System': ['/admin/notifications', '/admin/roles', '/admin/approvals', '/admin/audit-log', '/admin/security', '/admin/feature-flags', '/admin/system-settings', '/admin/api-keys', '/admin/data-export-import', '/admin/backups', '/admin/ai-analytics', '/admin/control-tower', '/admin/ai-copilot', '/admin/ai-executive', '/admin/ai', '/admin/workflows', '/admin/automation', '/admin/whatsapp', '/admin/integrations'],
 });
 
 export const FINANCE_NAV: NavLink[] = assignGroups(FINANCE_LINKS, {
   'Money': ['/admin/finance-dashboard', '/admin/chart-of-accounts', '/admin/invoices', '/admin/manual-payments', '/admin/expenses', '/admin/supplier-payables', '/admin/daily-closing', '/admin/wallets'],
   'Reports & Payouts': ['/admin/flight-reports', '/admin/hotel-reports', '/admin/visa-incentives', '/admin/staff-bank-verification'],
-  'Account': ['/admin/notifications', '/admin/api-keys', '/admin/security', '/admin/account'],
+  'Account': ['/admin/notifications', '/admin/api-keys', '/admin/security', '/admin/control-tower', '/admin/ai-copilot', '/admin/account'],
 });

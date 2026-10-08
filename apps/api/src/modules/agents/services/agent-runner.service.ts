@@ -76,6 +76,7 @@ interface RunState {
   startedAt: number;
   approvals: { id: string; toolKey: string; status: string }[];
   stepLog: RunResult['steps'];
+  pendingSteps: Prisma.AiExecutionStepCreateManyInput[];
   toolErrors: number;
   failedOver: boolean;
   provider?: string;
@@ -174,6 +175,7 @@ export class AgentRunnerService {
       startedAt: Date.now(),
       approvals: [],
       stepLog: [],
+      pendingSteps: [],
       toolErrors: 0,
       failedOver: false,
       chain: [...chain, agent.key],
@@ -1137,27 +1139,23 @@ export class AgentRunnerService {
     const seq = ++st.seq;
     st.stepLog.push({ seq, kind, tool: toolKey, status, note });
     if (!st.agent.config.audit.storeSteps) return;
-    await this.prisma.aiExecutionStep
-      .create({
-        data: {
-          executionId: st.executionId,
-          seq,
-          kind,
-          toolKey,
-          risk,
-          status,
-          input: input === undefined ? undefined : clip(maskDeep(input)),
-          output: output === undefined ? undefined : clip(filterOutput(output)),
-          error:
-            status === 'ERROR' || status === 'DENIED'
-              ? note?.slice(0, 500)
-              : undefined,
-          latencyMs,
-        },
-      })
-      .catch((e) =>
-        this.logger.warn(`Could not store step: ${(e as Error).message}`),
-      );
+    // Steps are buffered and written in ONE insert when the run ends (a run used to make a database round trip
+    // per step, which dominated its latency under load).
+    st.pendingSteps.push({
+      executionId: st.executionId,
+      seq,
+      kind,
+      toolKey,
+      risk,
+      status,
+      input: input === undefined ? undefined : clip(maskDeep(input)),
+      output: output === undefined ? undefined : clip(filterOutput(output)),
+      error:
+        status === 'ERROR' || status === 'DENIED'
+          ? note?.slice(0, 500)
+          : undefined,
+      latencyMs,
+    });
   }
 
   private async finish(
@@ -1180,6 +1178,12 @@ export class AgentRunnerService {
       blocked: extra.blocked,
       steps: st.stepLog,
     };
+    if (st.pendingSteps.length)
+      await this.prisma.aiExecutionStep
+        .createMany({ data: st.pendingSteps })
+        .catch((e) =>
+          this.logger.warn(`Could not store steps: ${(e as Error).message}`),
+        );
     await this.prisma.aiExecution
       .update({
         where: { id: st.executionId },

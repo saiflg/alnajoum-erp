@@ -148,3 +148,30 @@ export class MockFaultDto {
 export class ScanDto {
   @IsOptional() @IsString() @MaxLength(64) companyId?: string;
 }
+
+export class ProposeDocumentDto {
+  @IsString() @MaxLength(64) customerId: string;
+  @IsString() @MinLength(1) @MaxLength(200) fileName: string;
+  @IsOptional() @IsString() @MaxLength(20000) text?: string;
+}
+
+export class ApplyPassportDto {
+  @IsString() @MaxLength(64) customerId: string;
+  @IsString() @MinLength(6) @MaxLength(12) passportNumber: string;
+  @IsDateString() passportExpiryDate: string;
+  @IsBoolean() confirmed: boolean;
+  @IsOptional() @IsBoolean() overwrite?: boolean;
+}
+
+export class TriageDto {
+  @IsOptional() @IsString() @MaxLength(200) from?: string;
+  @IsString() @MaxLength(300) subject: string;
+  @IsString() @MinLength(1) @MaxLength(20000) body: string;
+  @IsOptional() @IsBoolean() record?: boolean;
+}
+
+export class CallDto {
+  @IsString() @MinLength(1) @MaxLength(30000) transcript: string;
+  @IsOptional() @IsString() @MaxLength(30) callerPhone?: string;
+  @IsOptional() @IsBoolean() otpVerified?: boolean;
+}

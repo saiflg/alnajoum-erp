@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AgentsModule } from '../agents/agents.module';
 import { AiModule } from '../ai/ai.module';
 import { AuditModule } from '../audit/audit.module';
 import { FlightsModule } from '../flights/flights.module';
@@ -71,6 +72,7 @@ import { WhatsAppProviderRouter } from './providers/whatsapp-provider.router';
 @Module({
   imports: [
     AiModule,
+    AgentsModule,
     AuditModule,
     IntegrationsModule,
     PaymentsModule,

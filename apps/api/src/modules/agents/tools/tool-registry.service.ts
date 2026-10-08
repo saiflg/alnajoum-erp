@@ -28,6 +28,7 @@ import {
 } from '../agent.types';
 import { filterOutput } from '../runtime/guards';
 import { AiKnowledgeService } from '../services/knowledge.service';
+import { CommunicationPolicyService } from '../services/communication-policy.service';
 import { AiMemoryService } from '../services/memory.service';
 import { AiRecommendationsService } from '../services/recommendations.service';
 import { ToolError, money, resolveCustomer } from './tool-support';
@@ -92,6 +93,7 @@ export class ToolRegistryService {
     private readonly recommendations: AiRecommendationsService,
     private readonly currency: CurrencyService,
     private readonly support: SupportTicketsService,
+    private readonly commPolicy: CommunicationPolicyService,
   ) {
     for (const t of [
       ...this.readTools(),
@@ -1482,6 +1484,14 @@ export class ToolRegistryService {
             },
           });
           const channel = input.channel as 'EMAIL' | 'SMS' | 'PUSH';
+          await this.commPolicy.assertMayMessage({
+            companyId: c.companyId,
+            customerIdentityId: row!.identity.id,
+            channel,
+            subject: String(input.subject),
+            body: String(input.body),
+            agentKey: ctx.agentKey,
+          });
           const to =
             channel === 'EMAIL'
               ? row?.identity.email

@@ -13,6 +13,17 @@ const BASE = 'http://localhost:4000/api/v1';
 const DEMO = 'Demo@2026';
 const sql = (q) => execFileSync('docker', ['exec', '-i', 'alnajoum-postgres', 'psql', '-U', 'alnajoum', '-d', 'alnajoum_erp', '-At', '-c', q], { encoding: 'utf8' }).trim();
 const num = (q) => Number(sql(q) || 0);
+
+// The mock payment provider settles a payment link by itself, so earlier runs leave the demo customer owing
+// nothing. Make the starting state deterministic: if there is no unpaid invoice, book one through the assistant.
+async function ensureUnpaidInvoice(token, customerId, postMessage) {
+  const open = () => Number(sql(`select count(*) from invoices where "customerId"='${customerId}' and status in ('ISSUED','PARTIALLY_PAID')`));
+  if (open() > 0) return;
+  const a = await postMessage(token, 'Find me a flight from Lagos to Abuja on 15 December');
+  await postMessage(token, 'confirm 1', a.conversationId);
+  if (open() === 0) throw new Error('could not create an unpaid invoice for the test customer');
+}
+
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const results = [];
 const check = (name, pass, detail = '') => { results.push(pass); console.log(`${pass ? 'PASS' : 'FAIL'}  ${name.padEnd(84)} ${String(detail).slice(0, 110)}`); };
@@ -48,6 +59,10 @@ const otherCustomer = await login('khadija.bello@demo.zamzamhorizon.travel');
 const staff = await login('ayo.bello@demo.alnajoum.travel');
 const superAdmin = await login('admin@alnajoum.travel', 'Alnajoum@2026');
 await stepUp(admin); await stepUp(superAdmin, 'Alnajoum@2026'); await stepUp(otherAdmin);
+await ensureUnpaidInvoice(customer, customerId, async (token, content, conversationId) => {
+  const r = await raw('POST', '/ai/assistant/message', { token, body: { content, conversationId } });
+  return r.data ?? {};
+});
 const coA = sql(`select s."companyId" from staff s join identities i on i.id=s."identityId" where i.email='chidi.eze@demo.alnajoum.travel'`);
 const reset = async () => { await raw('POST', '/ai/dev/mock-fault', { token: superAdmin, body: { mode: 'NONE' } }); };
 await reset();

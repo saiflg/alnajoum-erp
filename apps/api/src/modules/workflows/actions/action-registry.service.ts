@@ -1,4 +1,4 @@
-﻿import { Injectable } from '@nestjs/common';
+﻿import { Inject, Injectable, Optional } from '@nestjs/common';
 import { PrismaService } from '../../../infrastructure/prisma/prisma.service';
 import { AuditService } from '../../audit/audit.service';
 import { NotificationsService } from '../../notifications/notifications.service';
@@ -7,6 +7,8 @@ import { WhatsAppConversationsService } from '../../whatsapp/whatsapp-conversati
 import { WorkflowEventBus } from '../events/workflow-event-bus.service';
 import { ActionInfo } from '../engine/simulate';
 import { WorkflowAction } from './action.types';
+import { AI_DAILY_SCAN, AiScanAction } from './ai-scan.action';
+import type { AiDailyScan } from './ai-scan.action';
 import { AuditNoteAction } from './audit-note.action';
 import { EmitEventAction } from './emit-event.action';
 import { NotifyAction, WhatsAppNotifyAction } from './notify.actions';
@@ -29,6 +31,7 @@ export class ActionRegistryService {
     whatsapp: WhatsAppConversationsService,
     audit: AuditService,
     bus: WorkflowEventBus,
+    @Optional() @Inject(AI_DAILY_SCAN) aiScan?: AiDailyScan,
   ) {
     for (const a of [
       new TaskCreateAction(prisma, tasks),
@@ -39,6 +42,7 @@ export class ActionRegistryService {
       new WhatsAppNotifyAction(prisma, whatsapp),
       new AuditNoteAction(audit),
       new EmitEventAction(bus),
+      ...(aiScan ? [new AiScanAction(aiScan)] : []),
     ] as WorkflowAction[]) {
       this.actions.set(a.key, a);
     }

@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AgentsModule } from '../agents/agents.module';
 import { AnalyticsModule } from '../analytics/analytics.module';
 import { AuditModule } from '../audit/audit.module';
 import { CrmModule } from '../crm/crm.module';
@@ -22,6 +23,7 @@ import { WorkflowsService } from './workflows.service';
  */
 @Module({
   imports: [
+    AgentsModule,
     AnalyticsModule,
     AuditModule,
     CrmModule,
