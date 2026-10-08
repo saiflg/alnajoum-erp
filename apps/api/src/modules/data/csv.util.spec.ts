@@ -1,4 +1,9 @@
-import { csvRowsToRecords, parseCsv, toCsv } from './csv.util';
+import {
+  csvRowsToRecords,
+  neutraliseFormula,
+  parseCsv,
+  toCsv,
+} from './csv.util';
 
 describe('toCsv', () => {
   it('quotes a field containing a comma, quote, or newline', () => {
@@ -82,5 +87,28 @@ describe('csvRowsToRecords', () => {
       ['amina@example.com'],
     ]);
     expect(records).toEqual([{ email: 'amina@example.com', phone: '' }]);
+  });
+});
+
+describe('CSV formula injection (Phase 22 S-32)', () => {
+  it.each([
+    ['=1+1', "'=1+1"],
+    ['+cmd|calc', "'+cmd|calc"],
+    ['-2+3', "'-2+3"],
+    ['@SUM(A1)', "'@SUM(A1)"],
+    ['\tcmd', "'\tcmd"],
+  ])('neutralises %j', (input, expected) => {
+    expect(neutraliseFormula(input)).toBe(expected);
+  });
+
+  it('leaves ordinary text and genuine numbers (including negatives) untouched', () => {
+    for (const v of ['Amina Bello', '12', '-500', '+234', '3.5', '', 'a=b', 'x-y']) {
+      expect(neutraliseFormula(v)).toBe(v);
+    }
+  });
+
+  it('toCsv exports a hostile customer name as inert text, still correctly quoted', () => {
+    const csv = toCsv(['Name'], [['=HYPERLINK("http://evil","x"),y']]);
+    expect(csv).toBe('Name\n"\'=HYPERLINK(""http://evil"",""x""),y"');
   });
 });

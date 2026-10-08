@@ -8,6 +8,7 @@ import { BrandMark } from '@/components/BrandMark';
 import { ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 
+import { safeInternalPath } from '@/lib/safe-redirect';
 function RegisterForm() {
   const { user, loading, register } = useAuth();
   const router = useRouter();
@@ -38,7 +39,8 @@ function RegisterForm() {
       justRegisteredRef.current = true;
       const me = await register({ email, password, firstName, lastName });
 
-      const next = searchParams.get('next');
+      // Only a path on this site: `?next=https://evil` must not become a post-signup redirect.
+      const next = safeInternalPath(searchParams.get('next'), '');
       if (next) {
         const forward = new URLSearchParams();
         for (const key of [

@@ -4,6 +4,7 @@ import PDFDocument from 'pdfkit';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { ReadinessService } from './readiness.service';
 
+import { escapeCsvField } from '../data/csv.util';
 interface ManifestRow {
   name: string;
   passportNumber: string;
@@ -235,8 +236,7 @@ export class ManifestService {
       tenantCompanyId,
     );
 
-    const escape = (value: string) =>
-      /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+    const escape = escapeCsvField;
 
     const lines = [
       [
