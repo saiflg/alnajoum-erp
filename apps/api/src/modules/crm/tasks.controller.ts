@@ -18,6 +18,7 @@ import { CreateTaskDto } from './dto/create-task.dto';
 import { TasksService } from './tasks.service';
 
 import { TenantScoped } from '../../common/tenancy/tenant-scoped.decorator';
+import { TaskStatusDto } from './dto/crm-bodies.dto';
 @Controller('crm/tasks')
 export class TasksController {
   constructor(
@@ -81,7 +82,7 @@ export class TasksController {
   async updateStatus(
     @CurrentUser() user: AuthContext,
     @Param('id') id: string,
-    @Body() body: { status: TaskStatus },
+    @Body() body: TaskStatusDto,
   ) {
     const staffId = await this.requireStaffId(user);
     const task = await this.tasksService.get(id, resolveTenantFilter(user));

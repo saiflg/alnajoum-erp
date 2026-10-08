@@ -12,6 +12,7 @@ import { PayoutStatus } from '@prisma/client';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import type { AuthContext } from '../../common/interfaces/auth-context.interface';
+import { sealBankAccount } from '../../common/security/bank-account-cipher';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { UsersService } from '../users/users.service';
@@ -49,6 +50,9 @@ export class StaffPayoutsController {
       where: { id: staffId },
       data: {
         ...dto,
+        ...(dto.bankAccountNumber !== undefined && {
+          bankAccountNumber: sealBankAccount(staffId, dto.bankAccountNumber),
+        }),
         bankAccountVerified: false,
         bankAccountVerifiedAt: null,
         bankAccountVerifiedByStaffId: null,

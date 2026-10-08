@@ -50,7 +50,7 @@ describe('LedgerService', () => {
         findUnique: jest.fn(),
         aggregate: jest.fn().mockResolvedValue({ _sum: { amount: 0 } }),
       },
-      $transaction: jest.fn((cb: any) => cb(prisma)),
+      $transaction: jest.fn((cb: (tx: unknown) => unknown) => cb(prisma)),
     };
     auditService = { record: jest.fn() };
 

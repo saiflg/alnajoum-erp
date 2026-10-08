@@ -2,12 +2,17 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
+  OnModuleInit,
 } from '@nestjs/common';
+import {
+  openBankAccount,
+  sealBankAccount,
+} from '../../common/security/bank-account-cipher';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 
-import { tenantWhere } from '../../common/tenancy/tenant-guard.service';
 /** 0123456789 -> ******6789. Enough for a person to recognise the account, not to use it. */
 export function maskAccountNumber(value: string): string {
   const digits = value.trim();
@@ -17,14 +22,45 @@ export function maskAccountNumber(value: string): string {
 
 /** Spec #12 — the Finance-side half of staff payout bank account verification (the staff self-service update lives in StaffPayoutsController). */
 @Injectable()
-export class StaffBankAccountsService {
+export class StaffBankAccountsService implements OnModuleInit {
+  private readonly logger = new Logger(StaffBankAccountsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
   ) {}
 
-  listUnverified(tenant?: string) {
-    return this.prisma.staff.findMany({
+  /** Phase 22 S-24: account numbers written before encryption existed are sealed once, at startup. */
+  async onModuleInit(): Promise<void> {
+    try {
+      const rows = await this.prisma.staff.findMany({
+        where: {
+          bankAccountNumber: { not: null },
+          NOT: { bankAccountNumber: { startsWith: 'enc:v1:' } },
+        },
+        select: { id: true, bankAccountNumber: true },
+      });
+      for (const row of rows) {
+        await this.prisma.staff.update({
+          where: { id: row.id },
+          data: {
+            bankAccountNumber: sealBankAccount(row.id, row.bankAccountNumber!),
+          },
+        });
+      }
+      if (rows.length)
+        this.logger.log(
+          `Encrypted ${rows.length} staff bank account number(s)`,
+        );
+    } catch (err) {
+      this.logger.error(
+        `Could not encrypt bank account numbers: ${(err as Error).message}`,
+      );
+    }
+  }
+
+  async listUnverified(tenant?: string) {
+    const rows = await this.prisma.staff.findMany({
       where: {
         bankAccountVerified: false,
         bankAccountNumber: { not: null },
@@ -42,6 +78,11 @@ export class StaffBankAccountsService {
       },
       orderBy: { lastName: 'asc' },
     });
+    // The verifier has to see the real number to compare it with the bank's records.
+    return rows.map((r) => ({
+      ...r,
+      bankAccountNumber: openBankAccount(r.id, r.bankAccountNumber!),
+    }));
   }
 
   async verify(
@@ -88,7 +129,9 @@ export class StaffBankAccountsService {
     return {
       staffId,
       bankName: staff.bankName,
-      bankAccountNumber: maskAccountNumber(staff.bankAccountNumber),
+      bankAccountNumber: maskAccountNumber(
+        openBankAccount(staff.id, staff.bankAccountNumber),
+      ),
       bankAccountVerified: true,
     };
   }

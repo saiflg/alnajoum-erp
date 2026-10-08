@@ -116,17 +116,40 @@ describe('AuthService', () => {
         ...baseIdentity,
         passwordHash,
       });
+      prisma.identity.update.mockResolvedValue({
+        ...baseIdentity,
+        failedLoginCount: 1,
+      });
 
       await expect(
         service.validateCredentials('user@example.com', 'wrong-password1'),
       ).rejects.toThrow(UnauthorizedException);
 
-      expect(prisma.identity.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { id: 'identity-1' },
-          data: expect.objectContaining({ failedLoginCount: 1 }),
-        }),
-      );
+      // The counter moves in the database (atomic increment), not from a value read earlier.
+      expect(prisma.identity.update).toHaveBeenCalledWith({
+        where: { id: 'identity-1' },
+        data: { failedLoginCount: { increment: 1 } },
+      });
+    });
+
+    it('looks the account up by its normalised (trimmed, lower-case) email', async () => {
+      prisma.identity.findUnique.mockResolvedValue(null);
+      await expect(
+        service.validateCredentials('  User@Example.COM ', 'x'),
+      ).rejects.toThrow(UnauthorizedException);
+      expect(prisma.identity.findUnique).toHaveBeenCalledWith({
+        where: { email: 'user@example.com' },
+      });
+    });
+
+    it('does not reveal a locked account through a different message than the lock hint', async () => {
+      prisma.identity.findUnique.mockResolvedValue({
+        ...baseIdentity,
+        lockedUntil: new Date(Date.now() + 60_000),
+      });
+      await expect(
+        service.validateCredentials('user@example.com', 'whatever'),
+      ).rejects.toThrow(/temporarily unavailable/);
     });
 
     it('locks the account after reaching the max failed attempts', async () => {
@@ -135,6 +158,11 @@ describe('AuthService', () => {
         ...baseIdentity,
         passwordHash,
         failedLoginCount: MAX_FAILED_LOGIN_ATTEMPTS - 1,
+      });
+      // The atomic increment reports the new total, which has reached the limit.
+      prisma.identity.update.mockResolvedValueOnce({
+        ...baseIdentity,
+        failedLoginCount: MAX_FAILED_LOGIN_ATTEMPTS,
       });
 
       await expect(
@@ -248,7 +276,11 @@ describe('AuthService', () => {
         sub: 'identity-1',
         purpose: '2fa_challenge',
       });
-      prisma.identity.findUniqueOrThrow.mockResolvedValue(baseIdentity);
+      prisma.identity.findUnique.mockResolvedValue(baseIdentity);
+      prisma.identity.update.mockResolvedValue({
+        ...baseIdentity,
+        failedLoginCount: 1,
+      });
       twoFactorService.verifyChallenge.mockResolvedValue(false);
 
       await expect(
@@ -263,12 +295,109 @@ describe('AuthService', () => {
       expect(prisma.refreshToken.create).not.toHaveBeenCalled();
     });
 
+    it('counts wrong second-factor codes toward the same lockout as wrong passwords', async () => {
+      jwtService.verifyAsync.mockResolvedValue({
+        sub: 'identity-1',
+        purpose: '2fa_challenge',
+      });
+      prisma.identity.findUnique.mockResolvedValue(baseIdentity);
+      prisma.identity.update.mockResolvedValueOnce({
+        ...baseIdentity,
+        failedLoginCount: MAX_FAILED_LOGIN_ATTEMPTS,
+      });
+      twoFactorService.verifyChallenge.mockResolvedValue(false);
+
+      await expect(
+        service.verifyTwoFactorLogin('token', '000000', {}),
+      ).rejects.toThrow(UnauthorizedException);
+
+      expect(prisma.identity.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ lockedUntil: expect.any(Date) }),
+        }),
+      );
+      expect(auditService.record).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'security.account_locked' }),
+      );
+    });
+
+    it('refuses to even check a code while the account is locked', async () => {
+      jwtService.verifyAsync.mockResolvedValue({
+        sub: 'identity-1',
+        purpose: '2fa_challenge',
+      });
+      prisma.identity.findUnique.mockResolvedValue({
+        ...baseIdentity,
+        lockedUntil: new Date(Date.now() + 60_000),
+      });
+
+      await expect(
+        service.verifyTwoFactorLogin('token', '123456', {}),
+      ).rejects.toThrow(UnauthorizedException);
+      expect(twoFactorService.verifyChallenge).not.toHaveBeenCalled();
+    });
+
+    it('refuses a deactivated account even with a valid code', async () => {
+      jwtService.verifyAsync.mockResolvedValue({
+        sub: 'identity-1',
+        purpose: '2fa_challenge',
+      });
+      prisma.identity.findUnique.mockResolvedValue({
+        ...baseIdentity,
+        status: 'DEACTIVATED',
+      });
+      twoFactorService.verifyChallenge.mockResolvedValue(true);
+
+      await expect(
+        service.verifyTwoFactorLogin('token', '123456', {}),
+      ).rejects.toThrow('This account is not active');
+      expect(prisma.refreshToken.create).not.toHaveBeenCalled();
+    });
+
+    it('a challenge is single-use: it is spent once the account has signed in since it was issued', async () => {
+      const issuedAt = Math.floor(Date.now() / 1000) - 60;
+      jwtService.verifyAsync.mockResolvedValue({
+        sub: 'identity-1',
+        purpose: '2fa_challenge',
+        issuedAtMs: issuedAt * 1000,
+      });
+      prisma.identity.findUnique.mockResolvedValue({
+        ...baseIdentity,
+        lastLoginAt: new Date((issuedAt + 30) * 1000),
+      });
+      twoFactorService.verifyChallenge.mockResolvedValue(true);
+
+      await expect(
+        service.verifyTwoFactorLogin('token', '123456', {}),
+      ).rejects.toThrow(/expired/);
+      expect(twoFactorService.verifyChallenge).not.toHaveBeenCalled();
+    });
+
+    it('a challenge issued just after the previous sign-in (same second) is still good', async () => {
+      const now = Date.now();
+      jwtService.verifyAsync.mockResolvedValue({
+        sub: 'identity-1',
+        purpose: '2fa_challenge',
+        issuedAtMs: now,
+        iat: Math.floor(now / 1000),
+      });
+      prisma.identity.findUnique.mockResolvedValue({
+        ...baseIdentity,
+        lastLoginAt: new Date(now - 200),
+      });
+      twoFactorService.verifyChallenge.mockResolvedValue(true);
+      prisma.refreshToken.create.mockResolvedValue({});
+
+      const result = await service.verifyTwoFactorLogin('token', '123456', {});
+      expect(result.accessToken).toBeDefined();
+    });
+
     it('issues a full session for a valid code', async () => {
       jwtService.verifyAsync.mockResolvedValue({
         sub: 'identity-1',
         purpose: '2fa_challenge',
       });
-      prisma.identity.findUniqueOrThrow.mockResolvedValue(baseIdentity);
+      prisma.identity.findUnique.mockResolvedValue(baseIdentity);
       twoFactorService.verifyChallenge.mockResolvedValue(true);
       prisma.refreshToken.create.mockResolvedValue({});
 
@@ -281,6 +410,80 @@ describe('AuthService', () => {
           metadata: { via2fa: true },
         }),
       );
+    });
+  });
+
+  describe('refresh token reuse detection', () => {
+    const rotated = (revokedAgoMs: number) => ({
+      id: 'rt-old',
+      identityId: 'identity-1',
+      revokedAt: new Date(Date.now() - revokedAgoMs),
+      replacedById: 'rt-new',
+      expiresAt: new Date(Date.now() + 3600_000),
+      identity: baseIdentity,
+    });
+
+    it('a rotated token replayed long after rotation revokes every session of that login', async () => {
+      prisma.refreshToken.findUnique.mockResolvedValue(rotated(5 * 60_000));
+      prisma.refreshToken.updateMany.mockResolvedValue({ count: 3 });
+
+      await expect(service.refresh('stolen', {})).rejects.toThrow(
+        UnauthorizedException,
+      );
+
+      expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
+        where: { identityId: 'identity-1', revokedAt: null },
+        data: { revokedAt: expect.any(Date) },
+      });
+      expect(auditService.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'security.refresh_token_reuse',
+          metadata: { sessionsRevoked: 3 },
+        }),
+      );
+    });
+
+    it('a parallel refresh inside the grace window is just refused, not treated as theft', async () => {
+      prisma.refreshToken.findUnique.mockResolvedValue(rotated(2_000));
+
+      await expect(service.refresh('double-click', {})).rejects.toThrow(
+        UnauthorizedException,
+      );
+
+      expect(prisma.refreshToken.updateMany).not.toHaveBeenCalled();
+      expect(auditService.record).not.toHaveBeenCalled();
+    });
+
+    it('a token revoked by logout (never rotated) is refused without a mass revocation', async () => {
+      prisma.refreshToken.findUnique.mockResolvedValue({
+        ...rotated(5 * 60_000),
+        replacedById: null,
+      });
+
+      await expect(service.refresh('logged-out', {})).rejects.toThrow(
+        UnauthorizedException,
+      );
+      expect(prisma.refreshToken.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('rotation records which token replaced the old one', async () => {
+      prisma.refreshToken.findUnique.mockResolvedValue({
+        id: 'rt-1',
+        identityId: 'identity-1',
+        revokedAt: null,
+        replacedById: null,
+        expiresAt: new Date(Date.now() + 3600_000),
+        identity: baseIdentity,
+      });
+      prisma.refreshToken.updateMany.mockResolvedValue({ count: 1 });
+      prisma.refreshToken.create.mockResolvedValue({ id: 'rt-2' });
+
+      await service.refresh('good', {});
+
+      expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
+        where: { id: 'rt-1' },
+        data: { replacedById: 'rt-2' },
+      });
     });
   });
 

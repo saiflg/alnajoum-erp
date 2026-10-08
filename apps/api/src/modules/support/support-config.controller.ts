@@ -3,6 +3,11 @@ import { TicketPriority } from '@prisma/client';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { SupportConfigService } from './support-config.service';
+import {
+  CategoryNameDto,
+  EscalationRuleDto,
+  SlaTargetDto,
+} from './dto/support-bodies.dto';
 
 @Controller('support/config')
 export class SupportConfigController {
@@ -17,7 +22,7 @@ export class SupportConfigController {
 
   @Post('categories')
   @RequirePermissions(PERMISSIONS.SUPPORT.CATEGORY_MANAGE)
-  createCategory(@Body() body: { name: string }) {
+  createCategory(@Body() body: CategoryNameDto) {
     return this.configService.createCategory(body.name);
   }
 
@@ -29,9 +34,7 @@ export class SupportConfigController {
 
   @Post('sla')
   @RequirePermissions(PERMISSIONS.SUPPORT.SLA_MANAGE)
-  updateSlaRule(
-    @Body() body: { priority: TicketPriority; responseMinutes: number },
-  ) {
+  updateSlaRule(@Body() body: SlaTargetDto) {
     return this.configService.updateSlaRule(
       body.priority,
       body.responseMinutes,
@@ -46,15 +49,7 @@ export class SupportConfigController {
 
   @Post('escalation-rules')
   @RequirePermissions(PERMISSIONS.SUPPORT.SLA_MANAGE)
-  createEscalationRule(
-    @Body()
-    body: {
-      priority: TicketPriority;
-      afterMinutes: number;
-      notifyRole: string;
-      order: number;
-    },
-  ) {
+  createEscalationRule(@Body() body: EscalationRuleDto) {
     return this.configService.createEscalationRule(body);
   }
 }

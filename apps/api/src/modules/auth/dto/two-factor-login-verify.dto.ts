@@ -5,6 +5,6 @@ export class TwoFactorLoginVerifyDto {
   challengeToken: string;
 
   @IsString()
-  @Length(6, 12)
+  @Length(6, 32)
   code: string;
 }

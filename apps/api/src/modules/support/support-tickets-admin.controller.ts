@@ -22,6 +22,7 @@ import { AddTicketMessageDto } from './dto/add-ticket-message.dto';
 import { SupportTicketsService } from './support-tickets.service';
 
 import { TenantScoped } from '../../common/tenancy/tenant-scoped.decorator';
+import { TicketAssignDto, TicketStatusDto } from './dto/support-bodies.dto';
 @Controller('support/tickets')
 @RequirePermissions(PERMISSIONS.SUPPORT.TICKET_VIEW)
 export class SupportTicketsAdminController {
@@ -54,20 +55,14 @@ export class SupportTicketsAdminController {
   @TenantScoped('supportTicket')
   @Post(':id/assign')
   @RequirePermissions(PERMISSIONS.SUPPORT.TICKET_MANAGE)
-  async assign(
-    @Param('id') id: string,
-    @Body() body: { staffId: string; branchId?: string },
-  ) {
+  async assign(@Param('id') id: string, @Body() body: TicketAssignDto) {
     return this.ticketsService.assign(id, body.staffId, body.branchId);
   }
 
   @TenantScoped('supportTicket')
   @Post(':id/status')
   @RequirePermissions(PERMISSIONS.SUPPORT.TICKET_MANAGE)
-  updateStatus(
-    @Param('id') id: string,
-    @Body() body: { status: TicketStatus },
-  ) {
+  updateStatus(@Param('id') id: string, @Body() body: TicketStatusDto) {
     if (body.status === TicketStatus.RESOLVED) {
       return this.ticketsService.resolve(id);
     }

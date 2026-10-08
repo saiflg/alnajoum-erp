@@ -12,6 +12,8 @@ import {
   StreamableFile,
 } from '@nestjs/common';
 import type { Response } from 'express';
+import { Throttle } from '@nestjs/throttler';
+import { PUBLIC_LOOKUP_THROTTLE } from '../../common/security/throttle-limits';
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
@@ -65,6 +67,7 @@ export class UsersController {
    * active/inactive flag so a deactivated badge reads as invalid the
    * moment it's scanned, even though the physical card hasn't changed. */
   @Public()
+  @Throttle(PUBLIC_LOOKUP_THROTTLE)
   @Get('verify/:employeeCode')
   verify(@Param('employeeCode') employeeCode: string) {
     return this.staffIdCardService.getVerification(employeeCode);

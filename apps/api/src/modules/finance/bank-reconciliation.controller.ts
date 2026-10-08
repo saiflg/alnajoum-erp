@@ -18,6 +18,7 @@ import { CreateBankStatementLineDto } from './dto/create-bank-statement-line.dto
 import { MatchBankStatementLineDto } from './dto/match-bank-statement-line.dto';
 
 import { resolveTenantFilter } from '../../common/utils/tenant.util';
+import { BulkBankStatementDto } from './dto/finance-bodies.dto';
 @Controller('finance/bank-reconciliation')
 @RequirePermissions(PERMISSIONS.FINANCE.BANK_RECONCILIATION)
 export class BankReconciliationController {
@@ -46,7 +47,7 @@ export class BankReconciliationController {
   @Post('lines/bulk')
   async importBulk(
     @CurrentUser() user: AuthContext,
-    @Body() body: { lines: CreateBankStatementLineDto[] },
+    @Body() body: BulkBankStatementDto,
   ) {
     const staffId = await this.requireStaffId(user);
     return this.service.importBulk(body.lines, staffId);

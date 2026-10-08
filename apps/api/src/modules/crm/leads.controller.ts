@@ -20,6 +20,13 @@ import { UpdateLeadDto } from './dto/update-lead.dto';
 import { LeadsService } from './leads.service';
 
 import { TenantScoped } from '../../common/tenancy/tenant-scoped.decorator';
+import {
+  LeadAssignDto,
+  LeadConvertDto,
+  LeadStageCreateDto,
+  LeadStageMoveDto,
+  ReasonDto,
+} from './dto/crm-bodies.dto';
 @Controller('crm/leads')
 export class LeadsController {
   constructor(
@@ -82,7 +89,7 @@ export class LeadsController {
 
   @Post('stages')
   @RequirePermissions(PERMISSIONS.CRM.LEAD_STAGE_MANAGE)
-  createStage(@Body() body: { name: string; order: number }) {
+  createStage(@Body() body: LeadStageCreateDto) {
     return this.leadsService.createStage(body.name, body.order);
   }
 
@@ -106,7 +113,7 @@ export class LeadsController {
   async changeStage(
     @CurrentUser() user: AuthContext,
     @Param('id') id: string,
-    @Body() body: { stageId: string },
+    @Body() body: LeadStageMoveDto,
   ) {
     const staffId = await this.requireStaffId(user);
     return this.leadsService.changeStage(id, body.stageId, staffId);
@@ -119,7 +126,7 @@ export class LeadsController {
   async assign(
     @CurrentUser() user: AuthContext,
     @Param('id') id: string,
-    @Body() body: { staffId?: string; method?: 'ROUND_ROBIN' },
+    @Body() body: LeadAssignDto,
   ) {
     const staffId = await this.requireStaffId(user);
     const targetStaffId =
@@ -138,7 +145,7 @@ export class LeadsController {
   async markLost(
     @CurrentUser() user: AuthContext,
     @Param('id') id: string,
-    @Body() body: { reason: string },
+    @Body() body: ReasonDto,
   ) {
     const staffId = await this.requireStaffId(user);
     return this.leadsService.markLost(id, body.reason, staffId);
@@ -155,11 +162,7 @@ export class LeadsController {
   async convert(
     @CurrentUser() user: AuthContext,
     @Param('id') id: string,
-    @Body()
-    body: {
-      existingCustomerId?: string;
-      mode?: 'CUSTOMER' | 'CORPORATE' | 'FAMILY';
-    },
+    @Body() body: LeadConvertDto,
   ) {
     const staffId = await this.requireStaffId(user);
     return this.leadsService.convert(id, { ...body, actorStaffId: staffId });

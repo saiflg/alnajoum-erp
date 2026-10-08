@@ -3,6 +3,7 @@ import { RequirePermissions } from '../../common/decorators/permissions.decorato
 import { Roles } from '../../common/decorators/roles.decorator';
 import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { TemplatesService } from './templates.service';
+import { UpdateTemplateBodyDto } from './dto/update-template-body.dto';
 
 /** Spec #16/#22 — administrators editing message templates. */
 // Templates are shared by every tenant, so editing them is a platform operation.
@@ -23,16 +24,7 @@ export class TemplatesController {
   }
 
   @Patch(':key')
-  update(
-    @Param('key') key: string,
-    @Body()
-    body: {
-      name?: string;
-      subject?: string;
-      body?: string;
-      isActive?: boolean;
-    },
-  ) {
+  update(@Param('key') key: string, @Body() body: UpdateTemplateBodyDto) {
     return this.templatesService.update(key, body);
   }
 }

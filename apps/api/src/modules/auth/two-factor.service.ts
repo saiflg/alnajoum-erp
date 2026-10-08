@@ -2,19 +2,25 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
+  OnModuleInit,
   UnauthorizedException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Identity, Prisma } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { randomBytes } from 'crypto';
 import { authenticator } from 'otplib';
 import * as QRCode from 'qrcode';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
+import { FieldCipher } from '../../common/security/field-cipher';
 import { AuditService } from '../audit/audit.service';
 
 const RECOVERY_CODE_COUNT = 8;
 const ISSUER = 'Alnajoum Travel Agency';
+const TOTP_STEP_MS = 30_000;
+const secretContext = (identityId: string) =>
+  `identity:${identityId}:twoFactorSecret`;
 
 /**
  * Phase 11 spec #15 — TOTP two-factor authentication. Identity.
@@ -25,11 +31,72 @@ const ISSUER = 'Alnajoum Travel Agency';
  * columns alone can't satisfy.
  */
 @Injectable()
-export class TwoFactorService {
+export class TwoFactorService implements OnModuleInit {
+  private readonly logger = new Logger(TwoFactorService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
   ) {}
+
+  /** Phase 22 S-28: authenticator secrets are encrypted at rest. Existing plaintext secrets are
+   * encrypted once, at startup, so nobody has to re-enrol. */
+  async onModuleInit(): Promise<void> {
+    try {
+      const rows = await this.prisma.identity.findMany({
+        where: {
+          twoFactorSecret: { not: null },
+          NOT: { twoFactorSecret: { startsWith: 'enc:v1:' } },
+        },
+        select: { id: true, twoFactorSecret: true },
+      });
+      for (const row of rows) {
+        await this.prisma.identity.update({
+          where: { id: row.id },
+          data: { twoFactorSecret: this.seal(row.id, row.twoFactorSecret!) },
+        });
+      }
+      if (rows.length)
+        this.logger.log(`Encrypted ${rows.length} authenticator secret(s)`);
+    } catch (err) {
+      this.logger.error(
+        `Could not encrypt authenticator secrets: ${(err as Error).message}`,
+      );
+    }
+  }
+
+  private seal(identityId: string, secret: string): string {
+    return FieldCipher.default().encrypt(secret, secretContext(identityId));
+  }
+
+  private open(identity: Pick<Identity, 'id' | 'twoFactorSecret'>): string {
+    return FieldCipher.default().decryptIfEncrypted(
+      identity.twoFactorSecret!,
+      secretContext(identity.id),
+    );
+  }
+
+  /**
+   * The time-step a valid code belongs to, or null if the code is wrong. Each step can be accepted once
+   * (twoFactorLastStep moves forward atomically), so a code seen over a shoulder or in a log cannot be
+   * replayed inside its 30-second window.
+   */
+  private async acceptTotp(
+    identity: Pick<Identity, 'id' | 'twoFactorSecret'>,
+    code: string,
+  ): Promise<boolean> {
+    const delta = authenticator.checkDelta(code, this.open(identity));
+    if (delta === null || delta === undefined) return false;
+    const step = Math.floor(Date.now() / TOTP_STEP_MS) + delta;
+    const claim = await this.prisma.identity.updateMany({
+      where: {
+        id: identity.id,
+        OR: [{ twoFactorLastStep: null }, { twoFactorLastStep: { lt: step } }],
+      },
+      data: { twoFactorLastStep: step },
+    });
+    return claim.count === 1;
+  }
 
   /**
    * Step 1 of setup — generates a secret and a scannable QR code, but
@@ -54,7 +121,7 @@ export class TwoFactorService {
     const secret = authenticator.generateSecret();
     await this.prisma.identity.update({
       where: { id: identityId },
-      data: { twoFactorSecret: secret },
+      data: { twoFactorSecret: this.seal(identityId, secret) },
     });
 
     const otpauthUrl = authenticator.keyuri(identity.email, ISSUER, secret);
@@ -65,7 +132,8 @@ export class TwoFactorService {
 
   private generateRecoveryCodes(): string[] {
     return Array.from({ length: RECOVERY_CODE_COUNT }, () =>
-      randomBytes(5)
+      // 80 bits (was 40): recovery codes are a password-equivalent, so they get password-grade entropy.
+      randomBytes(10)
         .toString('hex')
         .toUpperCase()
         .match(/.{1,5}/g)!
@@ -104,17 +172,18 @@ export class TwoFactorService {
         'No pending two-factor setup — call the setup endpoint first.',
       );
     }
-    const valid = authenticator.verify({
-      token: code,
-      secret: identity.twoFactorSecret,
-    });
-    if (!valid) {
+    const delta = authenticator.checkDelta(code, this.open(identity));
+    if (delta === null || delta === undefined) {
       throw new UnauthorizedException('Invalid authenticator code');
     }
 
     await this.prisma.identity.update({
       where: { id: identityId },
-      data: { twoFactorEnabled: true },
+      data: {
+        twoFactorEnabled: true,
+        // The code that proved enrolment cannot be replayed to sign in a moment later.
+        twoFactorLastStep: Math.floor(Date.now() / TOTP_STEP_MS) + delta,
+      },
     });
 
     const recoveryCodes = this.generateRecoveryCodes();
@@ -140,21 +209,19 @@ export class TwoFactorService {
       return false;
     }
 
-    if (
-      authenticator.verify({ token: code, secret: identity.twoFactorSecret })
-    ) {
-      return true;
-    }
+    if (await this.acceptTotp(identity, code)) return true;
 
     const unusedCodes = await this.prisma.twoFactorRecoveryCode.findMany({
       where: { identityId, usedAt: null },
     });
     for (const recoveryCode of unusedCodes) {
       if (await argon2.verify(recoveryCode.codeHash, code)) {
-        await this.prisma.twoFactorRecoveryCode.update({
-          where: { id: recoveryCode.id },
+        // Atomic claim: two simultaneous uses of one recovery code must not both succeed.
+        const claim = await this.prisma.twoFactorRecoveryCode.updateMany({
+          where: { id: recoveryCode.id, usedAt: null },
           data: { usedAt: new Date() },
         });
+        if (claim.count !== 1) return false;
         await this.auditService.record({
           identityId,
           action: 'security.2fa_recovery_code_used',
@@ -207,7 +274,11 @@ export class TwoFactorService {
   ): Promise<void> {
     await this.prisma.identity.update({
       where: { id: identityId },
-      data: { twoFactorEnabled: false, twoFactorSecret: null },
+      data: {
+        twoFactorEnabled: false,
+        twoFactorSecret: null,
+        twoFactorLastStep: null,
+      },
     });
     await this.prisma.twoFactorRecoveryCode.deleteMany({
       where: { identityId },

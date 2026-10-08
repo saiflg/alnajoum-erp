@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { NormalizedInboundEvent } from './providers/whatsapp-provider.port';
 import { WhatsAppProviderRouter } from './providers/whatsapp-provider.router';
@@ -7,7 +8,10 @@ import { WhatsAppConversationsService } from './whatsapp-conversations.service';
 import { WhatsAppOtpService } from './whatsapp-otp.service';
 import { WhatsAppPaymentLinkService } from './whatsapp-payment-link.service';
 import { WhatsAppSelfServiceService } from './whatsapp-self-service.service';
-import { WhatsAppWebhookService } from './whatsapp-webhook.service';
+import {
+  WhatsAppWebhookService,
+  webhookEventKey,
+} from './whatsapp-webhook.service';
 
 const conversation = {
   id: 'conv-1',
@@ -122,7 +126,10 @@ describe('WhatsAppWebhookService', () => {
 
     it('returns false on a redelivered event (unique constraint violation)', async () => {
       prisma.whatsAppWebhookEvent.create.mockRejectedValue(
-        new Error('Unique constraint failed'),
+        new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+          code: 'P2002',
+          clientVersion: 'test',
+        }),
       );
 
       const isNew = await service.recordEventOnceOrSkip('meta', 'wamid.1', {
@@ -130,6 +137,40 @@ describe('WhatsAppWebhookService', () => {
       });
 
       expect(isNew).toBe(false);
+    });
+
+    it('does NOT treat a database failure as a duplicate (the event must be retried, not dropped)', async () => {
+      prisma.whatsAppWebhookEvent.create.mockRejectedValue(
+        new Error('connection refused'),
+      );
+
+      await expect(
+        service.recordEventOnceOrSkip('meta', 'wamid.1', { a: 1 }),
+      ).rejects.toThrow('connection refused');
+    });
+
+    it('sent, delivered and read events of ONE message are three different events', () => {
+      const base = {
+        kind: 'STATUS' as const,
+        providerMessageId: 'wamid.9',
+        timestamp: '2026-01-01T00:00:00Z',
+      };
+      const keys = (['SENT', 'DELIVERED', 'READ'] as const).map((status) =>
+        webhookEventKey({ ...base, status }),
+      );
+      expect(new Set(keys).size).toBe(3);
+      // ...while a redelivery of the same status is still the same event.
+      expect(webhookEventKey({ ...base, status: 'READ' })).toBe(keys[2]);
+    });
+
+    it('an inbound message is keyed by its own id', () => {
+      expect(
+        webhookEventKey({
+          kind: 'MESSAGE',
+          providerMessageId: 'wamid.7',
+          timestamp: 't',
+        }),
+      ).toBe('wamid.7');
     });
   });
 

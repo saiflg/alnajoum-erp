@@ -16,6 +16,13 @@ import { CustomersService } from '../customers/customers.service';
 import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { UsersService } from '../users/users.service';
 import { ComplaintsService } from './complaints.service';
+import {
+  ComplaintAssignDto,
+  ComplaintCreateDto,
+  ComplaintEscalateDto,
+  ComplaintNoteDto,
+  ComplaintResolutionDto,
+} from './dto/crm-bodies.dto';
 
 @Controller('crm/complaints')
 export class ComplaintsController {
@@ -36,7 +43,7 @@ export class ComplaintsController {
   @Post('me')
   async createOwn(
     @CurrentUser() user: AuthContext,
-    @Body() body: { subject: string; description: string },
+    @Body() body: ComplaintCreateDto,
   ) {
     const customerId = await this.customersService.getCustomerIdForIdentity(
       user.sub,
@@ -80,7 +87,7 @@ export class ComplaintsController {
   assign(
     @CurrentUser() user: AuthContext,
     @Param('id') id: string,
-    @Body() body: { staffId: string },
+    @Body() body: ComplaintAssignDto,
   ) {
     return this.complaintsService.assign(
       id,
@@ -94,7 +101,7 @@ export class ComplaintsController {
   async addNote(
     @CurrentUser() user: AuthContext,
     @Param('id') id: string,
-    @Body() body: { note: string; isInternal?: boolean },
+    @Body() body: ComplaintNoteDto,
   ) {
     const staffId = await this.requireStaffId(user);
     return this.complaintsService.addNote(
@@ -111,7 +118,7 @@ export class ComplaintsController {
   resolve(
     @CurrentUser() user: AuthContext,
     @Param('id') id: string,
-    @Body() body: { resolution: string },
+    @Body() body: ComplaintResolutionDto,
   ) {
     return this.complaintsService.resolve(
       id,
@@ -125,7 +132,7 @@ export class ComplaintsController {
   escalate(
     @CurrentUser() user: AuthContext,
     @Param('id') id: string,
-    @Body() body: { toRole: string },
+    @Body() body: ComplaintEscalateDto,
   ) {
     return this.complaintsService.escalate(
       id,

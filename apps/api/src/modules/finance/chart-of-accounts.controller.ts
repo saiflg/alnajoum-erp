@@ -10,6 +10,7 @@ import { LedgerService } from './ledger.service';
 
 import { Roles } from '../../common/decorators/roles.decorator';
 import { resolveTenantFilter } from '../../common/utils/tenant.util';
+import { AccountReasonDto } from './dto/finance-bodies.dto';
 class CreateAccountDto {
   @IsString()
   @MaxLength(20)
@@ -90,7 +91,7 @@ export class ChartOfAccountsController {
   reverseEntry(
     @CurrentUser() user: AuthContext,
     @Param('id') id: string,
-    @Body() body: { reason: string },
+    @Body() body: AccountReasonDto,
   ) {
     return this.ledger.reverseEntry(
       id,

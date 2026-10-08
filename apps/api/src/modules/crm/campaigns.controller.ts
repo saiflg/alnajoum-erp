@@ -9,6 +9,7 @@ import { CampaignsService } from './campaigns.service';
 
 import { TenantScoped } from '../../common/tenancy/tenant-scoped.decorator';
 import { resolveTenantFilter } from '../../common/utils/tenant.util';
+import { CampaignCreateDto, CampaignStatusDto } from './dto/crm-bodies.dto';
 @Controller('crm/campaigns')
 @RequirePermissions(PERMISSIONS.CRM.CAMPAIGN_MANAGE)
 export class CampaignsController {
@@ -20,17 +21,7 @@ export class CampaignsController {
   @Post()
   async create(
     @CurrentUser() user: AuthContext,
-    @Body()
-    body: {
-      name: string;
-      description?: string;
-      targetService: string;
-      targetAudience?: string;
-      startDate: string;
-      endDate?: string;
-      budget?: number;
-      channel?: string;
-    },
+    @Body() body: CampaignCreateDto,
   ) {
     const staffId = await this.usersService.getStaffIdForIdentity(user.sub);
     return this.campaignsService.create({
@@ -55,10 +46,7 @@ export class CampaignsController {
 
   @TenantScoped('campaign')
   @Post(':id/status')
-  updateStatus(
-    @Param('id') id: string,
-    @Body() body: { status: CampaignStatus },
-  ) {
+  updateStatus(@Param('id') id: string, @Body() body: CampaignStatusDto) {
     return this.campaignsService.updateStatus(id, body.status);
   }
 }

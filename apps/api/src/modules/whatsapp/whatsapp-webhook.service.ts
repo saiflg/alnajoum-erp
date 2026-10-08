@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { createHash } from 'crypto';
 import {
   WhatsAppMessageDirection,
@@ -35,6 +36,18 @@ const OTP_PATTERN = /^\d{6}$/;
  * phone-number-id → company mapping, which is a real but separable
  * follow-up (see WhatsAppModule's doc comment).
  */
+/**
+ * The key a webhook event is de-duplicated on. A message is identified by its own id; a delivery STATUS is
+ * identified by the message id AND the status, because one message legitimately produces sent, delivered and
+ * read events that all carry the same message id (keying on the id alone dropped delivered/read).
+ */
+export function webhookEventKey(event: NormalizedInboundEvent): string {
+  if (!event.providerMessageId) return `${event.kind}-${event.timestamp}`;
+  return event.kind === 'STATUS'
+    ? `${event.providerMessageId}:${event.status ?? 'UNKNOWN'}`
+    : event.providerMessageId;
+}
+
 @Injectable()
 export class WhatsAppWebhookService {
   private readonly logger = new Logger(WhatsAppWebhookService.name);
@@ -67,9 +80,16 @@ export class WhatsAppWebhookService {
         data: { provider, eventId, payloadHash, status: 'PENDING' },
       });
       return true;
-    } catch {
-      // Unique constraint violation — this exact event was already seen.
-      return false;
+    } catch (error) {
+      // Only a unique-constraint violation means "already seen". Anything else (database down, ...) must NOT
+      // be mistaken for a duplicate, or the event would be silently dropped: let it fail so the provider retries.
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        return false;
+      }
+      throw error;
     }
   }
 

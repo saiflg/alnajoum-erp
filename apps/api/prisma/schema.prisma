@@ -37,8 +37,11 @@ model Identity {
   emailVerifiedAt DateTime?
   phoneVerifiedAt DateTime?
 
-  twoFactorEnabled Boolean @default(false)
-  twoFactorSecret  String?
+  twoFactorEnabled  Boolean @default(false)
+  // Stored encrypted (FieldCipher) since Phase 22; legacy plaintext values are migrated at startup.
+  twoFactorSecret   String?
+  // The TOTP time-step last accepted, so one code cannot be used twice (replay protection).
+  twoFactorLastStep Int?
 
   lastLoginAt      DateTime?
   failedLoginCount Int       @default(0)
@@ -67,10 +70,10 @@ model Identity {
   notificationPreference NotificationPreference?
 
   // Phase 11 — 2FA recovery codes and API keys this identity owns.
-  recoveryCodes TwoFactorRecoveryCode[]
-  apiKeys       ApiKey[]
-  approvalRequestsMade     ApprovalRequest[] @relation("ApprovalRequester")
-  approvalDecisionsMade    ApprovalDecision[] @relation("ApprovalDecider")
+  recoveryCodes         TwoFactorRecoveryCode[]
+  apiKeys               ApiKey[]
+  approvalRequestsMade  ApprovalRequest[]       @relation("ApprovalRequester")
+  approvalDecisionsMade ApprovalDecision[]      @relation("ApprovalDecider")
 
   // Phase 18 — mobile app device registrations and self-service password
   // reset (no account-recovery flow existed before this phase at all).
@@ -326,11 +329,12 @@ model Staff {
   // change, and only an authorized re-verification (FINANCE.VERIFY_PAYOUT_
   // ACCOUNT) flips it back, which StaffPayoutsService.attemptPayout() now
   // requires before it will move money.
-  bankAccountVerified               Boolean   @default(false)
+  bankAccountVerified               Boolean    @default(false)
   bankAccountVerifiedAt             DateTime?
   bankAccountVerifiedByStaffId      String?
-  bankAccountVerifiedByStaff        Staff?    @relation("BankAccountVerifications", fields: [bankAccountVerifiedByStaffId], references: [id], onDelete: SetNull)
-  bankAccountVerificationsPerformed Staff[]   @relation("BankAccountVerifications")
+  bankAccountVerifiedByStaff        Staff?     @relation("BankAccountVerifications", fields: [bankAccountVerifiedByStaffId], references: [id], onDelete: SetNull)
+  bankAccountVerificationsPerformed Staff[]    @relation("BankAccountVerifications")
+  campaignsCreated                  Campaign[] @relation("CampaignCreator")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -406,7 +410,7 @@ model Staff {
   whatsappMessagesSent          WhatsAppMessage[]
 
   // Phase 16 — supplier management.
-  suppliersManaged         Supplier[]         @relation("SupplierAccountManager")
+  suppliersManaged          Supplier[]         @relation("SupplierAccountManager")
   supplierDocumentsUploaded SupplierDocument[]
 
   @@index([companyId])
@@ -444,21 +448,21 @@ model Company {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  branches   Branch[]
-  staff      Staff[]
-  customers  Customer[]
-  auditLogs  AuditLog[]
-  featureFlagOverrides FeatureFlagOverride[]
-  systemSettings SystemSetting[]
-  aiUsageLogs AiUsageLog[]
-  approvalRequests ApprovalRequest[]
+  branches               Branch[]
+  staff                  Staff[]
+  customers              Customer[]
+  auditLogs              AuditLog[]
+  featureFlagOverrides   FeatureFlagOverride[]
+  systemSettings         SystemSetting[]
+  aiUsageLogs            AiUsageLog[]
+  approvalRequests       ApprovalRequest[]
   approvalThresholdRules ApprovalThresholdRule[]
-  whatsappConversations WhatsAppConversation[]
-  flightSuppliers FlightSupplier[]
-  supplierPayables SupplierPayable[]
-  suppliers Supplier[]
-  ratePlans RatePlan[]
-  hotelAllotments HotelAllotment[]
+  whatsappConversations  WhatsAppConversation[]
+  flightSuppliers        FlightSupplier[]
+  supplierPayables       SupplierPayable[]
+  suppliers              Supplier[]
+  ratePlans              RatePlan[]
+  hotelAllotments        HotelAllotment[]
 
   // Phase 19 — revenue management.
   pricingRules    PricingRule[]
@@ -468,20 +472,20 @@ model Company {
 
   // Phase 21 — workflow automation.
   workflowDefinitions WorkflowDefinition[]
-  hajjGroups HajjGroup[]
-  umrahGroups UmrahGroup[]
-  hajjOpsVehicles Vehicle[]
-  hajjOpsDrivers Driver[]
-  hajjOpsTransports Transport[]
-  roomAllocations RoomAllocation[]
-  companyInvestments CompanyInvestment[]
-  journalEntries JournalEntry[]
-  dailyClosings DailyClosing[]
-  corporateAccounts CorporateAccount[]
-  securityIncidents SecurityIncident[]
-  accessReviews AccessReview[]
+  hajjGroups          HajjGroup[]
+  umrahGroups         UmrahGroup[]
+  hajjOpsVehicles     Vehicle[]
+  hajjOpsDrivers      Driver[]
+  hajjOpsTransports   Transport[]
+  roomAllocations     RoomAllocation[]
+  companyInvestments  CompanyInvestment[]
+  journalEntries      JournalEntry[]
+  dailyClosings       DailyClosing[]
+  corporateAccounts   CorporateAccount[]
+  securityIncidents   SecurityIncident[]
+  accessReviews       AccessReview[]
   dataSubjectRequests DataSubjectRequest[]
-  breakGlassGrants BreakGlassGrant[]
+  breakGlassGrants    BreakGlassGrant[]
 
   @@map("companies")
 }
@@ -610,8 +614,8 @@ model RefreshToken {
   revokedAt    DateTime?
   replacedById String?
 
-  createdByIp String?
-  userAgent   String?
+  createdByIp    String?
+  userAgent      String?
   lastActivityAt DateTime? // Phase 11 — updated opportunistically, not on every single request
 
   createdAt DateTime @default(now())
@@ -733,7 +737,7 @@ model AuditLog {
   // audit rows that represent a decision or a configuration change
   // (approvals, settings, role/permission edits). Left null for routine
   // create/read entries where there's no "previous state" to speak of.
-  reason      String?
+  reason        String?
   previousValue Json?
   newValue      Json?
 
@@ -1265,7 +1269,7 @@ enum FlightSupplierStatus {
  * never-a-stored-balance-column discipline as Wallet.
  */
 model FlightSupplier {
-  id   String             @id @default(cuid())
+  id String @id @default(cuid())
 
   // Phase 11 spec #2/#65 fix — a supplier's negotiated commission/markup/
   // credit terms are exactly the kind of commercially sensitive per-tenant
@@ -2489,10 +2493,12 @@ enum WhatsAppConsentStatus {
   UNKNOWN
 }
 
-/** One thread per customer phone number per company — the unit staff work
+/**
+ * One thread per customer phone number per company — the unit staff work
  * from in the inbox. `customerId` is nullable because a message can arrive
  * from a number with no matching Customer yet (identification happens
- * server-side by phone lookup, never trusted from the message itself). */
+ * server-side by phone lookup, never trusted from the message itself).
+ */
 model WhatsAppConversation {
   id String @id @default(cuid())
 
@@ -2501,16 +2507,16 @@ model WhatsAppConversation {
   branchId  String?
   branch    Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
 
-  customerId String?
-  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  customerId  String?
+  customer    Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
   // E.164 (the WhatsApp wa_id) — the raw join key before/without a matched
   // Customer, and still authoritative even after one is matched.
   phoneNumber String
 
-  status           WhatsAppConversationStatus @default(OPEN)
-  assignedStaffId  String?
-  assignedStaff    Staff?                     @relation(fields: [assignedStaffId], references: [id], onDelete: SetNull)
-  language         String?
+  status          WhatsAppConversationStatus @default(OPEN)
+  assignedStaffId String?
+  assignedStaff   Staff?                     @relation(fields: [assignedStaffId], references: [id], onDelete: SetNull)
+  language        String?
 
   // Spec #85 — staff takeover suppresses the self-service menu/automation
   // for this conversation until released, without touching `status`
@@ -2545,9 +2551,9 @@ model WhatsAppMessage {
   // reconciling delivery/read status webhooks back to the right row.
   providerMessageId String? @unique
 
-  direction WhatsAppMessageDirection
-  type      WhatsAppMessageType       @default(TEXT)
-  content   String?
+  direction     WhatsAppMessageDirection
+  type          WhatsAppMessageType      @default(TEXT)
+  content       String?
   mediaUrl      String?
   mediaMimeType String?
 
@@ -2579,16 +2585,18 @@ model WhatsAppMessage {
   @@map("whatsapp_messages")
 }
 
-/** Meta-policy-level "may we message this number at all", distinct from
+/**
+ * Meta-policy-level "may we message this number at all", distinct from
  * NotificationPreference.whatsappEnabled (which assumes consent already
  * exists and only toggles which message CATEGORIES a customer wants once
  * a conversation is already permitted). Keyed by phone, not customerId,
  * since consent can be recorded before any Customer match exists (e.g. an
- * inbound message from an unrecognized number that later gets linked). */
+ * inbound message from an unrecognized number that later gets linked).
+ */
 model WhatsAppConsent {
-  id          String  @id @default(cuid())
-  phoneNumber String  @unique
-  customerId  String? @unique
+  id          String    @id @default(cuid())
+  phoneNumber String    @unique
+  customerId  String?   @unique
   customer    Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
 
   status String @default("UNKNOWN") // WhatsAppConsentStatus's values, stored as a string so a webhook-recorded consent for an unmatched phone number never needs a customerId
@@ -2603,34 +2611,38 @@ model WhatsAppConsent {
   @@map("whatsapp_consents")
 }
 
-/** Spec #13/#43 — every provider webhook call lands here first, keyed by
+/**
+ * Spec #13/#43 — every provider webhook call lands here first, keyed by
  * the provider's own event id (or a payload hash when the provider gives
  * none), before any business processing runs. The unique constraint IS
  * the idempotency guarantee: a redelivered webhook fails the insert and
- * is dropped, never reprocessed. */
+ * is dropped, never reprocessed.
+ */
 model WhatsAppWebhookEvent {
-  id          String  @id @default(cuid())
+  id          String @id @default(cuid())
   provider    String // "meta" | "mock"
   eventId     String
   payloadHash String
 
-  receivedAt   DateTime  @default(now())
-  processedAt  DateTime?
-  status       String    @default("PENDING") // PENDING | PROCESSED | FAILED
-  error        String?
-  retryCount   Int       @default(0)
+  receivedAt  DateTime  @default(now())
+  processedAt DateTime?
+  status      String    @default("PENDING") // PENDING | PROCESSED | FAILED
+  error       String?
+  retryCount  Int       @default(0)
 
   @@unique([provider, eventId])
   @@index([status])
   @@map("whatsapp_webhook_events")
 }
 
-/** Phase 14 spec #7/#8 — short-lived OTP for linking a WhatsApp
+/**
+ * Phase 14 spec #7/#8 — short-lived OTP for linking a WhatsApp
  * conversation to an existing customer account before any sensitive data
  * (booking details, documents, payment info) is shown over the channel.
  * `codeHash` never stores the plaintext code — same discipline as
  * password/refresh-token hashing elsewhere in this codebase — and the
- * code itself is never written to logs or audit metadata. */
+ * code itself is never written to logs or audit metadata.
+ */
 model WhatsAppOtpChallenge {
   id          String    @id @default(cuid())
   phoneNumber String
@@ -3037,7 +3049,6 @@ model HotelBooking {
  * yet consumed by any booking-flow code — a real future use (e.g.
  * repricing an offer against this instead of the flat catalog price) is
  * a separate, larger change.
- *
  * Versioned by convention, not by database constraint: create a new row
  * for a new negotiated price rather than editing an active plan's price
  * fields, same "never overwrite historical commercial terms" discipline
@@ -3058,23 +3069,23 @@ model RatePlan {
   supplierId String?
   supplier   Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
 
-  name     String
-  mealPlan MealPlan @default(ROOM_ONLY)
+  name      String
+  mealPlan  MealPlan @default(ROOM_ONLY)
   occupancy Int?
 
-  currency    String @default("NGN")
-  netPrice    Int // per room-night — what this company is charged
-  grossPrice  Int? // per room-night — informational reference sell price, see doc comment above
+  currency   String @default("NGN")
+  netPrice   Int // per room-night — what this company is charged
+  grossPrice Int? // per room-night — informational reference sell price, see doc comment above
 
   commissionPercent Float?
   taxPercent        Float?
   feeAmount         Int?
   markupPercent     Float?
 
-  cancellationPolicy String?
-  changePolicy       String?
-  minStay            Int?
-  maxStay            Int?
+  cancellationPolicy  String?
+  changePolicy        String?
+  minStay             Int?
+  maxStay             Int?
   advancePurchaseDays Int?
   releasePeriodDays   Int?
 
@@ -3101,7 +3112,6 @@ model RatePlan {
  * timestamp, so the unique constraint below reliably means "one row per
  * day" rather than depending on every caller passing an already-truncated
  * value.
- *
  * remaining = totalAllocated - bookedCount - heldCount - blockedCount,
  * computed on read (spec #7's own formula) — never a separately-stored
  * column, so it can never drift from the counters it's derived from.
@@ -3775,12 +3785,12 @@ enum CorporateBookingStatus {
 }
 
 model CorporateAccount {
-  id   String @id @default(cuid())
+  id String @id @default(cuid())
 
   // Phase 22 - the agency (tenant) this corporate client belongs to.
   companyId String?
   company   Company? @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  name String
+  name      String
 
   registrationNumber String?
   billingEmail       String?
@@ -4398,7 +4408,7 @@ model SupplierContract {
   supplierId String
   supplier   Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
 
-  contractNumber String @unique
+  contractNumber String    @unique
   name           String
   startDate      DateTime
   endDate        DateTime?
@@ -5132,12 +5142,15 @@ model Campaign {
   status CampaignStatus @default(DRAFT)
 
   createdByStaffId String?
+  // Relation added in Phase 22 so a campaign can be scoped to its creator's company.
+  createdByStaff   Staff?  @relation("CampaignCreator", fields: [createdByStaffId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   leads Lead[]
 
+  @@index([createdByStaffId])
   @@map("campaigns")
 }
 
@@ -5214,12 +5227,12 @@ enum TravelGroupStatus {
 }
 
 model HajjGroup {
-  id          String @id @default(cuid())
+  id String @id @default(cuid())
 
   // Phase 22 - tenant ownership. Nullable only so existing rows could be backfilled; new rows always set it.
-  companyId String?
-  company   Company? @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  groupNumber String @unique
+  companyId   String?
+  company     Company? @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  groupNumber String   @unique
   name        String
 
   packageId String?
@@ -5259,11 +5272,11 @@ enum UmrahGroupType {
 }
 
 model UmrahGroup {
-  id          String         @id @default(cuid())
+  id String @id @default(cuid())
 
   // Phase 22 - tenant ownership. Nullable only so existing rows could be backfilled; new rows always set it.
-  companyId String?
-  company   Company? @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  companyId   String?
+  company     Company?       @relation(fields: [companyId], references: [id], onDelete: Restrict)
   groupNumber String         @unique
   name        String
   groupType   UmrahGroupType @default(GROUP)
@@ -5315,11 +5328,11 @@ enum VehicleFleetStatus {
 // VehicleRental (a customer-facing marketplace booking with a third-party
 // provider); no overlap in purpose or data.
 model Vehicle {
-  id          String             @id @default(cuid())
+  id String @id @default(cuid())
 
   // Phase 22 - tenant ownership. Nullable only so existing rows could be backfilled; new rows always set it.
-  companyId String?
-  company   Company? @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  companyId   String?
+  company     Company?           @relation(fields: [companyId], references: [id], onDelete: Restrict)
   plateNumber String             @unique
   type        VehicleFleetType
   capacity    Int
@@ -5342,7 +5355,7 @@ enum DriverStatus {
 }
 
 model Driver {
-  id        String @id @default(cuid())
+  id String @id @default(cuid())
 
   // Phase 22 - tenant ownership. Nullable only so existing rows could be backfilled; new rows always set it.
   companyId String?
@@ -5387,12 +5400,12 @@ enum TransportStatus {
 }
 
 model Transport {
-  id   String        @id @default(cuid())
+  id String @id @default(cuid())
 
   // Phase 22 - tenant ownership. Nullable only so existing rows could be backfilled; new rows always set it.
   companyId String?
-  company   Company? @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  type TransportType
+  company   Company?      @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  type      TransportType
 
   // Exactly one of these is set — same "exactly one" convention as
   // HajjRegistrationPilgrim.customerId/familyMemberId.
@@ -5600,13 +5613,13 @@ enum ApiKeyStatus {
  * prefix (for the owner to recognize which key is which in a list).
  */
 model ApiKey {
-  id             String       @id @default(cuid())
+  id              String   @id @default(cuid())
   ownerIdentityId String
-  ownerIdentity   Identity    @relation(fields: [ownerIdentityId], references: [id], onDelete: Cascade)
+  ownerIdentity   Identity @relation(fields: [ownerIdentityId], references: [id], onDelete: Cascade)
 
   name        String
   keyPrefix   String // first 8 chars of the raw key, safe to display — lets the owner tell keys apart without ever re-showing the secret
-  keyHash     String @unique
+  keyHash     String   @unique
   permissions String[] // subset of PERMISSIONS keys this key may exercise — never broader than its owner's own roles
 
   status     ApiKeyStatus @default(ACTIVE)
@@ -5648,8 +5661,8 @@ model ApprovalRequest {
   companyId String?
   company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
 
-  type   String // e.g. "FLIGHT_REFUND", "SUPPLIER_PAYMENT" — matches ApprovalThresholdRule.type
-  amount Int?
+  type     String // e.g. "FLIGHT_REFUND", "SUPPLIER_PAYMENT" — matches ApprovalThresholdRule.type
+  amount   Int?
   currency String?
 
   entityType String? // e.g. "FlightRefund"
@@ -5666,12 +5679,12 @@ model ApprovalRequest {
   previousState Json?
   newState      Json?
 
-  requiredApprovals Int @default(1) // resolved from ApprovalThresholdRule at creation time — never recomputed later, so a mid-flight threshold change can't retroactively change what a pending request needs
-  decisions ApprovalDecision[]
+  requiredApprovals Int                @default(1) // resolved from ApprovalThresholdRule at creation time — never recomputed later, so a mid-flight threshold change can't retroactively change what a pending request needs
+  decisions         ApprovalDecision[]
 
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  resolvedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  resolvedAt DateTime?
 
   @@index([companyId])
   @@index([status])
@@ -5718,14 +5731,14 @@ model ApprovalDecision {
  * band this rule covers; null maxAmount means "and above".
  */
 model ApprovalThresholdRule {
-  id        String  @id @default(cuid())
+  id        String   @id @default(cuid())
   companyId String?
   company   Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   type              String // e.g. "FLIGHT_REFUND"
-  minAmount         Int    @default(0)
+  minAmount         Int     @default(0)
   maxAmount         Int? // null = no upper bound
-  requiredApprovals Int    @default(1)
+  requiredApprovals Int     @default(1)
   isActive          Boolean @default(true)
 
   createdAt DateTime @default(now())
@@ -5743,9 +5756,9 @@ model ApprovalThresholdRule {
  * warning) — every gated call site still runs its normal RBAC guard.
  */
 model FeatureFlag {
-  id          String  @id @default(cuid())
-  key         String  @unique // e.g. "ENABLE_HAJJ"
-  description String?
+  id                 String  @id @default(cuid())
+  key                String  @unique // e.g. "ENABLE_HAJJ"
+  description        String?
   isEnabledByDefault Boolean @default(false)
 
   createdAt DateTime @default(now())
@@ -5780,7 +5793,7 @@ model FeatureFlagOverride {
  * overrides it, same most-specific-wins pattern used throughout.
  */
 model SystemSetting {
-  id        String  @id @default(cuid())
+  id        String   @id @default(cuid())
   companyId String?
   company   Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
@@ -5808,10 +5821,10 @@ model SystemSettingHistory {
   systemSettingId String
   systemSetting   SystemSetting @relation(fields: [systemSettingId], references: [id], onDelete: Cascade)
 
-  previousValue Json?
-  newValue      Json
+  previousValue       Json?
+  newValue            Json
   changedByIdentityId String?
-  reason        String?
+  reason              String?
 
   createdAt DateTime @default(now())
 
@@ -5826,12 +5839,12 @@ model SystemSettingHistory {
  * changes — this table never touches historical transaction values.
  */
 model Currency {
-  code           String  @id // ISO 4217, e.g. "NGN"
-  name           String
-  symbol         String
-  decimalPlaces  Int     @default(2)
-  exchangeRateToBase Float @default(1) // relative to the platform base currency (NGN)
-  isActive       Boolean @default(true)
+  code               String  @id // ISO 4217, e.g. "NGN"
+  name               String
+  symbol             String
+  decimalPlaces      Int     @default(2)
+  exchangeRateToBase Float   @default(1) // relative to the platform base currency (NGN)
+  isActive           Boolean @default(true)
 
   updatedAt DateTime @updatedAt
 
@@ -5846,16 +5859,16 @@ model Currency {
  * resolve a TaxRule the same way they resolve a FlightServiceFee today.
  */
 model TaxRule {
-  id                String   @id @default(cuid())
+  id                String    @id @default(cuid())
   name              String
   ratePercent       Float?
   fixedAmount       Int?
-  isInclusive       Boolean  @default(false)
+  isInclusive       Boolean   @default(false)
   applicableService String? // e.g. "FLIGHT", "HOTEL" — free text, mirrors FlightServiceFeeType's own looseness
   country           String?
-  effectiveFrom     DateTime @default(now())
+  effectiveFrom     DateTime  @default(now())
   effectiveTo       DateTime?
-  isActive          Boolean  @default(true)
+  isActive          Boolean   @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -5918,7 +5931,9 @@ model PricingRule {
   @@map("pricing_rules")
 }
 
-/** Immutable history: one row per version, holding the full rule as it was. */
+/**
+ * Immutable history: one row per version, holding the full rule as it was.
+ */
 model PricingRuleVersion {
   id     String      @id @default(cuid())
   ruleId String
@@ -5969,7 +5984,7 @@ model PricingTrace {
   companyId String?
   company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
 
-  product String
+  product    String
   // Optional link to what was priced (FlightBooking, HotelBooking, ...) — free text like WalletTransaction.invoiceId.
   sourceType String?
   sourceId   String?
@@ -5980,9 +5995,9 @@ model PricingTrace {
   margin        Int
   status        String // OK | REQUIRES_OVERRIDE
 
-  breakdown    Json
-  trace        Json
-  appliedRules Json // [{ id, version }]
+  breakdown     Json
+  trace         Json
+  appliedRules  Json // [{ id, version }]
   engineVersion String
 
   overrideApprovedBy String?
@@ -6007,9 +6022,9 @@ enum PromotionMode {
  * claim in PromotionsService.redeem (never by a plain read-modify-write).
  */
 model Promotion {
-  id        String   @id @default(cuid())
+  id        String  @id @default(cuid())
   companyId String
-  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   name String
   // Null = applies automatically to eligible bookings; set = customer must present this code.
@@ -6025,11 +6040,11 @@ model Promotion {
   products String[] // empty = every product
   channels String[] // empty = every channel
 
-  minBookingAmount   Int?
-  maxDiscountAmount  Int?
-  totalUsageLimit    Int?
-  perCustomerLimit   Int?
-  budget             Int?
+  minBookingAmount  Int?
+  maxDiscountAmount Int?
+  totalUsageLimit   Int?
+  perCustomerLimit  Int?
+  budget            Int?
 
   usedCount  Int @default(0)
   budgetUsed Int @default(0)
@@ -6045,7 +6060,9 @@ model Promotion {
   @@map("promotions")
 }
 
-/** One redemption. The unique key makes redeeming the same booking twice idempotent. */
+/**
+ * One redemption. The unique key makes redeeming the same booking twice idempotent.
+ */
 model PromotionUsage {
   id          String    @id @default(cuid())
   promotionId String
@@ -6221,11 +6238,11 @@ model WorkflowExecution {
   versionId  String
   versionNo  Int
 
-  companyId String
-  branchId  String?
-  eventId   String?
+  companyId    String
+  branchId     String?
+  eventId      String?
   // One execution per workflow per event. A replayed event hits this unique key.
-  executionKey String @unique
+  executionKey String  @unique
 
   mode   WorkflowExecutionMode   @default(LIVE)
   status WorkflowExecutionStatus @default(RUNNING)
@@ -6270,11 +6287,11 @@ model WorkflowExecutionStep {
   status   WorkflowStepStatus @default(RUNNING)
   attempts Int                @default(0)
 
-  input  Json?
-  output Json?
+  input          Json?
+  output         Json?
   // Condition trace for CONDITION steps.
-  trace  Json?
-  error  String?
+  trace          Json?
+  error          String?
   // Passed to the action so a retry or a human re-run cannot do the thing twice.
   idempotencyKey String
   // True when a mock ran instead of the real action (test mode).
@@ -6347,7 +6364,7 @@ enum IncidentStatus {
 
 /// A security incident (suspected breach, leaked credential, abuse). Append-only timeline in SecurityIncidentNote.
 model SecurityIncident {
-  id        String  @id @default(cuid())
+  id        String   @id @default(cuid())
   companyId String?
   company   Company? @relation(fields: [companyId], references: [id], onDelete: Restrict)
 
@@ -6407,11 +6424,11 @@ model AccessReview {
   companyId String
   company   Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
 
-  status               AccessReviewStatus @default(OPEN)
-  startedByIdentityId  String
-  startedAt            DateTime           @default(now())
+  status                AccessReviewStatus @default(OPEN)
+  startedByIdentityId   String
+  startedAt             DateTime           @default(now())
   completedByIdentityId String?
-  completedAt          DateTime?
+  completedAt           DateTime?
 
   items AccessReviewItem[]
 
@@ -6424,20 +6441,20 @@ model AccessReviewItem {
   reviewId String
   review   AccessReview @relation(fields: [reviewId], references: [id], onDelete: Cascade)
 
-  identityId  String
-  email       String
-  staffName   String
-  roles       String[]
-  lastLoginAt DateTime?
-  twoFactorEnabled Boolean @default(false)
-  isActive    Boolean @default(true)
+  identityId       String
+  email            String
+  staffName        String
+  roles            String[]
+  lastLoginAt      DateTime?
+  twoFactorEnabled Boolean   @default(false)
+  isActive         Boolean   @default(true)
 
-  decision          AccessReviewDecision @default(PENDING)
+  decision            AccessReviewDecision @default(PENDING)
   decidedByIdentityId String?
-  decidedAt         DateTime?
-  note              String?
+  decidedAt           DateTime?
+  note                String?
   /// Filled when completing the review actually removed the person's access.
-  revokedAt         DateTime?
+  revokedAt           DateTime?
 
   @@index([reviewId])
   @@map("access_review_items")
@@ -6460,12 +6477,12 @@ model DataSubjectRequest {
   companyId String
   company   Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
 
-  customerId String
-  type       DataSubjectRequestType
-  status     DataSubjectRequestStatus
+  customerId          String
+  type                DataSubjectRequestType
+  status              DataSubjectRequestStatus
   handledByIdentityId String
   /// Counts of what was exported / anonymised, or the reason it was refused.
-  outcome    Json
+  outcome             Json
 
   createdAt DateTime @default(now())
 
@@ -6495,13 +6512,13 @@ model BreakGlassGrant {
   roleName   String
   reason     String
 
-  status       BreakGlassStatus @default(REQUESTED)
-  requestedAt  DateTime         @default(now())
-  durationMinutes Int
+  status               BreakGlassStatus @default(REQUESTED)
+  requestedAt          DateTime         @default(now())
+  durationMinutes      Int
   approvedByIdentityId String?
-  approvedAt   DateTime?
-  expiresAt    DateTime?
-  endedAt      DateTime?
+  approvedAt           DateTime?
+  expiresAt            DateTime?
+  endedAt              DateTime?
 
   @@index([status, expiresAt])
   @@index([identityId])

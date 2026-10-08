@@ -18,3 +18,18 @@ export const CREDENTIAL_THROTTLE = {
 export const REFRESH_THROTTLE = {
   default: { ttl: 60_000, limit: Math.max(AUTH_LIMIT * 6, 60) },
 } as const;
+
+/** Unauthenticated searches that spend paid provider quota (flights, hotels): per client per minute. */
+export const PUBLIC_SEARCH_THROTTLE = {
+  default: { ttl: 60_000, limit: 20 },
+} as const;
+
+/** Unauthenticated lookups that confirm whether a record exists (staff badge verification). */
+export const PUBLIC_LOOKUP_THROTTLE = {
+  default: { ttl: 60_000, limit: 20 },
+} as const;
+
+/** The public contact form sends an email on every submission. */
+export const PUBLIC_FORM_THROTTLE = {
+  default: { ttl: 60_000, limit: 5 },
+} as const;

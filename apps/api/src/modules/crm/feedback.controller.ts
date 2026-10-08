@@ -9,6 +9,7 @@ import { FeedbackService } from './feedback.service';
 
 import { TenantScoped } from '../../common/tenancy/tenant-scoped.decorator';
 import { resolveTenantFilter } from '../../common/utils/tenant.util';
+import { FeedbackCreateDto } from './dto/crm-bodies.dto';
 @Controller('crm/feedback')
 export class FeedbackController {
   constructor(
@@ -20,16 +21,7 @@ export class FeedbackController {
   @Post('me')
   async createOwn(
     @CurrentUser() user: AuthContext,
-    @Body()
-    body: {
-      serviceType: string;
-      sourceType?: string;
-      sourceId?: string;
-      rating: number;
-      staffRating?: number;
-      comment?: string;
-      staffId?: string;
-    },
+    @Body() body: FeedbackCreateDto,
   ) {
     const customerId = await this.customersService.getCustomerIdForIdentity(
       user.sub,

@@ -15,6 +15,7 @@ import { resolveTenantFilter } from '../../common/utils/tenant.util';
 import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { UsersService } from '../users/users.service';
 import { Customer360Service } from './customer-360.service';
+import { NameDto, NoteDto } from './dto/crm-bodies.dto';
 
 @Controller('crm/customers')
 @RequirePermissions(PERMISSIONS.CRM.CUSTOMER_360_VIEW)
@@ -37,7 +38,7 @@ export class Customer360Controller {
 
   @Post('tags')
   @RequirePermissions(PERMISSIONS.CRM.CUSTOMER_TAG_MANAGE)
-  createTag(@Body() body: { name: string }) {
+  createTag(@Body() body: NameDto) {
     return this.service.createTag(body.name);
   }
 
@@ -78,7 +79,7 @@ export class Customer360Controller {
   async addNote(
     @CurrentUser() user: AuthContext,
     @Param('id') id: string,
-    @Body() body: { note: string },
+    @Body() body: NoteDto,
   ) {
     const staffId = await this.usersService.getStaffIdForIdentity(user.sub);
     if (!staffId) {

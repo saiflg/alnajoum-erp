@@ -13,6 +13,7 @@ import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { UsersService } from '../users/users.service';
 import { DailyClosingService } from './daily-closing.service';
 import { resolveTenantFilter } from '../../common/utils/tenant.util';
+import { DailyClosingRequestDto } from './dto/finance-bodies.dto';
 
 @Controller('finance/daily-closing')
 @RequirePermissions(PERMISSIONS.FINANCE.DAILY_CLOSING)
@@ -44,7 +45,7 @@ export class DailyClosingController {
   @Post()
   async close(
     @CurrentUser() user: AuthContext,
-    @Body() body: { businessDate?: string; branchId?: string },
+    @Body() body: DailyClosingRequestDto,
   ) {
     const staffId = await this.usersService.getStaffIdForIdentity(user.sub);
     if (!staffId) {

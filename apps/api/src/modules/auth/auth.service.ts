@@ -64,6 +64,14 @@ function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }
 
+/** Emails are compared case-insensitively and without stray whitespace everywhere. */
+export function normaliseEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+/** A rotated refresh token presented again after this long is a stolen copy, not a double-click. */
+const REFRESH_REUSE_GRACE_MS = 30_000;
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -90,8 +98,9 @@ export class AuthService {
     dto: RegisterCustomerDto,
     meta: RequestMeta,
   ): Promise<TokenPair> {
+    const email = normaliseEmail(dto.email);
     const existing = await this.prisma.identity.findUnique({
-      where: { email: dto.email },
+      where: { email },
     });
     if (existing) {
       throw new ConflictException('An account with this email already exists');
@@ -110,7 +119,7 @@ export class AuthService {
 
     const identity = await this.prisma.identity.create({
       data: {
-        email: dto.email,
+        email,
         phone: dto.phone,
         passwordHash,
         type: IdentityType.CUSTOMER,
@@ -165,22 +174,80 @@ export class AuthService {
     return undefined;
   }
 
+  private dummyHash: string | undefined;
+
+  /**
+   * One shared failure counter for the password and the second factor: five wrong answers of either kind lock
+   * the account. The increment is atomic so parallel guesses cannot slip under the limit.
+   */
+  private async recordFailedAttempt(
+    identity: Identity,
+    meta: RequestMeta,
+    reason?: string,
+  ): Promise<void> {
+    const updated = await this.prisma.identity.update({
+      where: { id: identity.id },
+      data: { failedLoginCount: { increment: 1 } },
+    });
+    const shouldLock = updated.failedLoginCount >= MAX_FAILED_LOGIN_ATTEMPTS;
+    if (shouldLock) {
+      await this.prisma.identity.update({
+        where: { id: identity.id },
+        data: {
+          failedLoginCount: 0,
+          lockedUntil: new Date(
+            Date.now() + ACCOUNT_LOCK_DURATION_MINUTES * 60 * 1000,
+          ),
+        },
+      });
+    }
+
+    // Phase 11 spec #17/#18 — every failed attempt and every lockout is
+    // a security event, not just a silent counter increment.
+    const auditCompanyId = await this.resolveCompanyIdForAudit(identity);
+    await this.auditService.record({
+      identityId: identity.id,
+      action: 'security.login_failed',
+      entityType: 'Identity',
+      entityId: identity.id,
+      companyId: auditCompanyId,
+      ...(reason && { metadata: { reason } }),
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
+    });
+    if (shouldLock) {
+      await this.auditService.record({
+        identityId: identity.id,
+        action: 'security.account_locked',
+        entityType: 'Identity',
+        entityId: identity.id,
+        companyId: auditCompanyId,
+        metadata: { durationMinutes: ACCOUNT_LOCK_DURATION_MINUTES },
+        ipAddress: meta.ipAddress,
+        userAgent: meta.userAgent,
+      });
+    }
+  }
+
   async validateCredentials(
     email: string,
     password: string,
     meta: RequestMeta = {},
   ): Promise<Identity> {
     const identity = await this.prisma.identity.findUnique({
-      where: { email },
+      where: { email: normaliseEmail(email) },
     });
 
     if (!identity) {
+      // Spend the same time as a real password check so response time does not reveal which emails exist.
+      this.dummyHash ??= await argon2.hash('alnajoum-not-a-real-password');
+      await argon2.verify(this.dummyHash, password).catch(() => false);
       throw new UnauthorizedException('Invalid email or password');
     }
 
     if (identity.lockedUntil && identity.lockedUntil > new Date()) {
       throw new UnauthorizedException(
-        'Account temporarily locked due to repeated failed login attempts',
+        'Sign-in is temporarily unavailable for this account. Try again later or reset your password.',
       );
     }
 
@@ -190,44 +257,7 @@ export class AuthService {
     );
 
     if (!passwordMatches) {
-      const failedLoginCount = identity.failedLoginCount + 1;
-      const shouldLock = failedLoginCount >= MAX_FAILED_LOGIN_ATTEMPTS;
-
-      await this.prisma.identity.update({
-        where: { id: identity.id },
-        data: {
-          failedLoginCount: shouldLock ? 0 : failedLoginCount,
-          lockedUntil: shouldLock
-            ? new Date(Date.now() + ACCOUNT_LOCK_DURATION_MINUTES * 60 * 1000)
-            : null,
-        },
-      });
-
-      // Phase 11 spec #17/#18 — every failed attempt and every lockout is
-      // a security event, not just a silent counter increment.
-      const auditCompanyId = await this.resolveCompanyIdForAudit(identity);
-      await this.auditService.record({
-        identityId: identity.id,
-        action: 'security.login_failed',
-        entityType: 'Identity',
-        entityId: identity.id,
-        companyId: auditCompanyId,
-        ipAddress: meta.ipAddress,
-        userAgent: meta.userAgent,
-      });
-      if (shouldLock) {
-        await this.auditService.record({
-          identityId: identity.id,
-          action: 'security.account_locked',
-          entityType: 'Identity',
-          entityId: identity.id,
-          companyId: auditCompanyId,
-          metadata: { durationMinutes: ACCOUNT_LOCK_DURATION_MINUTES },
-          ipAddress: meta.ipAddress,
-          userAgent: meta.userAgent,
-        });
-      }
-
+      await this.recordFailedAttempt(identity, meta);
       throw new UnauthorizedException('Invalid email or password');
     }
 
@@ -265,7 +295,7 @@ export class AuthService {
    * enough to be a meaningful standing credential if intercepted. */
   private async issueTwoFactorChallenge(identityId: string): Promise<string> {
     return this.jwtService.signAsync(
-      { sub: identityId, purpose: '2fa_challenge' },
+      { sub: identityId, purpose: '2fa_challenge', issuedAtMs: Date.now() },
       {
         secret: this.configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
         expiresIn: 300,
@@ -319,7 +349,12 @@ export class AuthService {
     code: string,
     meta: RequestMeta,
   ): Promise<TokenPair> {
-    let payload: { sub: string; purpose: string };
+    let payload: {
+      sub: string;
+      purpose: string;
+      iat?: number;
+      issuedAtMs?: number;
+    };
     try {
       payload = await this.jwtService.verifyAsync(challengeToken, {
         secret: this.configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
@@ -333,25 +368,49 @@ export class AuthService {
       throw new UnauthorizedException('Invalid 2FA challenge token');
     }
 
-    const identity = await this.prisma.identity.findUniqueOrThrow({
+    const identity = await this.prisma.identity.findUnique({
       where: { id: payload.sub },
     });
+    if (!identity) {
+      throw new UnauthorizedException('Invalid 2FA challenge token');
+    }
+    if (identity.lockedUntil && identity.lockedUntil > new Date()) {
+      throw new UnauthorizedException(
+        'Sign-in is temporarily unavailable for this account. Try again later or reset your password.',
+      );
+    }
+    if (identity.status === 'SUSPENDED' || identity.status === 'DEACTIVATED') {
+      throw new UnauthorizedException('This account is not active');
+    }
+    // A challenge is good for one sign-in: once the account has signed in since it was issued, it is spent.
+    // (Millisecond issue time; the JWT's own `iat` is only whole seconds, which would wrongly spend a challenge
+    // issued in the same second as the previous sign-in.)
+    const issuedAtMs =
+      payload.issuedAtMs ??
+      (payload.iat !== undefined ? payload.iat * 1000 : undefined);
+    if (
+      identity.lastLoginAt &&
+      issuedAtMs !== undefined &&
+      identity.lastLoginAt.getTime() > issuedAtMs
+    ) {
+      throw new UnauthorizedException(
+        'This 2FA challenge has expired — log in again',
+      );
+    }
     const valid = await this.twoFactorService.verifyChallenge(
       identity.id,
       code,
     );
     if (!valid) {
-      await this.auditService.record({
-        identityId: identity.id,
-        action: 'security.login_failed',
-        entityType: 'Identity',
-        entityId: identity.id,
-        companyId: await this.resolveCompanyIdForAudit(identity),
-        metadata: { reason: '2fa_code_invalid' },
-        ipAddress: meta.ipAddress,
-        userAgent: meta.userAgent,
-      });
+      // Wrong second-factor guesses count toward the same lockout as wrong passwords.
+      await this.recordFailedAttempt(identity, meta, '2fa_code_invalid');
       throw new UnauthorizedException('Invalid authenticator or recovery code');
+    }
+    if (identity.failedLoginCount > 0 || identity.lockedUntil) {
+      await this.prisma.identity.update({
+        where: { id: identity.id },
+        data: { failedLoginCount: 0, lockedUntil: null },
+      });
     }
 
     await this.prisma.identity.update({
@@ -375,6 +434,7 @@ export class AuthService {
   private async issueTokenPair(
     identity: Identity,
     meta: RequestMeta,
+    replacesTokenId?: string,
   ): Promise<TokenPair> {
     const { roles } = await this.rbacService.getEffectiveAccess(identity.id);
 
@@ -396,6 +456,13 @@ export class AuthService {
         userAgent: meta.userAgent,
       },
     });
+
+    if (replacesTokenId) {
+      await this.prisma.refreshToken.updateMany({
+        where: { id: replacesTokenId },
+        data: { replacedById: refreshTokenRecord.id },
+      });
+    }
 
     // `permissions` deliberately never goes into the signed payload — see
     // JwtAccessStrategy.validate's doc comment: a large permission set
@@ -442,7 +509,33 @@ export class AuthService {
       include: { identity: true },
     });
 
-    if (!stored || stored.revokedAt || stored.expiresAt < new Date()) {
+    if (!stored) {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+    // Reuse detection: a token that was already rotated and is presented again well after the fact is a
+    // stolen copy (the real client holds the newer one). Treat the whole login as compromised.
+    if (
+      stored.revokedAt &&
+      stored.replacedById &&
+      Date.now() - stored.revokedAt.getTime() > REFRESH_REUSE_GRACE_MS
+    ) {
+      const revoked = await this.prisma.refreshToken.updateMany({
+        where: { identityId: stored.identityId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      await this.auditService.record({
+        identityId: stored.identityId,
+        action: 'security.refresh_token_reuse',
+        entityType: 'RefreshToken',
+        entityId: stored.id,
+        companyId: await this.resolveCompanyIdForAudit(stored.identity),
+        metadata: { sessionsRevoked: revoked.count },
+        ipAddress: meta.ipAddress,
+        userAgent: meta.userAgent,
+      });
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+    if (stored.revokedAt || stored.expiresAt < new Date()) {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
     // A suspended or deactivated account cannot mint new tokens from an old session.
@@ -462,7 +555,7 @@ export class AuthService {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
 
-    return this.issueTokenPair(stored.identity, meta);
+    return this.issueTokenPair(stored.identity, meta, stored.id);
   }
 
   async logout(refreshToken: string): Promise<void> {
@@ -512,7 +605,7 @@ export class AuthService {
    */
   async forgotPassword(email: string, meta: RequestMeta): Promise<void> {
     const identity = await this.prisma.identity.findUnique({
-      where: { email },
+      where: { email: normaliseEmail(email) },
     });
     if (!identity) return;
 

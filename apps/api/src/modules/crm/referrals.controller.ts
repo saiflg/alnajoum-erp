@@ -9,6 +9,7 @@ import { ReferralsService } from './referrals.service';
 
 import { TenantScoped } from '../../common/tenancy/tenant-scoped.decorator';
 import { resolveTenantFilter } from '../../common/utils/tenant.util';
+import { ReferralCreateDto, ReferralRewardDto } from './dto/crm-bodies.dto';
 @Controller('crm/referrals')
 export class ReferralsController {
   constructor(
@@ -44,15 +45,7 @@ export class ReferralsController {
   @TenantScoped('referral')
   @Post(':id/qualify')
   @RequirePermissions(PERMISSIONS.CRM.REFERRAL_MANAGE)
-  markQualified(
-    @Param('id') id: string,
-    @Body()
-    body: {
-      serviceType: string;
-      transactionId: string;
-      transactionAmount: number;
-    },
-  ) {
+  markQualified(@Param('id') id: string, @Body() body: ReferralCreateDto) {
     return this.referralsService.markQualified(
       id,
       body.serviceType,
@@ -64,10 +57,7 @@ export class ReferralsController {
   @TenantScoped('referral')
   @Post(':id/reward')
   @RequirePermissions(PERMISSIONS.CRM.REFERRAL_MANAGE)
-  markRewarded(
-    @Param('id') id: string,
-    @Body() body: { rewardAmount: number },
-  ) {
+  markRewarded(@Param('id') id: string, @Body() body: ReferralRewardDto) {
     return this.referralsService.markRewarded(id, body.rewardAmount);
   }
 }

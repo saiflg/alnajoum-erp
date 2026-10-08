@@ -20,6 +20,7 @@ import type { Request, Response } from 'express';
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthContext } from '../../common/interfaces/auth-context.interface';
+import { durationToMs } from '../../common/utils/duration.util';
 import { ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE } from './auth.constants';
 import { AuthService, RequestMeta, TokenPair } from './auth.service';
 import { ChangePasswordDto } from './dto/change-password.dto';
@@ -59,18 +60,26 @@ export class AuthController {
     const isProduction =
       this.configService.get<string>('NODE_ENV') === 'production';
 
+    // The cookies live exactly as long as the tokens they carry (they used to be hard-coded to 15 min / 7 days
+    // regardless of JWT_ACCESS_EXPIRES_IN / JWT_REFRESH_EXPIRES_IN).
+    const accessMs = durationToMs(
+      this.configService.get<string>('JWT_ACCESS_EXPIRES_IN', '15m'),
+    );
+    const refreshMs = durationToMs(
+      this.configService.get<string>('JWT_REFRESH_EXPIRES_IN', '7d'),
+    );
     res.cookie(ACCESS_TOKEN_COOKIE, tokens.accessToken, {
       httpOnly: true,
       secure: isProduction,
       sameSite: 'lax',
-      maxAge: 15 * 60 * 1000,
+      maxAge: accessMs,
     });
     res.cookie(REFRESH_TOKEN_COOKIE, tokens.refreshToken, {
       httpOnly: true,
       secure: isProduction,
       sameSite: 'lax',
       path: '/api/v1/auth',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
+      maxAge: refreshMs,
     });
   }
 
@@ -147,6 +156,15 @@ export class AuthController {
       this.buildMeta(req, ip),
     );
     this.setAuthCookies(res, tokens);
+    // A browser refreshing through its httpOnly cookie never needs the tokens in the response body, and
+    // returning them would let a script injected into the page read them (defeating httpOnly). Clients that
+    // present the refresh token themselves (mobile, API) still receive the new pair.
+    if (!dto.refreshToken) {
+      return {
+        identity: tokens.identity,
+        accessTokenExpiresIn: tokens.accessTokenExpiresIn,
+      };
+    }
     return tokens;
   }
 
@@ -253,6 +271,22 @@ export class AuthController {
   @Post('sessions/:id/revoke')
   revokeSession(@CurrentUser() user: AuthContext, @Param('id') id: string) {
     return this.sessionsService.revoke(user.sub, id, user.sub);
+  }
+
+  /** Sign out everywhere, this device included. */
+  @Post('sessions/revoke-all')
+  async revokeAllSessions(
+    @CurrentUser() user: AuthContext,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.sessionsService.revokeAllOthers(
+      user.sub,
+      null,
+      user.sub,
+    );
+    res.clearCookie(ACCESS_TOKEN_COOKIE);
+    res.clearCookie(REFRESH_TOKEN_COOKIE, { path: '/api/v1/auth' });
+    return result;
   }
 
   @Post('sessions/revoke-others')

@@ -18,6 +18,7 @@ import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { STAFF_PAYOUT_PROVIDER } from './providers/staff-payout-provider.port';
 import type { StaffPayoutProviderPort } from './providers/staff-payout-provider.port';
 
+import { openBankAccount } from '../../common/security/bank-account-cipher';
 import { tenantWhere } from '../../common/tenancy/tenant-guard.service';
 /**
  * Turns an APPROVED StaffIncentive into money moved, following the exact
@@ -155,7 +156,7 @@ export class StaffPayoutsService {
       amount: incentive.amount,
       currency: incentive.currency,
       bankName: staff.bankName,
-      bankAccountNumber: staff.bankAccountNumber,
+      bankAccountNumber: openBankAccount(staff.id, staff.bankAccountNumber),
       bankAccountName: staff.bankAccountName,
       // Stable per payout row, so a provider that supports idempotency keys can recognise a repeat.
       reference: `PAYOUT-${payout.id}`,

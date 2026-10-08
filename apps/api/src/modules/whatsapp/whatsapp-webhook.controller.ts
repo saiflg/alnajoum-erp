@@ -14,7 +14,10 @@ import type { Request, Response } from 'express';
 import { Public } from '../../common/decorators/public.decorator';
 import type { NormalizedInboundEvent } from './providers/whatsapp-provider.port';
 import { WhatsAppProviderRouter } from './providers/whatsapp-provider.router';
-import { WhatsAppWebhookService } from './whatsapp-webhook.service';
+import {
+  WhatsAppWebhookService,
+  webhookEventKey,
+} from './whatsapp-webhook.service';
 
 /**
  * Phase 14 spec #12/#74 — the public Meta webhook endpoint. GET handles
@@ -61,6 +64,9 @@ export class WhatsAppWebhookController {
         signature,
       ))
     ) {
+      this.logger.warn(
+        'Rejected a WhatsApp webhook call with a missing or invalid signature',
+      );
       // Still 200 here (not 401): an attacker probing the endpoint learns
       // nothing either way, and Meta itself never sends an unsigned
       // request in practice — a 401 would only ever fire for a genuine
@@ -86,19 +92,17 @@ export class WhatsAppWebhookController {
     }
 
     for (const event of events) {
+      const eventId = webhookEventKey(event);
       const isNew = await this.webhookService.recordEventOnceOrSkip(
         concreteProvider,
-        event.providerMessageId || `${event.kind}-${event.timestamp}`,
+        eventId,
         event,
       );
       if (!isNew) continue; // spec #12/#43 — duplicate delivery, already processed
 
       try {
         await this.webhookService.processEvent(event);
-        await this.webhookService.markEventProcessed(
-          concreteProvider,
-          event.providerMessageId || `${event.kind}-${event.timestamp}`,
-        );
+        await this.webhookService.markEventProcessed(concreteProvider, eventId);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         this.logger.error(
@@ -106,7 +110,7 @@ export class WhatsAppWebhookController {
         );
         await this.webhookService.markEventProcessed(
           concreteProvider,
-          event.providerMessageId || `${event.kind}-${event.timestamp}`,
+          eventId,
           message,
         );
       }
