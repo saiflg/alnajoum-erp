@@ -13,6 +13,7 @@ import {
   InvoiceStatus,
   PaymentMethod,
   Wallet,
+  WalletTransaction,
   WalletTransactionStatus,
   WalletTransactionType,
 } from '@prisma/client';
@@ -475,7 +476,7 @@ export class WalletService {
       if (replay) return this.getWalletWithBalance(customerId);
     }
 
-    let walletTx;
+    let walletTx: WalletTransaction;
     try {
       walletTx = await this.prisma.walletTransaction.create({
         data: {
@@ -590,7 +591,7 @@ export class WalletService {
       });
       if (replay) return this.getWalletWithBalance(customerId);
     }
-    let adjustmentTx;
+    let adjustmentTx: WalletTransaction;
     try {
       adjustmentTx = await this.adjustInTransaction(
         wallet,

@@ -7,6 +7,7 @@ import {
 import {
   InvoiceStatus,
   VisaApplicationStatus,
+  VisaRefund,
   VisaRefundStatus,
 } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
@@ -141,7 +142,7 @@ export class VisaRefundsService {
 
     // One refund per application (VisaRefund.applicationId is unique): a simultaneous second request
     // fails on that constraint, which is reported as the conflict it is rather than a server error.
-    let refund;
+    let refund: VisaRefund;
     try {
       [refund] = await this.prisma.$transaction([
         this.prisma.visaRefund.create({
