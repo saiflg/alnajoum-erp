@@ -104,8 +104,14 @@ class VerifiedDiskStorage implements StorageEngine {
       if (settled) return;
       settled = true;
       file.stream.unpipe();
-      out.destroy();
-      fs.unlink(finalPath, () => callback(error));
+      // Remove the file only once the stream has really closed: destroying a stream whose open() is still
+      // pending would otherwise create the file after the unlink and leave an empty file behind.
+      const removeThenReport = () => fs.unlink(finalPath, () => callback(error));
+      if (out.closed) removeThenReport();
+      else {
+        out.once('close', removeThenReport);
+        out.destroy();
+      }
     };
 
     gate.on('error', fail);
