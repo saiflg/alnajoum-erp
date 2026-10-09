@@ -7,7 +7,7 @@ A backup is only worth what a *restore* of it is worth. This page says what is b
 | Asset | Where it lives | Backed up by | Restore proved? |
 |---|---|---|---|
 | Database (every business record, audit log, ledger) | Postgres volume `postgres_data` | `deploy/backup.sh` (`pg_dump -Fc`, verified readable, SHA-256, optionally AES-256 encrypted) | **Yes** — restored into a scratch database and row counts compared (§5) |
-| Customer documents (passports, receipts) | Docker volume `uploads_data` | `UPLOADS_VOLUME=… deploy/backup.sh` (tar archive) | **No** — the archive is created and listed; a restore of it has not been drilled |
+| Customer documents (passports, receipts) | Docker volume `uploads_data` | `UPLOADS_VOLUME=… deploy/backup.sh` (tar archive) | **Yes** — archived and restored into a fresh volume with identical checksums (§5); restoring the real production volume was not rehearsed |
 | **Encryption keys** (`DATA_ENCRYPTION_KEYS`) | `.env.prod` on the server | **Nothing automatic. You must copy them somewhere that is not the server.** | n/a |
 | Other secrets (JWT, provider keys) | `.env.prod`; provider keys inside the database (encrypted) | Provider keys travel with the database backup; JWT secrets are in `.env.prod` | Provider keys: yes (they are database rows). JWT secrets: regenerate if lost (everyone signs in again) |
 | Application code | Git | Git | n/a |
@@ -77,9 +77,12 @@ Provision → `deploy/bootstrap-new-server.sh` → copy `.env.prod` (from your k
 | Date | Drill | Result |
 |---|---|---|
 | 2026-10-08 | Encrypted backup of the local development database, then `restore-check.sh` | **PASSED.** Backup 14 s, 640 KB encrypted (`.dump.enc`), checksum OK. Restore into a scratch database + comparison 58 s. Row counts live = restored: identities 22, customers 13, invoices 109, payments 90, journal_entries 50, wallet_transactions 24, audit_logs 444, flight_bookings 97. Restored copy carried all 49 migrations (latest `20261010020000_phase22_campaign_creator_relation`) |
-| — | Document (uploads) restore | **Not done** |
+| 2026-10-09 | Phase 24 re-drill on the current schema: encrypted backup → `restore-check.sh` | **PASSED.** 51 migrations (latest `20261011020000_phase23_conversation_customer_fk`); identities, customers, invoices, payments, journal entries, wallet transactions, audit logs, flight bookings, **AI executions / agents / approvals** and **workflow executions** all equal to live. (Took 6 min only because Docker was compiling the images on the same 4 GB machine; the same restore took 55 s on an idle machine.) |
+| 2026-10-09 | Backup integrity: checksum, encryption | **PASSED.** SHA-256 verified; the wrong passphrase is refused (openssl exit 1); the right one decrypts |
+| 2026-10-09 | **Recovery rehearsal**: decrypt → restore into a brand-new database → boot the application against it → sign in → read data | **PASSED.** Restore 55 s; the API reached healthy; an existing customer signed in with their old password; their 19 invoices and the security console were readable. 100 s end to end for the demo-sized database. The restored copy had fewer rows than live only because the backup predates the later test runs |
+| 2026-10-09 | Document (uploads) restore | **PASSED.** Archive created with the exact command in `backup.sh`, checksum verified, restored into a new empty volume: 5 files in nested folders, every SHA-256 identical (a drill volume, not the live uploads) |
 | — | Full rebuild on a new server | **Not done** |
-| — | Restore over the live database | **Not done** |
+| — | Restore over the live database | **Not done** (the rehearsal above restores beside it, never over it) |
 
 ## 6. Failure scenarios
 

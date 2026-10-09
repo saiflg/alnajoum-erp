@@ -41,12 +41,12 @@ Customer Service (conversational assistant, booking, payments, WhatsApp) · Staf
 
 Each has an id/key, audience, system prompt + prompt version, tool list, prohibited actions, autonomy level, model/provider + fallback, temperature, token/step/tool/time/depth limits, per-run budget, approval requirements, escalation policy and audit setting. **Changing any of it means publishing a new version** (previous version retired, kept, rollback possible); executions record the agent version and prompt version. Publishing/rollback is platform-administrator only and needs step-up.
 
-## 4. Tools and risk (29 tools + 5 proposal-only)
+## 4. Tools and risk (33 tools: 17 read-only, 5 low-risk write, 3 medium, 8 high)
 
 * **READ_ONLY** — customer profile, bookings, booking detail, balance, payment status, visa applications (+checklist), pilgrim readiness, flight search, offer revalidation, hotel availability, knowledge search, analytics metric, supplier status, pending approvals, operational summary, leads needing follow-up, currency conversion.
 * **LOW_RISK_WRITE** — create task, create CRM follow-up, create support ticket, record a recommendation, remember an approved preference.
 * **MEDIUM_RISK** — create payment link (customer's own invoice), prepare flight booking (customer's explicit confirmation, revalidated price, no ticket), send notification (staff, under communication policy).
-* **HIGH_RISK (always a human)** — cancel a reservation, request a refund, issue a ticket (run **under the approver's identity**, once, after approval); adjust wallet, execute payout, mark payment verified, post journal entry, change bank details (**proposal only**: approval records the decision; a person does it in the normal screen).
+* **HIGH_RISK (always a human, 8)** — three run **under the approver's identity**, once, after approval: cancel a reservation, request a refund, issue a ticket. Five are **proposal-only**: adjust wallet balance, execute staff payout, mark payment verified, post journal entry, change bank details. Approving one of these records the decision; the AI cannot carry it out and a person does it in the normal screen (which has its own step-up, locking and idempotency). All five are also in every agent's prohibited list, so only an agent that is explicitly given the proposal tool can even suggest them.
 
 Every tool validates input (unknown fields rejected), is scoped to the person's company (and branch where branch-limited; customers to their own record), filters its output (no hashes, secrets, bank numbers; passport numbers reduced to their last characters) and is audited.
 

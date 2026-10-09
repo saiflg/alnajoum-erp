@@ -66,6 +66,8 @@ check('20 simultaneous identical "create a task" requests create exactly ONE tas
 // 4. payment link under load: one attempt only
 const inv = sql(`select i."invoiceNumber" from invoices i where i."customerId"='${customerId}' and i.status in ('ISSUED','PARTIALLY_PAID') order by i."createdAt" limit 1`);
 sql(`delete from ai_action_records where "toolKey"='createPaymentLink'`);
+// Set-up: the payments module allows ONE live checkout per invoice, so close any left over from earlier suites.
+sql(`update payment_intents set status='FAILED' where "customerId"='${customerId}' and status='PENDING'`);
 const before = Number(sql(`select count(*) from payment_intents where "customerId"='${customerId}'`));
 await Promise.all(Array.from({ length: 15 }, () => post('/ai/assistant/message', customer, { content: `Send me a payment link for ${inv}` })));
 const added = Number(sql(`select count(*) from payment_intents where "customerId"='${customerId}'`)) - before;

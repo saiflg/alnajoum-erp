@@ -33,9 +33,11 @@ const admin = await login('chidi.eze@demo.alnajoum.travel');
 const finance = await login('ibrahim.musa@demo.alnajoum.travel');
 const customer = await login('chinedu.okafor@demo.alnajoum.travel');
 
-const SEARCH = { tripType: 'ONE_WAY', cabinClass: 'ECONOMY', adults: 1, segments: [{ origin: 'LOS', destination: 'ABV', departureDate: new Date(Date.now() + 40 * 864e5).toISOString().slice(0, 10) }] };
+const SEARCH = { tripType: 'ONE_WAY', adults: 1, legs: [{ origin: 'LOS', destination: 'ABV', departureDate: new Date(Date.now() + 40 * 864e5).toISOString().slice(0, 10) }] };
 
-// name, method, path, token, body, p95 budget (ms)
+// name, method, path, token, body, p95 budget (ms), options
+// `throttled: true` marks a route that is rate limited ON PURPOSE (public searches spend paid provider quota):
+// HTTP 429 is then the correct answer to excess load, not an error, and latency is judged on the answered requests.
 const scenarios = [
   ['health', 'GET', '/health', null, null, 300],
   ['admin: invoice list', 'GET', '/invoices', admin, null, 1500],
@@ -45,23 +47,26 @@ const scenarios = [
   ['finance: journal entries', 'GET', '/finance/accounts/journal-entries', finance, null, 2000],
   ['customer: own invoices', 'GET', '/invoices/me', customer, null, 1500],
   ['customer: own wallet', 'GET', '/wallet/me', customer, null, 1500],
-  ['public: flight search (mock provider)', 'POST', '/flights/search', null, SEARCH, 2500],
+  ['public: flight search (rate limited)', 'POST', '/flights/search', null, SEARCH, 2500, { throttled: true }],
   ['AI assistant: balance question', 'POST', '/ai/assistant/message', customer, { content: 'How much do I owe?' }, 4000],
 ];
 
 const pct = (arr, p) => arr[Math.min(arr.length - 1, Math.floor((p / 100) * arr.length))];
 let failed = 0;
+const selected = scenarios.filter((sc) => !args.only || sc[0].includes(args.only));
 console.log(`${USERS} virtual users x ${SECONDS}s per scenario\n`);
 console.log('scenario'.padEnd(40), 'reqs'.padStart(6), 'rps'.padStart(6), 'err'.padStart(5), 'p50'.padStart(6), 'p95'.padStart(6), 'p99'.padStart(6), 'budget'.padStart(7), ' result');
 
-for (const [name, method, path, token, body, budget] of scenarios) {
+for (const [name, method, path, token, body, budget, options = {}] of selected) {
   const times = [];
   let errors = 0;
+  let throttled = 0;
   const statuses = new Map();
   const deadline = Date.now() + SECONDS * 1000;
   async function user() {
     while (Date.now() < deadline) {
       const t0 = performance.now();
+      let lastWasThrottled = false;
       try {
         const res = await fetch(BASE + path, {
           method,
@@ -70,21 +75,23 @@ for (const [name, method, path, token, body, budget] of scenarios) {
         });
         await res.arrayBuffer();
         statuses.set(res.status, (statuses.get(res.status) || 0) + 1);
-        if (res.status >= 400) errors++;
+        if (options.throttled && res.status === 429) { throttled++; lastWasThrottled = true; }
+        else if (res.status >= 400) errors++;
       } catch {
         errors++;
       }
-      times.push(performance.now() - t0);
+      if (!lastWasThrottled) times.push(performance.now() - t0);
     }
   }
   await Promise.all(Array.from({ length: USERS }, user));
   times.sort((a, b) => a - b);
-  const p50 = pct(times, 50), p95 = pct(times, 95), p99 = pct(times, 99);
-  const pass = errors === 0 && p95 <= budget;
+  const answered = times.length;
+  const p50 = pct(times, 50) ?? 0, p95 = pct(times, 95) ?? 0, p99 = pct(times, 99) ?? 0;
+  const pass = errors === 0 && answered > 0 && p95 <= budget;
   if (!pass) failed++;
   console.log(
     name.padEnd(40), String(times.length).padStart(6), (times.length / SECONDS).toFixed(0).padStart(6), String(errors).padStart(5),
-    p50.toFixed(0).padStart(6), p95.toFixed(0).padStart(6), p99.toFixed(0).padStart(6), String(budget).padStart(7), pass ? ' PASS' : ` FAIL ${[...statuses].map(([s, n]) => `${s}x${n}`).join(' ')}`,
+    p50.toFixed(0).padStart(6), p95.toFixed(0).padStart(6), p99.toFixed(0).padStart(6), String(budget).padStart(7), pass ? (throttled ? ` PASS (${throttled} throttled by design)` : ' PASS') : ` FAIL ${[...statuses].map(([s, n]) => `${s}x${n}`).join(' ')}`,
   );
 }
 console.log(`\n${scenarios.length - failed} passed, ${failed} FAILED`);
