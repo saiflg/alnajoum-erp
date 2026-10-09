@@ -308,7 +308,8 @@ export const INTEGRATION_CATALOG: Record<
         },
         {
           key: 'retention',
-          label: 'Provider retention of prompts/outputs (state it; do not assume)',
+          label:
+            'Provider retention of prompts/outputs (state it; do not assume)',
           secret: false,
           placeholder: 'e.g. zero retention, 30 days',
         },

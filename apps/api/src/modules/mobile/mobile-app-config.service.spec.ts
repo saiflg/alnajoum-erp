@@ -39,7 +39,7 @@ describe('MobileAppConfigService', () => {
     it('returns a sensible unforced default when no row exists for the platform yet', async () => {
       prisma.mobileAppConfig.findUnique.mockResolvedValue(null);
 
-      const config = await service.get('ANDROID' as never);
+      const config = await service.get('ANDROID');
 
       expect(config).toMatchObject({
         platform: 'ANDROID',
@@ -59,7 +59,7 @@ describe('MobileAppConfigService', () => {
       };
       prisma.mobileAppConfig.findUnique.mockResolvedValue(row);
 
-      const config = await service.get('IOS' as never);
+      const config = await service.get('IOS');
 
       expect(config).toBe(row);
     });
@@ -67,10 +67,13 @@ describe('MobileAppConfigService', () => {
 
   describe('upsert', () => {
     it('creates/updates the per-platform row and audits it', async () => {
-      prisma.mobileAppConfig.upsert.mockResolvedValue({ id: 'cfg-1', platform: 'ANDROID' });
+      prisma.mobileAppConfig.upsert.mockResolvedValue({
+        id: 'cfg-1',
+        platform: 'ANDROID',
+      });
 
       await service.upsert(
-        'ANDROID' as never,
+        'ANDROID',
         {
           minSupportedVersion: '1.0.0',
           recommendedVersion: '1.2.0',

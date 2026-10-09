@@ -15,9 +15,7 @@ import {
  * change, same as every other provider in this codebase.
  */
 @Injectable()
-export class FcmPushNotificationProviderService
-  implements PushNotificationProviderPort
-{
+export class FcmPushNotificationProviderService implements PushNotificationProviderPort {
   sendPush(_input: SendPushInput): Promise<SendPushResult> {
     return Promise.resolve({
       success: false,

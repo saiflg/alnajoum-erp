@@ -102,14 +102,12 @@ describe('StaffBankAccountsService startup migration (S-24)', () => {
     it('leaves a number that is already under the current key alone', async () => {
       const prisma = {
         staff: {
-          findMany: jest
-            .fn()
-            .mockResolvedValue([
-              {
-                id: 's1',
-                bankAccountNumber: sealBankAccount('s1', '0123456789'),
-              },
-            ]),
+          findMany: jest.fn().mockResolvedValue([
+            {
+              id: 's1',
+              bankAccountNumber: sealBankAccount('s1', '0123456789'),
+            },
+          ]),
           update: jest.fn(),
         },
       };

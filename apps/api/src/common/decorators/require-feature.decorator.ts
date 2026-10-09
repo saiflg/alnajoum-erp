@@ -10,4 +10,5 @@ export const FEATURE_FLAG_KEY = 'featureFlag';
  * unauthorized caller is already rejected before this guard ever asks
  * whether the feature itself is switched on.
  */
-export const RequireFeature = (key: string) => SetMetadata(FEATURE_FLAG_KEY, key);
+export const RequireFeature = (key: string) =>
+  SetMetadata(FEATURE_FLAG_KEY, key);

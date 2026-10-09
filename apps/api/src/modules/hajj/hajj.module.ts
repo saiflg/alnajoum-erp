@@ -11,7 +11,13 @@ import { HajjRegistrationsOwnController } from './hajj-registrations-own.control
 import { HajjRegistrationsService } from './hajj-registrations.service';
 
 @Module({
-  imports: [CustomersModule, UsersModule, NotificationsModule, PaymentsModule, AuditModule],
+  imports: [
+    CustomersModule,
+    UsersModule,
+    NotificationsModule,
+    PaymentsModule,
+    AuditModule,
+  ],
   // Order matters: static "hajj/packages/admin" and "hajj/registrations/me"
   // routes must be registered before the dynamic ":id" ones.
   controllers: [

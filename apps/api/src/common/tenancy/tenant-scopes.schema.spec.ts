@@ -7,7 +7,9 @@ import { TENANT_SCOPES } from './tenant-guard.service';
  * to mocked unit tests, and turns every request for that kind of record into a 500. This walks each scope
  * against the generated schema and fails on any field or relation that does not exist.
  */
-const models = new Map(Prisma.dmmf.datamodel.models.map((m) => [m.name.toLowerCase(), m]));
+const models = new Map(
+  Prisma.dmmf.datamodel.models.map((m) => [m.name.toLowerCase(), m]),
+);
 const byName = new Map(Prisma.dmmf.datamodel.models.map((m) => [m.name, m]));
 const LOGICAL = new Set(['AND', 'OR', 'NOT']);
 
@@ -28,7 +30,11 @@ function problems(modelName: string, where: unknown, path: string): string[] {
       out.push(`${path}: "${key}" is not a field of ${modelName}`);
       continue;
     }
-    if (field.kind === 'object' && typeof value === 'object' && value !== null) {
+    if (
+      field.kind === 'object' &&
+      typeof value === 'object' &&
+      value !== null
+    ) {
       out.push(...problems(field.type, value, `${path}.${key}`));
     }
   }

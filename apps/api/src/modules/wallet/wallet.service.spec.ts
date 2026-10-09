@@ -892,9 +892,11 @@ describe('WalletService', () => {
         undefined,
         'other',
       );
-      const refs = prisma.walletTransaction.create.mock.calls.map(
-        (c) => c[0].data.reference,
-      );
+      const refs = (
+        prisma.walletTransaction.create.mock.calls as {
+          data: { reference: string };
+        }[][]
+      ).map((c) => c[0].data.reference);
       expect(refs[0]).toBe(refs[1]);
       expect(refs[2]).not.toBe(refs[0]);
     });

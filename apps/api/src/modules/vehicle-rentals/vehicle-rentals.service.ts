@@ -25,7 +25,8 @@ function generateBookingReference(): string {
 export class VehicleRentalsService {
   constructor(
     private readonly prisma: PrismaService,
-    @Inject(VEHICLE_RENTAL_PROVIDER) private readonly provider: VehicleRentalProviderPort,
+    @Inject(VEHICLE_RENTAL_PROVIDER)
+    private readonly provider: VehicleRentalProviderPort,
     private readonly invoicesService: InvoicesService,
     private readonly notificationsService: NotificationsService,
   ) {}
@@ -46,12 +47,18 @@ export class VehicleRentalsService {
   async getOffer(offerId: string): Promise<VehicleRentalOffer> {
     const offer = await this.provider.getOffer(offerId);
     if (!offer) {
-      throw new NotFoundException('This vehicle offer has expired or does not exist');
+      throw new NotFoundException(
+        'This vehicle offer has expired or does not exist',
+      );
     }
     return offer;
   }
 
-  async createBooking(customerId: string, offerId: string, bookedByStaffId?: string) {
+  async createBooking(
+    customerId: string,
+    offerId: string,
+    bookedByStaffId?: string,
+  ) {
     const offer = await this.getOffer(offerId);
 
     const result = await this.provider.createOrder(offer);
@@ -127,12 +134,16 @@ export class VehicleRentalsService {
   }
 
   async getBooking(id: string, ownerCustomerId?: string) {
-    const booking = await this.prisma.vehicleRental.findUnique({ where: { id } });
+    const booking = await this.prisma.vehicleRental.findUnique({
+      where: { id },
+    });
     if (!booking) {
       throw new NotFoundException('Booking not found');
     }
     if (ownerCustomerId && booking.customerId !== ownerCustomerId) {
-      throw new ForbiddenException('This booking does not belong to this customer');
+      throw new ForbiddenException(
+        'This booking does not belong to this customer',
+      );
     }
     return booking;
   }

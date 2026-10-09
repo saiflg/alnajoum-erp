@@ -1,4 +1,8 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PackageStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -18,7 +22,9 @@ export class UmrahPackagesService {
         ...dto,
         incentiveRule: dto.incentiveRule as unknown as Prisma.InputJsonValue,
         seatsAvailable: dto.seatsAvailable ?? dto.maxPilgrims,
-        departureDate: dto.departureDate ? new Date(dto.departureDate) : undefined,
+        departureDate: dto.departureDate
+          ? new Date(dto.departureDate)
+          : undefined,
         returnDate: dto.returnDate ? new Date(dto.returnDate) : undefined,
       },
     });
@@ -47,14 +53,17 @@ export class UmrahPackagesService {
       orderBy: { departureDate: 'asc' },
     });
     return packages.map(
-      ({ costPrice: _costPrice, incentiveRule: _incentiveRule, ...rest }) => rest,
+      ({ costPrice: _costPrice, incentiveRule: _incentiveRule, ...rest }) =>
+        rest,
     );
   }
 
   /** The public detail page: a package that is not PUBLISHED does not exist as far as the public is concerned. */
   async findOnePublished(id: string) {
     const pkg = await this.findOne(id, true);
-    if ((pkg as { status?: PackageStatus }).status !== PackageStatus.PUBLISHED) {
+    if (
+      (pkg as { status?: PackageStatus }).status !== PackageStatus.PUBLISHED
+    ) {
       throw new NotFoundException('Umrah package not found');
     }
     return pkg;
@@ -66,13 +75,21 @@ export class UmrahPackagesService {
       throw new NotFoundException('Umrah package not found');
     }
     if (hideCost) {
-      const { costPrice: _costPrice, incentiveRule: _incentiveRule, ...rest } = pkg;
+      const {
+        costPrice: _costPrice,
+        incentiveRule: _incentiveRule,
+        ...rest
+      } = pkg;
       return rest;
     }
     return pkg;
   }
 
-  async update(id: string, dto: UpdateUmrahPackageDto, actorIdentityId?: string) {
+  async update(
+    id: string,
+    dto: UpdateUmrahPackageDto,
+    actorIdentityId?: string,
+  ) {
     await this.findOne(id);
     const updated = await this.prisma.umrahPackage.update({
       where: { id },
@@ -82,7 +99,9 @@ export class UmrahPackagesService {
           dto.incentiveRule !== undefined
             ? (dto.incentiveRule as unknown as Prisma.InputJsonValue)
             : undefined,
-        departureDate: dto.departureDate ? new Date(dto.departureDate) : undefined,
+        departureDate: dto.departureDate
+          ? new Date(dto.departureDate)
+          : undefined,
         returnDate: dto.returnDate ? new Date(dto.returnDate) : undefined,
       },
     });

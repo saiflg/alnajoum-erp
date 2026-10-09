@@ -81,7 +81,9 @@ describe('VisaService', () => {
         count: jest.fn().mockResolvedValue(0),
       },
       visaApplicationNote: { create: jest.fn(), findMany: jest.fn() },
-      $transaction: jest.fn((callback: (tx: unknown) => unknown) => callback(prisma)),
+      $transaction: jest.fn((callback: (tx: unknown) => unknown) =>
+        callback(prisma),
+      ),
     };
     invoicesService = {
       createForVisaApplication: jest.fn(),
@@ -137,7 +139,9 @@ describe('VisaService', () => {
         }),
       );
       expect(invoicesService.createForVisaApplication).toHaveBeenCalled();
-      expect(notificationsService.sendVisaApplicationStatusUpdate).toHaveBeenCalledWith(
+      expect(
+        notificationsService.sendVisaApplicationStatusUpdate,
+      ).toHaveBeenCalledWith(
         'amina@example.com',
         'identity-1',
         expect.objectContaining({ applicationReference: 'VISA-2026-000001' }),
@@ -249,7 +253,10 @@ describe('VisaService', () => {
         ...visaServiceRow,
         requiresGuarantor: false,
       });
-      prisma.visaApplication.create.mockResolvedValue({ ...applicationRow, id: 'app-3' });
+      prisma.visaApplication.create.mockResolvedValue({
+        ...applicationRow,
+        id: 'app-3',
+      });
 
       const result = await service.submit('customer-1', {
         destinationCountry: 'Saudi Arabia',
@@ -293,13 +300,23 @@ describe('VisaService', () => {
     });
 
     it('honors a staff-set guarantorExempt override and skips straight to PAYMENT_PENDING', async () => {
-      prisma.visaApplication.create.mockResolvedValue({ ...applicationRow, id: 'app-4' });
+      prisma.visaApplication.create.mockResolvedValue({
+        ...applicationRow,
+        id: 'app-4',
+      });
 
       await service.submit(
         'customer-1',
-        { destinationCountry: 'Saudi Arabia', visaType: VisaType.PILGRIMAGE, visaServiceId: 'vs-1' },
+        {
+          destinationCountry: 'Saudi Arabia',
+          visaType: VisaType.PILGRIMAGE,
+          visaServiceId: 'vs-1',
+        },
         'staff-1',
-        { guarantorExempt: true, guarantorExemptReason: 'Applicant is a known VIP client' },
+        {
+          guarantorExempt: true,
+          guarantorExemptReason: 'Applicant is a known VIP client',
+        },
       );
 
       expect(prisma.visaApplication.update).toHaveBeenCalledWith({
@@ -307,7 +324,9 @@ describe('VisaService', () => {
         data: { status: VisaApplicationStatus.PAYMENT_PENDING },
       });
       expect(auditService.record).toHaveBeenCalledWith(
-        expect.objectContaining({ action: 'visa_application.guarantor_exempted' }),
+        expect.objectContaining({
+          action: 'visa_application.guarantor_exempted',
+        }),
       );
     });
 
@@ -315,7 +334,11 @@ describe('VisaService', () => {
       await expect(
         service.submit(
           'customer-1',
-          { destinationCountry: 'X', visaType: VisaType.OTHER, visaServiceId: 'vs-1' },
+          {
+            destinationCountry: 'X',
+            visaType: VisaType.OTHER,
+            visaServiceId: 'vs-1',
+          },
           'staff-1',
           { guarantorExempt: true },
         ),
@@ -336,34 +359,49 @@ describe('VisaService', () => {
 
   describe('getApplication', () => {
     it('throws Forbidden when the application belongs to a different customer', async () => {
-      await expect(service.getApplication('app-1', 'someone-else')).rejects.toThrow(
-        ForbiddenException,
-      );
+      await expect(
+        service.getApplication('app-1', 'someone-else'),
+      ).rejects.toThrow(ForbiddenException);
     });
 
     it('throws NotFound when the application does not exist', async () => {
       prisma.visaApplication.findUnique.mockResolvedValueOnce(null);
 
-      await expect(service.getApplication('missing')).rejects.toThrow(NotFoundException);
+      await expect(service.getApplication('missing')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
   describe('updateStatus', () => {
     it('updates status, notifies, and voids the invoice when cancelled', async () => {
-      await service.updateStatus('app-1', VisaApplicationStatus.CANCELLED, 'no longer needed');
+      await service.updateStatus(
+        'app-1',
+        VisaApplicationStatus.CANCELLED,
+        'no longer needed',
+      );
 
       expect(prisma.visaApplication.update).toHaveBeenCalledWith({
         where: { id: 'app-1' },
-        data: { status: VisaApplicationStatus.CANCELLED, staffNote: 'no longer needed' },
+        data: {
+          status: VisaApplicationStatus.CANCELLED,
+          staffNote: 'no longer needed',
+        },
       });
-      expect(invoicesService.voidVisaApplicationIfUnpaid).toHaveBeenCalledWith('app-1');
-      expect(notificationsService.sendVisaApplicationStatusUpdate).toHaveBeenCalled();
+      expect(invoicesService.voidVisaApplicationIfUnpaid).toHaveBeenCalledWith(
+        'app-1',
+      );
+      expect(
+        notificationsService.sendVisaApplicationStatusUpdate,
+      ).toHaveBeenCalled();
     });
 
     it('does not void an invoice for a non-terminal status transition', async () => {
       await service.updateStatus('app-1', VisaApplicationStatus.IN_REVIEW);
 
-      expect(invoicesService.voidVisaApplicationIfUnpaid).not.toHaveBeenCalled();
+      expect(
+        invoicesService.voidVisaApplicationIfUnpaid,
+      ).not.toHaveBeenCalled();
     });
 
     it('creates an incentive when the application is marked COMPLETED', async () => {
@@ -374,14 +412,18 @@ describe('VisaService', () => {
 
       await service.updateStatus('app-1', VisaApplicationStatus.COMPLETED);
 
-      expect(visaIncentivesService.createForCompletedApplication).toHaveBeenCalled();
+      expect(
+        visaIncentivesService.createForCompletedApplication,
+      ).toHaveBeenCalled();
     });
 
     it('rejects updating an application already in a terminal state', async () => {
       prisma.visaApplication.findUnique.mockResolvedValue({
         ...applicationRow,
         status: VisaApplicationStatus.ISSUED,
-        customer: { identity: { id: 'identity-1', email: 'amina@example.com' } },
+        customer: {
+          identity: { id: 'identity-1', email: 'amina@example.com' },
+        },
       });
 
       await expect(
@@ -396,7 +438,9 @@ describe('VisaService', () => {
         ...applicationRow,
         status: VisaApplicationStatus.PAYMENT_PENDING,
         invoice: { status: InvoiceStatus.PAID },
-        customer: { identity: { id: 'identity-1', email: 'amina@example.com' } },
+        customer: {
+          identity: { id: 'identity-1', email: 'amina@example.com' },
+        },
       });
 
       await service.markPaymentVerified('app-1', 'staff-1');
@@ -412,30 +456,37 @@ describe('VisaService', () => {
         ...applicationRow,
         status: VisaApplicationStatus.PAYMENT_PENDING,
         invoice: { status: InvoiceStatus.ISSUED },
-        customer: { identity: { id: 'identity-1', email: 'amina@example.com' } },
+        customer: {
+          identity: { id: 'identity-1', email: 'amina@example.com' },
+        },
       });
 
-      await expect(service.markPaymentVerified('app-1', 'staff-1')).rejects.toThrow(
-        ConflictException,
-      );
+      await expect(
+        service.markPaymentVerified('app-1', 'staff-1'),
+      ).rejects.toThrow(ConflictException);
     });
 
     it('rejects when the application is not in PAYMENT_PENDING', async () => {
       prisma.visaApplication.findUnique.mockResolvedValue({
         ...applicationRow,
         status: VisaApplicationStatus.SUBMITTED,
-        customer: { identity: { id: 'identity-1', email: 'amina@example.com' } },
+        customer: {
+          identity: { id: 'identity-1', email: 'amina@example.com' },
+        },
       });
 
-      await expect(service.markPaymentVerified('app-1', 'staff-1')).rejects.toThrow(
-        ConflictException,
-      );
+      await expect(
+        service.markPaymentVerified('app-1', 'staff-1'),
+      ).rejects.toThrow(ConflictException);
     });
   });
 
   describe('assign', () => {
     it('sets assignedStaffId and records an audit entry', async () => {
-      prisma.visaApplication.update.mockResolvedValue({ ...applicationRow, assignedStaffId: 'staff-2' });
+      prisma.visaApplication.update.mockResolvedValue({
+        ...applicationRow,
+        assignedStaffId: 'staff-2',
+      });
 
       await service.assign('app-1', 'staff-2', 'identity-9');
 
@@ -456,7 +507,11 @@ describe('VisaService', () => {
       await service.addNote('app-1', 'staff-1', 'Passport copy looks blurry');
 
       expect(prisma.visaApplicationNote.create).toHaveBeenCalledWith({
-        data: { applicationId: 'app-1', staffId: 'staff-1', note: 'Passport copy looks blurry' },
+        data: {
+          applicationId: 'app-1',
+          staffId: 'staff-1',
+          note: 'Passport copy looks blurry',
+        },
       });
     });
   });
@@ -469,14 +524,18 @@ describe('VisaService', () => {
         where: { id: 'app-1' },
         data: { status: VisaApplicationStatus.CANCELLED },
       });
-      expect(invoicesService.voidVisaApplicationIfUnpaid).toHaveBeenCalledWith('app-1');
+      expect(invoicesService.voidVisaApplicationIfUnpaid).toHaveBeenCalledWith(
+        'app-1',
+      );
     });
 
     it('rejects cancelling an already-terminal application', async () => {
       prisma.visaApplication.findUnique.mockResolvedValue({
         ...applicationRow,
         status: VisaApplicationStatus.REJECTED,
-        customer: { identity: { id: 'identity-1', email: 'amina@example.com' } },
+        customer: {
+          identity: { id: 'identity-1', email: 'amina@example.com' },
+        },
       });
 
       await expect(service.cancel('app-1')).rejects.toThrow(ConflictException);

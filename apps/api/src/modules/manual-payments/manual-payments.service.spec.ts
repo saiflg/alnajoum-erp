@@ -43,7 +43,7 @@ describe('ManualPaymentsService', () => {
       },
       payment: { create: jest.fn() },
       $executeRaw: jest.fn().mockResolvedValue(1),
-      $transaction: jest.fn((cb) => cb(prisma)),
+      $transaction: jest.fn((cb: (tx: unknown) => unknown) => cb(prisma)),
     };
     invoicesService = { recomputeStatus: jest.fn() };
     notificationsService = {

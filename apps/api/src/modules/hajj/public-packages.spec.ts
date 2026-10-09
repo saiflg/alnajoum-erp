@@ -49,13 +49,12 @@ describe.each(cases)('public $name package detail', (c) => {
     for (const secret of c.secrets) expect(result).not.toHaveProperty(secret);
   });
 
-  it.each([
-    PackageStatus.DRAFT,
-    PackageStatus.CLOSED,
-    PackageStatus.CANCELLED,
-  ])('answers 404 for a %s package', async (status) => {
-    await expect(
-      c.make(prismaWith(status)).findOnePublished('p1'),
-    ).rejects.toBeInstanceOf(NotFoundException);
-  });
+  it.each([PackageStatus.DRAFT, PackageStatus.CLOSED, PackageStatus.CANCELLED])(
+    'answers 404 for a %s package',
+    async (status) => {
+      await expect(
+        c.make(prismaWith(status)).findOnePublished('p1'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    },
+  );
 });

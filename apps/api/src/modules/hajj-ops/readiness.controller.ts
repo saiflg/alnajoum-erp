@@ -16,7 +16,6 @@ import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { ReadinessService } from './readiness.service';
 import { UsersService } from '../users/users.service';
 
-import { resolveTenantFilter } from '../../common/utils/tenant.util';
 import { TenantScoped } from '../../common/tenancy/tenant-scoped.decorator';
 @Controller('hajj-ops/readiness')
 export class ReadinessController {

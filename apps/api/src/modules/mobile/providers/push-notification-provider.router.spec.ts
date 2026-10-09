@@ -16,7 +16,10 @@ describe('PushNotificationProviderRouter', () => {
   const input = { token: 'tok-1', title: 'Hi', body: 'Body' };
 
   it('routes FCM-provider devices to the FCM stub, which reports not configured', async () => {
-    const result = await router.sendPush({ ...input, provider: 'FCM' } as never);
+    const result = await router.sendPush({
+      ...input,
+      provider: 'FCM',
+    });
     expect(result).toEqual({
       success: false,
       error: 'FCM is not configured for this deployment',
@@ -24,7 +27,10 @@ describe('PushNotificationProviderRouter', () => {
   });
 
   it('routes APNS-provider devices to the APNs stub, which reports not configured', async () => {
-    const result = await router.sendPush({ ...input, provider: 'APNS' } as never);
+    const result = await router.sendPush({
+      ...input,
+      provider: 'APNS',
+    });
     expect(result).toEqual({
       success: false,
       error: 'APNs is not configured for this deployment',
@@ -32,7 +38,10 @@ describe('PushNotificationProviderRouter', () => {
   });
 
   it('defaults an EXPO (or unknown) provider to the mock provider, which succeeds', async () => {
-    const result = await router.sendPush({ ...input, provider: 'EXPO' } as never);
+    const result = await router.sendPush({
+      ...input,
+      provider: 'EXPO',
+    });
     expect(result).toEqual({ success: true });
   });
 

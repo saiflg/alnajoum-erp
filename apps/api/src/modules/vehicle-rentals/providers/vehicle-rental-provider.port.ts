@@ -37,7 +37,9 @@ export interface CreateOrderResult {
  * as HotelProviderPort/FlightProviderPort.
  */
 export interface VehicleRentalProviderPort {
-  searchOffers(criteria: SearchVehicleRentalsCriteria): Promise<VehicleRentalOffer[]>;
+  searchOffers(
+    criteria: SearchVehicleRentalsCriteria,
+  ): Promise<VehicleRentalOffer[]>;
   getOffer(offerId: string): Promise<VehicleRentalOffer | null>;
   createOrder(offer: VehicleRentalOffer): Promise<CreateOrderResult>;
   cancelOrder(providerOrderId: string): Promise<void>;

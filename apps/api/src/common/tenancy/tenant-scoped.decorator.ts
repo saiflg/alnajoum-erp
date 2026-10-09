@@ -33,14 +33,15 @@ export const TenantScoped =
   (
     target: object,
     _key?: string | symbol,
-    descriptor?: TypedPropertyDescriptor<any>,
+    descriptor?: TypedPropertyDescriptor<unknown>,
   ): void => {
-    const holder: object = descriptor?.value ?? target;
+    const holder: object = (descriptor?.value as object | undefined) ?? target;
     const added = specs.map((spec): TenantScopeSpec =>
       typeof spec === 'string' ? { kind: spec } : spec,
     );
     // Several @TenantScoped on one route accumulate (SetMetadata would let the last one win).
-    const existing: TenantScopeSpec[] =
-      Reflect.getMetadata(TENANT_SCOPED_KEY, holder) ?? [];
+    const existing =
+      (Reflect.getMetadata(TENANT_SCOPED_KEY, holder) as
+        TenantScopeSpec[] | undefined) ?? [];
     Reflect.defineMetadata(TENANT_SCOPED_KEY, [...existing, ...added], holder);
   };

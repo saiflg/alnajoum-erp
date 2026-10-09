@@ -106,7 +106,8 @@ class VerifiedDiskStorage implements StorageEngine {
       file.stream.unpipe();
       // Remove the file only once the stream has really closed: destroying a stream whose open() is still
       // pending would otherwise create the file after the unlink and leave an empty file behind.
-      const removeThenReport = () => fs.unlink(finalPath, () => callback(error));
+      const removeThenReport = () =>
+        fs.unlink(finalPath, () => callback(error));
       if (out.closed) removeThenReport();
       else {
         out.once('close', removeThenReport);
@@ -135,7 +136,9 @@ class VerifiedDiskStorage implements StorageEngine {
     file: Express.Multer.File,
     callback: (error: Error | null) => void,
   ): void {
-    fs.unlink(file.path, (err) => callback(err && err.code !== 'ENOENT' ? err : null));
+    fs.unlink(file.path, (err) =>
+      callback(err && err.code !== 'ENOENT' ? err : null),
+    );
   }
 }
 

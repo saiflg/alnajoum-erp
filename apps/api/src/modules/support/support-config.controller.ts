@@ -1,5 +1,4 @@
 import { Body, Controller, Get, Post } from '@nestjs/common';
-import { TicketPriority } from '@prisma/client';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { SupportConfigService } from './support-config.service';

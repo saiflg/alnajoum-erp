@@ -44,14 +44,17 @@ describe('MobileDevicesService', () => {
 
       await service.register('identity-1', {
         deviceId: 'install-abc',
-        platform: 'ANDROID' as never,
+        platform: 'ANDROID',
         appVersion: '1.0.0',
       });
 
       expect(prisma.mobileDevice.upsert).toHaveBeenCalledWith(
         expect.objectContaining({
           where: {
-            identityId_deviceId: { identityId: 'identity-1', deviceId: 'install-abc' },
+            identityId_deviceId: {
+              identityId: 'identity-1',
+              deviceId: 'install-abc',
+            },
           },
         }),
       );
@@ -65,7 +68,7 @@ describe('MobileDevicesService', () => {
 
       await service.register('identity-1', {
         deviceId: 'install-abc',
-        platform: 'IOS' as never,
+        platform: 'IOS',
         appVersion: '1.1.0',
       });
 
@@ -78,7 +81,7 @@ describe('MobileDevicesService', () => {
 
       await service.register('identity-1', {
         deviceId: 'install-abc',
-        platform: 'IOS' as never,
+        platform: 'IOS',
         appVersion: '1.1.0',
         pushToken: 'ExponentPushToken[xxx]',
       });
@@ -92,7 +95,7 @@ describe('MobileDevicesService', () => {
 
       await service.register('identity-1', {
         deviceId: 'install-abc',
-        platform: 'IOS' as never,
+        platform: 'IOS',
         appVersion: '1.1.0',
       });
 
@@ -128,13 +131,19 @@ describe('MobileDevicesService', () => {
         identityId: 'identity-1',
         revokedAt: null,
       });
-      prisma.mobileDevice.update.mockResolvedValue({ id: 'dev-1', revokedAt: new Date() });
+      prisma.mobileDevice.update.mockResolvedValue({
+        id: 'dev-1',
+        revokedAt: new Date(),
+      });
 
       await service.revoke('identity-1', 'dev-1');
 
       expect(prisma.mobileDevice.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ pushToken: null, pushProvider: null }),
+          data: expect.objectContaining({
+            pushToken: null,
+            pushProvider: null,
+          }),
         }),
       );
       expect(auditService.record).toHaveBeenCalledWith(
@@ -143,7 +152,11 @@ describe('MobileDevicesService', () => {
     });
 
     it('revoke is a no-op (no duplicate audit) for an already-revoked device', async () => {
-      const revokedDevice = { id: 'dev-1', identityId: 'identity-1', revokedAt: new Date() };
+      const revokedDevice = {
+        id: 'dev-1',
+        identityId: 'identity-1',
+        revokedAt: new Date(),
+      };
       prisma.mobileDevice.findUnique.mockResolvedValue(revokedDevice);
 
       const result = await service.revoke('identity-1', 'dev-1');

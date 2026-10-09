@@ -19,16 +19,16 @@ import {
  * reason as FCM/APNs — see those services' own doc comments.
  */
 @Injectable()
-export class PushNotificationProviderRouter
-  implements PushNotificationProviderPort
-{
+export class PushNotificationProviderRouter implements PushNotificationProviderPort {
   constructor(
     private readonly mockProvider: MockPushNotificationProviderService,
     private readonly fcmProvider: FcmPushNotificationProviderService,
     private readonly apnsProvider: ApnsPushNotificationProviderService,
   ) {}
 
-  private resolve(pushProvider: string | null | undefined): PushNotificationProviderPort {
+  private resolve(
+    pushProvider: string | null | undefined,
+  ): PushNotificationProviderPort {
     switch (pushProvider) {
       case 'FCM':
         return this.fcmProvider;

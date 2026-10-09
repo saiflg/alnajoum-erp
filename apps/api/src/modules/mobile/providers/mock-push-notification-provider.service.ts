@@ -12,10 +12,10 @@ import {
  * first" reasoning as MockNotificationProviderService.
  */
 @Injectable()
-export class MockPushNotificationProviderService
-  implements PushNotificationProviderPort
-{
-  private readonly logger = new Logger(MockPushNotificationProviderService.name);
+export class MockPushNotificationProviderService implements PushNotificationProviderPort {
+  private readonly logger = new Logger(
+    MockPushNotificationProviderService.name,
+  );
 
   sendPush(input: SendPushInput): Promise<SendPushResult> {
     this.logger.log(

@@ -49,7 +49,10 @@ export class PaystackWebhookController {
   ) {
     if (
       !req.rawBody ||
-      !(await this.paystackProvider.verifyWebhookSignature(req.rawBody, signature))
+      !(await this.paystackProvider.verifyWebhookSignature(
+        req.rawBody,
+        signature,
+      ))
     ) {
       this.logger.warn('Rejected a Paystack webhook with an invalid signature');
       throw new UnauthorizedException('Invalid webhook signature');

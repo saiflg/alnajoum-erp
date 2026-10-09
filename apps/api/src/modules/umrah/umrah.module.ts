@@ -11,7 +11,13 @@ import { UmrahRegistrationsOwnController } from './umrah-registrations-own.contr
 import { UmrahRegistrationsService } from './umrah-registrations.service';
 
 @Module({
-  imports: [CustomersModule, UsersModule, NotificationsModule, PaymentsModule, AuditModule],
+  imports: [
+    CustomersModule,
+    UsersModule,
+    NotificationsModule,
+    PaymentsModule,
+    AuditModule,
+  ],
   controllers: [
     UmrahPackagesController,
     UmrahRegistrationsOwnController,

@@ -1,4 +1,8 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PackageStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -17,7 +21,9 @@ export class HajjPackagesService {
       data: {
         ...dto,
         seatsAvailable: dto.seatsAvailable ?? dto.maxPilgrims,
-        departureDate: dto.departureDate ? new Date(dto.departureDate) : undefined,
+        departureDate: dto.departureDate
+          ? new Date(dto.departureDate)
+          : undefined,
         returnDate: dto.returnDate ? new Date(dto.returnDate) : undefined,
       },
     });
@@ -51,7 +57,9 @@ export class HajjPackagesService {
   /** The public detail page: a package that is not PUBLISHED does not exist as far as the public is concerned. */
   async findOnePublished(id: string) {
     const pkg = await this.findOne(id, true);
-    if ((pkg as { status?: PackageStatus }).status !== PackageStatus.PUBLISHED) {
+    if (
+      (pkg as { status?: PackageStatus }).status !== PackageStatus.PUBLISHED
+    ) {
       throw new NotFoundException('Hajj package not found');
     }
     return pkg;
@@ -69,13 +77,19 @@ export class HajjPackagesService {
     return pkg;
   }
 
-  async update(id: string, dto: UpdateHajjPackageDto, actorIdentityId?: string) {
+  async update(
+    id: string,
+    dto: UpdateHajjPackageDto,
+    actorIdentityId?: string,
+  ) {
     await this.findOne(id);
     const updated = await this.prisma.hajjPackage.update({
       where: { id },
       data: {
         ...dto,
-        departureDate: dto.departureDate ? new Date(dto.departureDate) : undefined,
+        departureDate: dto.departureDate
+          ? new Date(dto.departureDate)
+          : undefined,
         returnDate: dto.returnDate ? new Date(dto.returnDate) : undefined,
       },
     });

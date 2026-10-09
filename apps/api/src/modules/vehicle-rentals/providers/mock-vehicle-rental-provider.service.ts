@@ -10,7 +10,10 @@ import {
 
 const OFFER_TTL_MS = 30 * 60 * 1000;
 
-const VEHICLES: Record<VehicleType, Array<{ name: string; seats: number; rateMultiplier: number }>> = {
+const VEHICLES: Record<
+  VehicleType,
+  Array<{ name: string; seats: number; rateMultiplier: number }>
+> = {
   CAR: [
     { name: 'Toyota Camry', seats: 4, rateMultiplier: 1 },
     { name: 'Toyota Corolla', seats: 4, rateMultiplier: 0.85 },
@@ -27,7 +30,12 @@ const VEHICLES: Record<VehicleType, Array<{ name: string; seats: number; rateMul
   ],
 };
 
-const FEATURE_POOL = ['Air Conditioning', 'GPS Tracking', 'Insurance Included', 'Unlimited Mileage'];
+const FEATURE_POOL = [
+  'Air Conditioning',
+  'GPS Tracking',
+  'Insurance Included',
+  'Unlimited Mileage',
+];
 
 function hashString(input: string): number {
   let hash = 5381;
@@ -67,7 +75,9 @@ export class MockVehicleRentalProviderService implements VehicleRentalProviderPo
   private readonly logger = new Logger(MockVehicleRentalProviderService.name);
   private readonly offerCache = new Map<string, CachedOffer>();
 
-  searchOffers(criteria: SearchVehicleRentalsCriteria): Promise<VehicleRentalOffer[]> {
+  searchOffers(
+    criteria: SearchVehicleRentalsCriteria,
+  ): Promise<VehicleRentalOffer[]> {
     const withDriver = criteria.withDriver ?? true;
     const seedKey = [
       criteria.vehicleType,
@@ -84,14 +94,16 @@ export class MockVehicleRentalProviderService implements VehicleRentalProviderPo
     const offers: VehicleRentalOffer[] = [];
 
     for (const vehicle of catalogue) {
-      const baseDailyRate = randInt(rand, 30_000, 60_000) * vehicle.rateMultiplier;
+      const baseDailyRate =
+        randInt(rand, 30_000, 60_000) * vehicle.rateMultiplier;
       const driverFee = withDriver ? randInt(rand, 5_000, 10_000) * days : 0;
       const totalAmount = Math.round(baseDailyRate * days + driverFee);
 
       const featureCount = randInt(rand, 2, FEATURE_POOL.length);
       const features: string[] = [];
       while (features.length < featureCount) {
-        const candidate = FEATURE_POOL[randInt(rand, 0, FEATURE_POOL.length - 1)];
+        const candidate =
+          FEATURE_POOL[randInt(rand, 0, FEATURE_POOL.length - 1)];
         if (!features.includes(candidate)) features.push(candidate);
       }
 
@@ -111,11 +123,16 @@ export class MockVehicleRentalProviderService implements VehicleRentalProviderPo
         expiresAt: new Date(Date.now() + OFFER_TTL_MS).toISOString(),
       };
 
-      this.offerCache.set(offer.id, { offer, expiresAt: Date.now() + OFFER_TTL_MS });
+      this.offerCache.set(offer.id, {
+        offer,
+        expiresAt: Date.now() + OFFER_TTL_MS,
+      });
       offers.push(offer);
     }
 
-    return Promise.resolve(offers.sort((a, b) => a.totalAmount - b.totalAmount));
+    return Promise.resolve(
+      offers.sort((a, b) => a.totalAmount - b.totalAmount),
+    );
   }
 
   getOffer(offerId: string): Promise<VehicleRentalOffer | null> {
@@ -133,9 +150,14 @@ export class MockVehicleRentalProviderService implements VehicleRentalProviderPo
     if (!cached || cached.expiresAt < Date.now()) {
       return Promise.resolve({ providerOrderId: '', status: 'FAILED' });
     }
-    this.logger.log(`Mock vehicle rental order created for offer ${offer.id} (${offer.vehicleName})`);
+    this.logger.log(
+      `Mock vehicle rental order created for offer ${offer.id} (${offer.vehicleName})`,
+    );
     this.offerCache.delete(offer.id);
-    return Promise.resolve({ providerOrderId: `MOCK-${randomUUID()}`, status: 'CONFIRMED' });
+    return Promise.resolve({
+      providerOrderId: `MOCK-${randomUUID()}`,
+      status: 'CONFIRMED',
+    });
   }
 
   cancelOrder(providerOrderId: string): Promise<void> {

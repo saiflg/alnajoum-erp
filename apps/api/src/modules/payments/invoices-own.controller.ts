@@ -76,10 +76,8 @@ export class InvoicesOwnController {
     const customerId = await this.customersService.getCustomerIdForIdentity(
       user.sub,
     );
-    const { stream, filename } = await this.receiptsService.renderPaymentReceipt(
-      paymentId,
-      customerId,
-    );
+    const { stream, filename } =
+      await this.receiptsService.renderPaymentReceipt(paymentId, customerId);
     res.set({
       'Content-Type': 'application/pdf',
       'Content-Disposition': `attachment; filename="${filename}"`,

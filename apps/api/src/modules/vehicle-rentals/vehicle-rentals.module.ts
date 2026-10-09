@@ -20,7 +20,10 @@ import { VehicleRentalsService } from './vehicle-rentals.service';
   providers: [
     VehicleRentalsService,
     MockVehicleRentalProviderService,
-    { provide: VEHICLE_RENTAL_PROVIDER, useExisting: MockVehicleRentalProviderService },
+    {
+      provide: VEHICLE_RENTAL_PROVIDER,
+      useExisting: MockVehicleRentalProviderService,
+    },
   ],
 })
 export class VehicleRentalsModule {}

@@ -14,7 +14,12 @@ describe('GuarantorsService', () => {
   let service: GuarantorsService;
   let prisma: {
     visaApplication: { findUnique: jest.Mock; update: jest.Mock };
-    guarantor: { create: jest.Mock; findUnique: jest.Mock; update: jest.Mock; findMany: jest.Mock };
+    guarantor: {
+      create: jest.Mock;
+      findUnique: jest.Mock;
+      update: jest.Mock;
+      findMany: jest.Mock;
+    };
   };
   let auditService: { record: jest.Mock };
   let notificationsService: { sendGuarantorUpdate: jest.Mock };
@@ -46,7 +51,10 @@ describe('GuarantorsService', () => {
 
   describe('attachToApplication', () => {
     it('creates the guarantor and moves the application to GUARANTOR_VERIFICATION', async () => {
-      prisma.visaApplication.findUnique.mockResolvedValue({ id: 'app-1', guarantorId: null });
+      prisma.visaApplication.findUnique.mockResolvedValue({
+        id: 'app-1',
+        guarantorId: null,
+      });
       prisma.guarantor.create.mockResolvedValue({ id: 'g-1' });
 
       await service.attachToApplication('app-1', {
@@ -57,7 +65,10 @@ describe('GuarantorsService', () => {
 
       expect(prisma.visaApplication.update).toHaveBeenCalledWith({
         where: { id: 'app-1' },
-        data: { guarantorId: 'g-1', status: VisaApplicationStatus.GUARANTOR_VERIFICATION },
+        data: {
+          guarantorId: 'g-1',
+          status: VisaApplicationStatus.GUARANTOR_VERIFICATION,
+        },
       });
     });
 
@@ -74,7 +85,10 @@ describe('GuarantorsService', () => {
     });
 
     it('rejects attaching a second guarantor to the same application', async () => {
-      prisma.visaApplication.findUnique.mockResolvedValue({ id: 'app-1', guarantorId: 'g-existing' });
+      prisma.visaApplication.findUnique.mockResolvedValue({
+        id: 'app-1',
+        guarantorId: 'g-existing',
+      });
 
       await expect(
         service.attachToApplication('app-1', {
@@ -97,7 +111,9 @@ describe('GuarantorsService', () => {
       prisma.visaApplication.findUnique.mockResolvedValue({
         id: 'app-1',
         applicationReference: 'VISA-2026-000001',
-        customer: { identity: { id: 'identity-1', email: 'amina@example.com' } },
+        customer: {
+          identity: { id: 'identity-1', email: 'amina@example.com' },
+        },
       });
     });
 
@@ -110,7 +126,10 @@ describe('GuarantorsService', () => {
 
       await service.verify(
         'g-1',
-        { verificationStatus: VerificationStatus.VERIFIED, approvalStatus: ApprovalStatus.APPROVED },
+        {
+          verificationStatus: VerificationStatus.VERIFIED,
+          approvalStatus: ApprovalStatus.APPROVED,
+        },
         'staff-1',
       );
 
@@ -134,13 +153,19 @@ describe('GuarantorsService', () => {
 
       await service.verify(
         'g-1',
-        { verificationStatus: VerificationStatus.REJECTED, approvalStatus: ApprovalStatus.REJECTED },
+        {
+          verificationStatus: VerificationStatus.REJECTED,
+          approvalStatus: ApprovalStatus.REJECTED,
+        },
         'staff-1',
       );
 
       expect(prisma.visaApplication.update).toHaveBeenCalledWith({
         where: { id: 'app-1' },
-        data: { status: VisaApplicationStatus.AWAITING_GUARANTOR, guarantorId: null },
+        data: {
+          status: VisaApplicationStatus.AWAITING_GUARANTOR,
+          guarantorId: null,
+        },
       });
       expect(notificationsService.sendGuarantorUpdate).toHaveBeenCalledWith(
         'amina@example.com',
@@ -169,7 +194,11 @@ describe('GuarantorsService', () => {
       prisma.guarantor.findUnique.mockResolvedValue(null);
 
       await expect(
-        service.verify('missing', { approvalStatus: ApprovalStatus.APPROVED }, 'staff-1'),
+        service.verify(
+          'missing',
+          { approvalStatus: ApprovalStatus.APPROVED },
+          'staff-1',
+        ),
       ).rejects.toThrow(NotFoundException);
     });
   });

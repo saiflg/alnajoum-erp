@@ -1,5 +1,12 @@
 import { VehicleType } from '@prisma/client';
-import { IsBoolean, IsDateString, IsEnum, IsOptional, IsString, MinLength } from 'class-validator';
+import {
+  IsBoolean,
+  IsDateString,
+  IsEnum,
+  IsOptional,
+  IsString,
+  MinLength,
+} from 'class-validator';
 
 export class SearchVehicleRentalsDto {
   @IsEnum(VehicleType)

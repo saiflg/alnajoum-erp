@@ -18,7 +18,12 @@ describe('computeMargin (pure)', () => {
 describe('VisaServicesService', () => {
   let service: VisaServicesService;
   let prisma: {
-    visaService: { create: jest.Mock; update: jest.Mock; findMany: jest.Mock; findUnique: jest.Mock };
+    visaService: {
+      create: jest.Mock;
+      update: jest.Mock;
+      findMany: jest.Mock;
+      findUnique: jest.Mock;
+    };
   };
   let auditService: { record: jest.Mock };
 
@@ -95,13 +100,25 @@ describe('VisaServicesService', () => {
         status: VisaServiceStatus.ACTIVE,
       });
 
-      const result = await service.update('vs-1', { sellingPrice: 850_000, status: VisaServiceStatus.ACTIVE }, 'identity-1');
+      const result = await service.update(
+        'vs-1',
+        { sellingPrice: 850_000, status: VisaServiceStatus.ACTIVE },
+        'identity-1',
+      );
 
       expect(auditService.record).toHaveBeenCalledWith(
         expect.objectContaining({
           metadata: {
-            previous: { companyCost: 600_000, sellingPrice: 800_000, status: VisaServiceStatus.DRAFT },
-            next: { companyCost: 600_000, sellingPrice: 850_000, status: VisaServiceStatus.ACTIVE },
+            previous: {
+              companyCost: 600_000,
+              sellingPrice: 800_000,
+              status: VisaServiceStatus.DRAFT,
+            },
+            next: {
+              companyCost: 600_000,
+              sellingPrice: 850_000,
+              status: VisaServiceStatus.ACTIVE,
+            },
           },
         }),
       );
@@ -111,7 +128,9 @@ describe('VisaServicesService', () => {
     it('throws NotFound when updating a service that does not exist', async () => {
       prisma.visaService.findUnique.mockResolvedValue(null);
 
-      await expect(service.update('missing', { sellingPrice: 1 })).rejects.toThrow(NotFoundException);
+      await expect(
+        service.update('missing', { sellingPrice: 1 }),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 

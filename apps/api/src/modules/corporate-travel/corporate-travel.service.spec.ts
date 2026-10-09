@@ -8,9 +8,19 @@ import { CorporateTravelService } from './corporate-travel.service';
 describe('CorporateTravelService', () => {
   let service: CorporateTravelService;
   let prisma: {
-    corporateAccount: { create: jest.Mock; findMany: jest.Mock; findUnique: jest.Mock; update: jest.Mock };
+    corporateAccount: {
+      create: jest.Mock;
+      findMany: jest.Mock;
+      findUnique: jest.Mock;
+      update: jest.Mock;
+    };
     corporateTraveler: { create: jest.Mock; findMany: jest.Mock };
-    corporateBooking: { create: jest.Mock; findMany: jest.Mock; findUnique: jest.Mock; update: jest.Mock };
+    corporateBooking: {
+      create: jest.Mock;
+      findMany: jest.Mock;
+      findUnique: jest.Mock;
+      update: jest.Mock;
+    };
     $transaction: jest.Mock;
   };
   let invoicesService: {
@@ -26,8 +36,18 @@ describe('CorporateTravelService', () => {
   };
 
   const travelers = [
-    { id: 'trav-1', corporateAccountId: 'acct-1', firstName: 'Musa', lastName: 'Bello' },
-    { id: 'trav-2', corporateAccountId: 'acct-1', firstName: 'Hauwa', lastName: 'Sani' },
+    {
+      id: 'trav-1',
+      corporateAccountId: 'acct-1',
+      firstName: 'Musa',
+      lastName: 'Bello',
+    },
+    {
+      id: 'trav-2',
+      corporateAccountId: 'acct-1',
+      firstName: 'Hauwa',
+      lastName: 'Sani',
+    },
   ];
 
   beforeEach(async () => {
@@ -45,7 +65,9 @@ describe('CorporateTravelService', () => {
         findUnique: jest.fn(),
         update: jest.fn(),
       },
-      $transaction: jest.fn((callback: (tx: unknown) => unknown) => callback(prisma)),
+      $transaction: jest.fn((callback: (tx: unknown) => unknown) =>
+        callback(prisma),
+      ),
     };
     invoicesService = {
       createForCorporateBooking: jest.fn(),
@@ -68,7 +90,9 @@ describe('CorporateTravelService', () => {
     it('throws NotFound for a missing account', async () => {
       prisma.corporateAccount.findUnique.mockResolvedValueOnce(null);
 
-      await expect(service.getAccount('missing')).rejects.toThrow(NotFoundException);
+      await expect(service.getAccount('missing')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -76,11 +100,18 @@ describe('CorporateTravelService', () => {
     it('validates the account exists before adding a traveler', async () => {
       prisma.corporateTraveler.create.mockResolvedValue(travelers[0]);
 
-      await service.addTraveler('acct-1', { firstName: 'Musa', lastName: 'Bello' });
+      await service.addTraveler('acct-1', {
+        firstName: 'Musa',
+        lastName: 'Bello',
+      });
 
       expect(prisma.corporateAccount.findUnique).toHaveBeenCalled();
       expect(prisma.corporateTraveler.create).toHaveBeenCalledWith({
-        data: { firstName: 'Musa', lastName: 'Bello', corporateAccountId: 'acct-1' },
+        data: {
+          firstName: 'Musa',
+          lastName: 'Bello',
+          corporateAccountId: 'acct-1',
+        },
       });
     });
   });
@@ -95,8 +126,18 @@ describe('CorporateTravelService', () => {
         totalAmount: 150_000,
         currency: 'NGN',
         travelers: [
-          { travelerId: 'trav-1', amount: 90_000, description: 'Flight LOS-ABV', traveler: travelers[0] },
-          { travelerId: 'trav-2', amount: 60_000, description: 'Flight LOS-ABV', traveler: travelers[1] },
+          {
+            travelerId: 'trav-1',
+            amount: 90_000,
+            description: 'Flight LOS-ABV',
+            traveler: travelers[0],
+          },
+          {
+            travelerId: 'trav-2',
+            amount: 60_000,
+            description: 'Flight LOS-ABV',
+            traveler: travelers[1],
+          },
         ],
       });
 
@@ -105,8 +146,16 @@ describe('CorporateTravelService', () => {
         {
           description: 'Lagos-Abuja trip',
           travelers: [
-            { travelerId: 'trav-1', description: 'Flight LOS-ABV', amount: 90_000 },
-            { travelerId: 'trav-2', description: 'Flight LOS-ABV', amount: 60_000 },
+            {
+              travelerId: 'trav-1',
+              description: 'Flight LOS-ABV',
+              amount: 90_000,
+            },
+            {
+              travelerId: 'trav-2',
+              description: 'Flight LOS-ABV',
+              amount: 60_000,
+            },
           ],
         },
         'staff-1',
@@ -162,7 +211,9 @@ describe('CorporateTravelService', () => {
         where: { id: 'booking-1' },
         data: { status: CorporateBookingStatus.CANCELLED },
       });
-      expect(invoicesService.voidCorporateBookingIfUnpaid).toHaveBeenCalledWith('booking-1');
+      expect(invoicesService.voidCorporateBookingIfUnpaid).toHaveBeenCalledWith(
+        'booking-1',
+      );
     });
 
     it('rejects cancelling an already-cancelled booking', async () => {
@@ -171,7 +222,9 @@ describe('CorporateTravelService', () => {
         status: CorporateBookingStatus.CANCELLED,
       });
 
-      await expect(service.cancelBooking('booking-1')).rejects.toThrow(ConflictException);
+      await expect(service.cancelBooking('booking-1')).rejects.toThrow(
+        ConflictException,
+      );
     });
   });
 });

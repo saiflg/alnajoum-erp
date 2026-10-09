@@ -15,7 +15,9 @@ describe('HajjRegistrationsService', () => {
   let service: HajjRegistrationsService;
   let prisma: Record<string, any>;
   let invoicesService: { createForHajjRegistration: jest.Mock };
-  let notificationsService: { sendPilgrimageRegistrationConfirmation: jest.Mock };
+  let notificationsService: {
+    sendPilgrimageRegistrationConfirmation: jest.Mock;
+  };
 
   const publishedPackage = {
     id: 'pkg-1',
@@ -32,10 +34,12 @@ describe('HajjRegistrationsService', () => {
       hajjRegistration: { create: jest.fn() },
       familyMember: { findUnique: jest.fn() },
       customer: { findUnique: jest.fn() },
-      $transaction: jest.fn((cb) => cb(prisma)),
+      $transaction: jest.fn((cb: (tx: unknown) => unknown) => cb(prisma)),
     };
     invoicesService = { createForHajjRegistration: jest.fn() };
-    notificationsService = { sendPilgrimageRegistrationConfirmation: jest.fn() };
+    notificationsService = {
+      sendPilgrimageRegistrationConfirmation: jest.fn(),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -63,9 +67,9 @@ describe('HajjRegistrationsService', () => {
       status: PackageStatus.DRAFT,
     });
 
-    await expect(
-      service.register('customer-1', 'pkg-1', [{}]),
-    ).rejects.toThrow(ConflictException);
+    await expect(service.register('customer-1', 'pkg-1', [{}])).rejects.toThrow(
+      ConflictException,
+    );
   });
 
   it('rejects registering more pilgrims than seats remain', async () => {
@@ -157,7 +161,9 @@ describe('HajjRegistrationsService', () => {
       ],
       expect.anything(),
     );
-    expect(notificationsService.sendPilgrimageRegistrationConfirmation).toHaveBeenCalledWith(
+    expect(
+      notificationsService.sendPilgrimageRegistrationConfirmation,
+    ).toHaveBeenCalledWith(
       'amina@example.com',
       expect.objectContaining({ kind: 'Hajj', pilgrimCount: 2 }),
     );
@@ -176,7 +182,10 @@ describe('HajjRegistrationsService', () => {
         lastName: 'Bello',
         passportNumber: 'A1234567',
       })
-      .mockResolvedValueOnce({ id: 'customer-1', identity: { email: 'a@example.com' } });
+      .mockResolvedValueOnce({
+        id: 'customer-1',
+        identity: { email: 'a@example.com' },
+      });
     prisma.hajjRegistration.create.mockResolvedValue({
       id: 'reg-1',
       registrationNumber: 'HAJJ-ABC123',

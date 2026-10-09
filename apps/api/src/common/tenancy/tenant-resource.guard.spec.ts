@@ -125,8 +125,9 @@ describe('@TenantScoped decorator', () => {
         return 1;
       }
     }
-    const method = Reflect.getMetadata(
+    const method: unknown = Reflect.getMetadata(
       TENANT_SCOPED_KEY,
+      // eslint-disable-next-line @typescript-eslint/unbound-method
       Ctl.prototype.handler,
     );
     expect(method).toEqual([

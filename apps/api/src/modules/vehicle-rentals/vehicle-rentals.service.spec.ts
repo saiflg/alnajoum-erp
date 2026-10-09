@@ -4,7 +4,11 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { VehicleRentalProviderName, VehicleRentalStatus, VehicleType } from '@prisma/client';
+import {
+  VehicleRentalProviderName,
+  VehicleRentalStatus,
+  VehicleType,
+} from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { InvoicesService } from '../payments/invoices.service';
@@ -60,7 +64,9 @@ describe('VehicleRentalsService', () => {
         findUnique: jest.fn(),
         update: jest.fn(),
       },
-      $transaction: jest.fn((callback: (tx: unknown) => unknown) => callback(prisma)),
+      $transaction: jest.fn((callback: (tx: unknown) => unknown) =>
+        callback(prisma),
+      ),
     };
     provider = {
       searchOffers: jest.fn(),
@@ -161,11 +167,14 @@ describe('VehicleRentalsService', () => {
 
     it('throws Conflict when the provider rejects the order (offer expired)', async () => {
       provider.getOffer.mockResolvedValue(baseOffer);
-      provider.createOrder.mockResolvedValue({ providerOrderId: '', status: 'FAILED' });
+      provider.createOrder.mockResolvedValue({
+        providerOrderId: '',
+        status: 'FAILED',
+      });
 
-      await expect(service.createBooking('customer-1', 'offer-1')).rejects.toThrow(
-        ConflictException,
-      );
+      await expect(
+        service.createBooking('customer-1', 'offer-1'),
+      ).rejects.toThrow(ConflictException);
       expect(prisma.vehicleRental.create).not.toHaveBeenCalled();
     });
   });
@@ -177,15 +186,17 @@ describe('VehicleRentalsService', () => {
         customerId: 'customer-a',
       });
 
-      await expect(service.getBooking('rental-1', 'customer-b')).rejects.toThrow(
-        ForbiddenException,
-      );
+      await expect(
+        service.getBooking('rental-1', 'customer-b'),
+      ).rejects.toThrow(ForbiddenException);
     });
 
     it('throws NotFound when the booking does not exist', async () => {
       prisma.vehicleRental.findUnique.mockResolvedValue(null);
 
-      await expect(service.getBooking('missing')).rejects.toThrow(NotFoundException);
+      await expect(service.getBooking('missing')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -206,9 +217,13 @@ describe('VehicleRentalsService', () => {
 
       expect(provider.cancelOrder).toHaveBeenCalledWith('MOCK-1');
       expect(prisma.vehicleRental.update).toHaveBeenCalledWith(
-        expect.objectContaining({ data: { status: VehicleRentalStatus.CANCELLED } }),
+        expect.objectContaining({
+          data: { status: VehicleRentalStatus.CANCELLED },
+        }),
       );
-      expect(invoicesService.voidVehicleRentalIfUnpaid).toHaveBeenCalledWith('rental-1');
+      expect(invoicesService.voidVehicleRentalIfUnpaid).toHaveBeenCalledWith(
+        'rental-1',
+      );
     });
 
     it('rejects cancelling an already-cancelled booking', async () => {
@@ -218,7 +233,9 @@ describe('VehicleRentalsService', () => {
         status: VehicleRentalStatus.CANCELLED,
       });
 
-      await expect(service.cancelBooking('rental-1')).rejects.toThrow(ConflictException);
+      await expect(service.cancelBooking('rental-1')).rejects.toThrow(
+        ConflictException,
+      );
     });
   });
 });

@@ -288,9 +288,13 @@ export class DuffelFlightProviderService implements FlightProviderPort {
   async searchOffers(criteria: SearchFlightsCriteria): Promise<FlightOffer[]> {
     const cabinClass = criteria.cabinClass ?? CabinClass.ECONOMY;
     const passengers = [
-      ...Array(criteria.adults).fill({ type: 'adult' }),
-      ...Array(criteria.children ?? 0).fill({ type: 'child' }),
-      ...Array(criteria.infants ?? 0).fill({ type: 'infant_without_seat' }),
+      ...Array.from({ length: criteria.adults }, () => ({ type: 'adult' })),
+      ...Array.from({ length: criteria.children ?? 0 }, () => ({
+        type: 'child',
+      })),
+      ...Array.from({ length: criteria.infants ?? 0 }, () => ({
+        type: 'infant_without_seat',
+      })),
     ];
 
     const res = await this.duffelFetch(

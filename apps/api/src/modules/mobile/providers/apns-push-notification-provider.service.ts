@@ -11,9 +11,7 @@ import {
  * APNs key/certificate may live in this environment.
  */
 @Injectable()
-export class ApnsPushNotificationProviderService
-  implements PushNotificationProviderPort
-{
+export class ApnsPushNotificationProviderService implements PushNotificationProviderPort {
   sendPush(_input: SendPushInput): Promise<SendPushResult> {
     return Promise.resolve({
       success: false,

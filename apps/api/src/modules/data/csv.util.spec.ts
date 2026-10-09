@@ -102,7 +102,16 @@ describe('CSV formula injection (Phase 22 S-32)', () => {
   });
 
   it('leaves ordinary text and genuine numbers (including negatives) untouched', () => {
-    for (const v of ['Amina Bello', '12', '-500', '+234', '3.5', '', 'a=b', 'x-y']) {
+    for (const v of [
+      'Amina Bello',
+      '12',
+      '-500',
+      '+234',
+      '3.5',
+      '',
+      'a=b',
+      'x-y',
+    ]) {
       expect(neutraliseFormula(v)).toBe(v);
     }
   });

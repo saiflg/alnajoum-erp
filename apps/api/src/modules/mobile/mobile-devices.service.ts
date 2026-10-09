@@ -30,14 +30,14 @@ export class MobileDevicesService {
         appVersion: dto.appVersion,
         osVersion: dto.osVersion,
         pushToken: dto.pushToken,
-        pushProvider: dto.pushToken ? dto.pushProvider ?? 'EXPO' : null,
+        pushProvider: dto.pushToken ? (dto.pushProvider ?? 'EXPO') : null,
       },
       update: {
         platform: dto.platform,
         appVersion: dto.appVersion,
         osVersion: dto.osVersion,
         pushToken: dto.pushToken,
-        pushProvider: dto.pushToken ? dto.pushProvider ?? 'EXPO' : null,
+        pushProvider: dto.pushToken ? (dto.pushProvider ?? 'EXPO') : null,
         lastActiveAt: new Date(),
         revokedAt: null, // re-registering un-revokes — the app is installed and running again
       },
@@ -74,13 +74,17 @@ export class MobileDevicesService {
   /** Updates only the push token/provider — called on every app foreground
    * so a rotated Expo/FCM/APNs token never goes stale without the
    * customer re-registering the whole device. */
-  async updatePushToken(identityId: string, id: string, dto: UpdatePushTokenDto) {
+  async updatePushToken(
+    identityId: string,
+    id: string,
+    dto: UpdatePushTokenDto,
+  ) {
     await this.getOwnedDevice(identityId, id);
     return this.prisma.mobileDevice.update({
       where: { id },
       data: {
         pushToken: dto.pushToken,
-        pushProvider: dto.pushToken ? dto.pushProvider ?? 'EXPO' : null,
+        pushProvider: dto.pushToken ? (dto.pushProvider ?? 'EXPO') : null,
         lastActiveAt: new Date(),
       },
     });

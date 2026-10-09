@@ -16,12 +16,19 @@ export const EXTENSION_BY_MIME: Record<DetectedMime, string> = {
 export const SIGNATURE_BYTES = 8;
 
 export function detectMime(head: Buffer): DetectedMime | null {
-  if (head.length >= 3 && head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff) {
+  if (
+    head.length >= 3 &&
+    head[0] === 0xff &&
+    head[1] === 0xd8 &&
+    head[2] === 0xff
+  ) {
     return 'image/jpeg';
   }
   if (
     head.length >= 8 &&
-    head.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+    head
+      .subarray(0, 8)
+      .equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
   ) {
     return 'image/png';
   }
@@ -41,6 +48,8 @@ export function contentDisposition(
   type: 'inline' | 'attachment',
   filename: string,
 ): string {
+  // Stripping control characters is the point of this expression.
+  // eslint-disable-next-line no-control-regex
   const clean = filename.replace(/[\u0000-\u001f\u007f]/g, '').trim() || 'file';
   const ascii =
     clean
