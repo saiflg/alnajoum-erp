@@ -433,7 +433,7 @@ export class ToolRegistryService {
           const intent = input.reference
             ? await p.paymentIntent.findFirst({
                 where: {
-                  reference: String(input.reference),
+                  reference: asStr(input.reference) ?? '',
                   invoice: { customer: { companyId: cid } },
                 },
                 include: {
@@ -663,14 +663,14 @@ export class ToolRegistryService {
             legs.push({
               origin: destination,
               destination: origin,
-              departureDate: String(input.returnDate),
+              departureDate: asStr(input.returnDate) ?? '',
             });
           const offers = await this.flights.search({
-            tripType: (input.returnDate ? 'ROUND_TRIP' : 'ONE_WAY') as never,
-            legs: legs as never,
+            tripType: input.returnDate ? 'ROUND_TRIP' : 'ONE_WAY',
+            legs: legs,
             adults: Number(input.adults ?? 1),
             cabinClass: input.cabinClass as never,
-          } as never);
+          });
           const top = offers.slice(0, 5).map((o) => ({
             offerId: o.id,
             provider: o.provider,
@@ -761,7 +761,7 @@ export class ToolRegistryService {
             checkOutDate: String(input.checkOutDate),
             rooms: Number(input.rooms ?? 1),
             guests: Number(input.guests ?? 1),
-          } as never);
+          });
           return res(
             {
               count: offers.length,
@@ -869,7 +869,12 @@ export class ToolRegistryService {
                 orderBy: { endDate: 'asc' },
                 take: 10,
               })
-              .catch(() => []),
+              .catch(
+                (): {
+                  endDate: Date | null;
+                  supplier: { name: string };
+                }[] => [],
+              ),
             p.providerTransactionLog
               .count({
                 where: {
@@ -1159,7 +1164,7 @@ export class ToolRegistryService {
                 Date.now() + Number(input.dueInHours ?? 24) * 3600_000,
               ).toISOString(),
               notes: `Created by the ${ctx.agentKey} AI agent for a staff request.`,
-            } as never,
+            },
             pr.staffId ?? undefined,
           );
           return res(
@@ -1201,14 +1206,14 @@ export class ToolRegistryService {
           const task = await this.tasks.create(
             {
               title: String(input.title),
-              relatedType: 'FOLLOW_UP' as never,
+              relatedType: 'FOLLOW_UP',
               customerId: c.id,
               assignedStaffId: assigneeId,
               dueDate: new Date(
                 Date.now() + Number(input.dueInHours ?? 24) * 3600_000,
               ).toISOString(),
-              priority: 'NORMAL' as never,
-            } as never,
+              priority: 'NORMAL',
+            },
             ctx.principal.staffId ?? undefined,
           );
           return res(
@@ -1249,7 +1254,7 @@ export class ToolRegistryService {
             subject: String(input.subject),
             description: String(input.description),
             categoryId,
-          } as never);
+          });
           return res(
             { ticketNumber: t.ticketNumber },
             ['Support desk'],

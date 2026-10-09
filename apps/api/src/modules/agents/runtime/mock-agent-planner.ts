@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-explicit-any */
+// This test double reads arbitrary tool-output JSON to decide what to say next, so it is deliberately loosely typed.
 import { Confidence, ModelAction } from '../agent.types';
 
 /**
@@ -357,9 +359,6 @@ const tool = (
   input: Record<string, unknown> = {},
   why?: string,
 ): ModelAction => ({ action: 'tool', tool: name, input, why });
-const err = (r: PlannerRequest, tn: string) =>
-  last(r, tn)?.ok === false ? last(r, tn)!.error : undefined;
-
 export function planNext(r: PlannerRequest, now = new Date()): ModelAction {
   const L = r.language;
   const text = r.objective;

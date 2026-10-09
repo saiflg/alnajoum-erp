@@ -10,22 +10,28 @@ export class ModelUnavailable extends Error {}
 const CONFIDENCES: Confidence[] = ['HIGH', 'MEDIUM', 'LOW', 'UNKNOWN'];
 
 /** Strict parse of a model reply into one of the four allowed actions; anything else is rejected. */
+const asString = (v: unknown, max = 6000): string | undefined =>
+  typeof v === 'string' ? v.slice(0, max) : undefined;
+
+/** Strict parse of a model reply into one of the four allowed actions; anything else is rejected. */
 export function parseModelAction(text: string): ModelAction {
   const cleaned = text
     .trim()
     .replace(/^```(?:json)?\s*/i, '')
     .replace(/\s*```$/, '');
-  let v: any;
+  let parsed: unknown;
   try {
-    v = JSON.parse(cleaned);
+    parsed = JSON.parse(cleaned);
   } catch {
     throw new MalformedModelOutput('The model did not return valid JSON');
   }
-  if (!v || typeof v !== 'object')
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
     throw new MalformedModelOutput('The model reply was not an object');
+  const v = parsed as Record<string, unknown>;
   switch (v.action) {
-    case 'tool':
-      if (typeof v.tool !== 'string' || !/^[A-Za-z0-9_]{1,60}$/.test(v.tool))
+    case 'tool': {
+      const tool = asString(v.tool, 60);
+      if (!tool || !/^[A-Za-z0-9_]{1,60}$/.test(tool))
         throw new MalformedModelOutput('A tool action needs a tool name');
       if (
         v.input !== undefined &&
@@ -36,42 +42,45 @@ export function parseModelAction(text: string): ModelAction {
         throw new MalformedModelOutput('Tool input must be an object');
       return {
         action: 'tool',
-        tool: v.tool,
-        input: v.input ?? {},
-        why: typeof v.why === 'string' ? v.why.slice(0, 300) : undefined,
+        tool,
+        input: (v.input as Record<string, unknown> | undefined) ?? {},
+        why: asString(v.why, 300),
       };
-    case 'final':
-      if (typeof v.text !== 'string')
+    }
+    case 'final': {
+      const body = asString(v.text);
+      if (body === undefined)
         throw new MalformedModelOutput('A final answer needs text');
       return {
         action: 'final',
-        text: v.text.slice(0, 6000),
-        confidence: CONFIDENCES.includes(v.confidence)
-          ? v.confidence
+        text: body,
+        confidence: CONFIDENCES.includes(v.confidence as Confidence)
+          ? (v.confidence as Confidence)
           : 'UNKNOWN',
         sources: Array.isArray(v.sources)
-          ? v.sources.filter((s: unknown) => typeof s === 'string').slice(0, 10)
+          ? v.sources
+              .filter((x): x is string => typeof x === 'string')
+              .slice(0, 10)
           : undefined,
         needsInfo: v.needsInfo === true,
       };
-    case 'delegate':
-      if (typeof v.agent !== 'string' || typeof v.objective !== 'string')
+    }
+    case 'delegate': {
+      const agent = asString(v.agent, 60);
+      const objective = asString(v.objective, 1000);
+      if (!agent || !objective)
         throw new MalformedModelOutput(
           'A delegation needs an agent and an objective',
         );
-      return {
-        action: 'delegate',
-        agent: v.agent,
-        objective: v.objective.slice(0, 1000),
-      };
+      return { action: 'delegate', agent, objective };
+    }
     case 'handoff':
       return {
         action: 'handoff',
-        reason:
-          typeof v.reason === 'string' ? v.reason.slice(0, 300) : 'handoff',
+        reason: asString(v.reason, 300) ?? 'handoff',
       };
     default:
-      throw new MalformedModelOutput(`Unknown action "${String(v.action)}"`);
+      throw new MalformedModelOutput('Unknown action');
   }
 }
 
@@ -125,7 +134,7 @@ const withTimeout = <T>(p: Promise<T>, ms: number, what: string): Promise<T> =>
       },
       (e) => {
         clearTimeout(t);
-        reject(e);
+        reject(e instanceof Error ? e : new Error(String(e)));
       },
     );
   });

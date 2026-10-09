@@ -1,10 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { PilgrimType } from '@prisma/client';
 import { PrismaService } from '../../../infrastructure/prisma/prisma.service';
 import { ReadinessService } from '../../hajj-ops/readiness.service';
 import { SecurityOverviewService } from '../../security/security-overview.service';
 import { VisaChecklistService } from '../../visa/visa-checklist.service';
-import { PriorityFactors } from '../runtime/priority';
 import {
   AiRecommendationsService,
   RecommendationInput,
@@ -201,7 +199,7 @@ export class OperationsScannerService {
         const rows = await Promise.all(
           g.pilgrims
             .slice(0, 200)
-            .map((p) => this.readiness.compute(type as PilgrimType, p.id)),
+            .map((p) => this.readiness.compute(type, p.id)),
         );
         if (!rows.length) continue;
         const n = rows.length;

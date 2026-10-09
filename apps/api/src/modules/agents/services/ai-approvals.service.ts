@@ -94,8 +94,7 @@ export class AiApprovalsService {
         reason: a.reason,
         params: safeParams,
         preview: preview as unknown as Prisma.InputJsonValue,
-        financialImpact: preview.financialImpact as
-          Prisma.InputJsonValue | undefined,
+        financialImpact: preview.financialImpact,
         customerImpact: a.customerSummary,
         requiredRole: APPROVER_PERMISSION[a.tool.key]?.join(', ') ?? 'Staff',
         initiatorIdentityId: a.initiatorIdentityId ?? undefined,
@@ -189,7 +188,7 @@ export class AiApprovalsService {
     return row;
   }
 
-  private async authorise(
+  private authorise(
     approval: { toolKey: string; initiatorIdentityId: string | null },
     user: AuthContext,
   ) {
@@ -242,7 +241,7 @@ export class AiApprovalsService {
     if (decision === 'CANCEL') {
       // The person who started it, or any authorised approver, may withdraw it.
       if (row.initiatorIdentityId !== user.sub)
-        await this.authorise(
+        this.authorise(
           { toolKey: row.toolKey, initiatorIdentityId: null },
           user,
         );
@@ -269,7 +268,7 @@ export class AiApprovalsService {
       return this.get(id, tenant);
     }
 
-    await this.authorise(row, user);
+    this.authorise(row, user);
     const tool = this.tools.get(row.toolKey);
     if (!tool) throw new BadRequestException('That tool no longer exists');
 

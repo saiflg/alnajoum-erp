@@ -92,7 +92,7 @@ export class AgentWhatsAppBridge implements AiWhatsAppBridge {
       history: history.reverse().map((m) => ({
         role: m.role === 'SYSTEM' ? 'AI' : m.role,
         content: m.content,
-      })) as never,
+      })),
     });
     await this.prisma.aiConversationMessage.create({
       data: {

@@ -260,7 +260,7 @@ export class AiRecommendationsService {
             row.dueAt ?? new Date(Date.now() + 24 * 3600_000)
           ).toISOString(),
           priority: PRIORITY_BY_SEVERITY[row.severity] ?? 'NORMAL',
-        } as never,
+        },
         actor.staffId ?? undefined,
       );
       await this.prisma.aiRecommendation.update({

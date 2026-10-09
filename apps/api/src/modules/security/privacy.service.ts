@@ -327,11 +327,20 @@ export class PrivacyService {
       // Phase 23: what the AI layer holds about this person goes too — conversations, memory, and the free text in
       // execution traces and feedback. (The audit log keeps the fact that an AI action happened, not the content.)
       await tx.aiMemory.deleteMany({
-        where: { companyId: customer.companyId, subjectType: 'CUSTOMER', subjectId: customerId },
+        where: {
+          companyId: customer.companyId,
+          subjectType: 'CUSTOMER',
+          subjectId: customerId,
+        },
       });
-      await tx.aiConversationMessage.deleteMany({ where: { conversation: { customerId } } });
+      await tx.aiConversationMessage.deleteMany({
+        where: { conversation: { customerId } },
+      });
       await tx.aiConversation.deleteMany({ where: { customerId } });
-      await tx.aiFeedback.updateMany({ where: { execution: { customerId } }, data: { note: null } });
+      await tx.aiFeedback.updateMany({
+        where: { execution: { customerId } },
+        data: { note: null },
+      });
       await tx.aiExecutionStep.updateMany({
         where: { execution: { customerId } },
         data: { input: Prisma.JsonNull, output: Prisma.JsonNull },

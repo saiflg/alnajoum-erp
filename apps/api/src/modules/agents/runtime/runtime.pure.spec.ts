@@ -16,6 +16,7 @@ import {
 import { detectLanguage, say } from './language';
 import { callSignature, checkLoop, delegationCreatesCycle } from './loop-guard';
 import { decide, effectiveAutonomy } from './policy-engine';
+import { classify } from './mock-agent-planner';
 import { scorePriority } from './priority';
 
 const config = (over: Partial<AgentConfig> = {}): AgentConfig => ({
@@ -109,7 +110,7 @@ const T = {
   staffonly: tool('staffonly', { requiredPermissions: ['x:y'] }),
 };
 const run = (
-  key: keyof typeof T | string,
+  key: string,
   p: Principal,
   cfg = config(),
   c = controls(),
@@ -482,9 +483,6 @@ describe('priority engine', () => {
 });
 
 describe('planner intent routing (mock model)', () => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { classify } =
-    require('./mock-agent-planner') as typeof import('./mock-agent-planner');
   it.each([
     ['How much do I owe?', 'BALANCE'],
     ['Create a task to Call Mr Okafor about the unpaid invoice', 'CREATE_TASK'],

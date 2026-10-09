@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 
-export type MockFaultMode = 'NONE' | 'FAIL' | 'TIMEOUT' | 'MALFORMED' | 'OUTAGE' | 'EMPTY';
+export type MockFaultMode =
+  'NONE' | 'FAIL' | 'TIMEOUT' | 'MALFORMED' | 'OUTAGE' | 'EMPTY';
 
 export interface MockFault {
   mode: MockFaultMode;
@@ -23,7 +24,8 @@ export class MockAiFaultService {
   private remaining = 0;
 
   set(fault: MockFault): void {
-    if (process.env.NODE_ENV === 'production') throw new Error('Mock AI faults are disabled in production');
+    if (process.env.NODE_ENV === 'production')
+      throw new Error('Mock AI faults are disabled in production');
     this.fault = fault;
     this.remaining = fault.times ?? 0;
   }

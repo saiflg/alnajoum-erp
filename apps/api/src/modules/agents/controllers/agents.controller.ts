@@ -565,7 +565,7 @@ export class AgentsController {
     @Param('key') key: string,
     @Body() dto: DraftVersionDto,
   ) {
-    return this.admin.draftVersion(key, dto as never, { identityId: user.sub });
+    return this.admin.draftVersion(key, dto, { identityId: user.sub });
   }
   @Post('versions/:id/publish')
   @Roles('SUPER_ADMIN')

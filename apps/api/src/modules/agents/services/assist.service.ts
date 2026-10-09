@@ -259,7 +259,7 @@ export class AiAssistService {
       'Phone call',
       maskSensitive(input.transcript),
       {
-        customerName: verified ? customer!.firstName : undefined,
+        customerName: verified ? customer.firstName : undefined,
         channel: 'CALL',
       },
     );
@@ -276,7 +276,7 @@ export class AiAssistService {
           ? 'Verified by the one-time code the caller system checked.'
           : 'NOT verified. A caller saying who they are does not verify them: confirm by one-time code before sharing any account detail.',
       },
-      matchedCustomer: verified ? { id: customer!.id } : null,
+      matchedCustomer: verified ? { id: customer.id } : null,
       requiresHumanApproval: result.requiresHumanApproval,
       approvalReasons: result.approvalReasons,
       notice:

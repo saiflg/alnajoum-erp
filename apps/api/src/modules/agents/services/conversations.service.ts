@@ -4,7 +4,6 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
 import { AuthContext } from '../../../common/interfaces/auth-context.interface';
 import { PrismaService } from '../../../infrastructure/prisma/prisma.service';
 import { AuditService } from '../../audit/audit.service';
@@ -74,7 +73,7 @@ export class ConversationsService {
         ? detected
         : (convo?.language ??
           (isLang(customer?.preferredLanguage)
-            ? customer!.preferredLanguage!
+            ? customer.preferredLanguage
             : 'en'));
     convo ??= await this.prisma.aiConversation.create({
       data: {
@@ -130,7 +129,7 @@ export class ConversationsService {
       history: history.reverse().map((m) => ({
         role: m.role === 'SYSTEM' ? 'AI' : m.role,
         content: m.content,
-      })) as never,
+      })),
     });
     const aiMsg = await this.prisma.aiConversationMessage.create({
       data: {
@@ -142,7 +141,7 @@ export class ConversationsService {
         confidence: result.confidence,
         sources: result.sources.map((label) => ({
           label,
-        })) as Prisma.InputJsonValue,
+        })),
       },
     });
     if (result.handoff) {

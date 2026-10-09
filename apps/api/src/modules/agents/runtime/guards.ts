@@ -217,7 +217,7 @@ const FORBIDDEN_KEYS = new Set([
 const PARTIAL_KEYS = new Set(['passportnumber', 'nin', 'bvn', 'idnumber']);
 
 const partial = (v: unknown): unknown => {
-  const s = String(v ?? '');
+  const s = typeof v === 'string' || typeof v === 'number' ? String(v) : '';
   return s.length <= 3 ? '***' : `${'*'.repeat(s.length - 3)}${s.slice(-3)}`;
 };
 

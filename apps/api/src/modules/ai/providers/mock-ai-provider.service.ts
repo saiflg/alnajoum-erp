@@ -1,5 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import { planNext, PlannerRequest } from '../../agents/runtime/mock-agent-planner';
+import {
+  planNext,
+  PlannerRequest,
+} from '../../agents/runtime/mock-agent-planner';
 import { MockAiFaultService } from './mock-ai-faults.service';
 import {
   AiCompletionRequest,
@@ -44,10 +47,14 @@ export class MockAiProviderService implements AiProviderPort {
     });
   }
 
-  private async completeAgentTurn(request: AiCompletionRequest): Promise<AiCompletionResult> {
+  private async completeAgentTurn(
+    request: AiCompletionRequest,
+  ): Promise<AiCompletionResult> {
     let payload: PlannerRequest & { agent: string };
     try {
-      payload = JSON.parse(request.prompt) as PlannerRequest & { agent: string };
+      payload = JSON.parse(request.prompt) as PlannerRequest & {
+        agent: string;
+      };
     } catch {
       throw new Error('mock provider: the agent protocol payload was not JSON');
     }
@@ -70,13 +77,19 @@ export class MockAiProviderService implements AiProviderPort {
   }
 
   /** Simulated token accounting: about one token per four characters, so budgets can be exercised. */
-  private usage(request: AiCompletionRequest, text: string, _p: unknown): AiCompletionResult {
+  private usage(
+    request: AiCompletionRequest,
+    text: string,
+    _p: unknown,
+  ): AiCompletionResult {
     return {
       text,
       provider: 'mock',
       model: 'mock-agent-planner-v1',
       usage: {
-        promptTokens: Math.ceil((request.system.length + request.prompt.length) / 4),
+        promptTokens: Math.ceil(
+          (request.system.length + request.prompt.length) / 4,
+        ),
         completionTokens: Math.ceil(text.length / 4),
       },
     };

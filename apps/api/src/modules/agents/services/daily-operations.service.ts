@@ -1,6 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../infrastructure/prisma/prisma.service';
 import { AiAnalyticsService } from '../../ai/ai-analytics.service';
 import { AiMemoryService } from './memory.service';
@@ -162,11 +161,11 @@ export class DailyOperationsService {
     };
     return this.prisma.aiBriefing.upsert({
       where: { companyId_businessDate: { companyId, businessDate: day } },
-      update: { content: content as unknown as Prisma.InputJsonValue },
+      update: { content: content },
       create: {
         companyId,
         businessDate: day,
-        content: content as unknown as Prisma.InputJsonValue,
+        content: content,
       },
     });
   }

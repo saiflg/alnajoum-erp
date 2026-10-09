@@ -108,7 +108,7 @@ export class AiControlsService {
     scope: string,
   ): CommunicationPolicy {
     const v = (value ?? {}) as Partial<CommunicationPolicy>;
-    if (scope === GLOBAL) return { ...base, ...v } as CommunicationPolicy;
+    if (scope === GLOBAL) return { ...base, ...v };
     return {
       channels: v.channels
         ? base.channels.filter((c) => v.channels!.includes(c))

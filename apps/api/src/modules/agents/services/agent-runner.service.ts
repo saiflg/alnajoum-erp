@@ -10,7 +10,6 @@ import { createHash } from 'crypto';
 import { PrismaService } from '../../../infrastructure/prisma/prisma.service';
 import { AuditService } from '../../audit/audit.service';
 import {
-  ModelAction,
   ModelAction as MA,
   Principal,
   RunInput,
@@ -38,7 +37,11 @@ import {
   delegationCreatesCycle,
 } from '../runtime/loop-guard';
 import { isAffirmation } from '../runtime/mock-agent-planner';
-import { AiModelClient, ModelUnavailable } from '../runtime/model-client';
+import {
+  AiModelClient,
+  ModelTurn,
+  ModelUnavailable,
+} from '../runtime/model-client';
 import { decide } from '../runtime/policy-engine';
 import { ToolRegistryService } from '../tools/tool-registry.service';
 import { ToolError, validateInput } from '../tools/tool-support';
@@ -263,7 +266,7 @@ export class AgentRunnerService {
         identityId: principal.identityId,
         evidence: { kinds: scan.kinds, matches: scan.matches },
       });
-      await this.step(
+      this.step(
         st,
         'GUARD',
         undefined,
@@ -336,7 +339,7 @@ export class AgentRunnerService {
               detail: verdictLoop.detail,
             },
           });
-        await this.step(
+        this.step(
           st,
           'GUARD',
           undefined,
@@ -373,7 +376,7 @@ export class AgentRunnerService {
         });
       }
 
-      let turn;
+      let turn: ModelTurn;
       try {
         turn = await this.model.next({
           agentKey: agent.key,
@@ -390,9 +393,7 @@ export class AgentRunnerService {
             tools: allowed,
             toolResults: st.toolResults.map((r) => ({
               ...r,
-              output: r.output
-                ? (maskDeep(r.output) as Record<string, unknown>)
-                : undefined,
+              output: r.output ? maskDeep(r.output) : undefined,
             })),
             memory: st.memory,
             delegations: st.delegations,
@@ -410,7 +411,7 @@ export class AgentRunnerService {
           err instanceof ModelUnavailable
             ? err.message
             : (err as Error).message;
-        await this.step(
+        this.step(
           st,
           'MODEL',
           undefined,
@@ -432,14 +433,14 @@ export class AgentRunnerService {
       st.provider = turn.provider;
       st.model = turn.model;
       st.failedOver = st.failedOver || turn.failedOver;
-      await this.step(
+      this.step(
         st,
         'MODEL',
         undefined,
         undefined,
         'OK',
         {
-          action: (turn.action as ModelAction).action,
+          action: turn.action.action,
           provider: turn.provider,
           failedOver: turn.failedOver,
           attempts: turn.attempts,
@@ -526,7 +527,7 @@ export class AgentRunnerService {
           identityId: principal.identityId,
           evidence: { tool: a.tool, reason: d.reason },
         });
-      await this.step(
+      this.step(
         st,
         'TOOL',
         a.tool,
@@ -542,7 +543,7 @@ export class AgentRunnerService {
     }
     const v = validateInput(tool!.input, a.input ?? {});
     if (!v.ok) {
-      await this.step(
+      this.step(
         st,
         'TOOL',
         a.tool,
@@ -567,7 +568,7 @@ export class AgentRunnerService {
         !!pending?.offers?.some((o) => o.offerId === input.offerId);
       input = { ...input, customerConfirmed: confirmed };
       if (!confirmed) {
-        await this.step(
+        this.step(
           st,
           'TOOL',
           a.tool,
@@ -586,7 +587,7 @@ export class AgentRunnerService {
     }
 
     if (d.outcome === 'PROPOSE_ONLY') {
-      await this.step(
+      this.step(
         st,
         'TOOL',
         a.tool,
@@ -630,15 +631,10 @@ export class AgentRunnerService {
     if (d.outcome === 'REQUIRE_APPROVAL') {
       if (st.input.dryRun) {
         const preview = tool!.preview?.(input);
-        await this.step(
-          st,
-          'APPROVAL',
-          a.tool,
-          tool!.risk,
-          'SIMULATED',
-          input,
-          { wouldRequestApproval: true, preview },
-        );
+        this.step(st, 'APPROVAL', a.tool, tool!.risk, 'SIMULATED', input, {
+          wouldRequestApproval: true,
+          preview,
+        });
         record(true, undefined, {
           simulated: true,
           wouldRequestApproval: true,
@@ -659,15 +655,9 @@ export class AgentRunnerService {
         initiatorIdentityId: principal.identityId,
       });
       st.approvals.push({ id: row.id, toolKey: a.tool, status: row.status });
-      await this.step(
-        st,
-        'APPROVAL',
-        a.tool,
-        tool!.risk,
-        'PENDING_APPROVAL',
-        input,
-        { approvalId: row.id },
-      );
+      this.step(st, 'APPROVAL', a.tool, tool!.risk, 'PENDING_APPROVAL', input, {
+        approvalId: row.id,
+      });
       record(true, undefined, { approvalRequested: true, approvalId: row.id });
       st.sources.add('Human approval');
       // The run now waits for a person; nothing else is attempted in this run.
@@ -684,7 +674,7 @@ export class AgentRunnerService {
 
     // ALLOW
     if (st.input.dryRun && tool!.writes) {
-      await this.step(st, 'TOOL', a.tool, tool!.risk, 'SIMULATED', input, {
+      this.step(st, 'TOOL', a.tool, tool!.risk, 'SIMULATED', input, {
         wouldExecute: tool!.description,
       });
       record(true, undefined, {
@@ -701,7 +691,7 @@ export class AgentRunnerService {
       st.facts[a.tool] = data;
       out.sources.forEach((s) => st.sources.add(s));
       await this.afterTool(st, a.tool, data, principal);
-      await this.step(
+      this.step(
         st,
         'TOOL',
         a.tool,
@@ -739,7 +729,7 @@ export class AgentRunnerService {
           : 'The system could not complete that just now.';
       if (!(err instanceof ToolError))
         this.logger.warn(`Tool ${a.tool} failed: ${(err as Error).message}`);
-      await this.step(
+      this.step(
         st,
         'TOOL',
         a.tool,
@@ -1000,7 +990,7 @@ export class AgentRunnerService {
     draft?: string,
   ) {
     const p = st.input.principal;
-    await this.step(
+    this.step(
       st,
       'ESCALATION',
       undefined,
@@ -1071,7 +1061,7 @@ export class AgentRunnerService {
         identityId: principal.identityId,
         evidence: { delegateTo: a.agent, chain: st.chain },
       });
-      await this.step(
+      this.step(
         st,
         'DELEGATION',
         undefined,
@@ -1105,7 +1095,7 @@ export class AgentRunnerService {
       st.chain,
     );
     st.promptTokens += 0;
-    await this.step(
+    this.step(
       st,
       'DELEGATION',
       undefined,
@@ -1125,7 +1115,7 @@ export class AgentRunnerService {
   }
 
   // ------------------------------------------------------------------------------------------ recording
-  private async step(
+  private step(
     st: RunState,
     kind: AiStepKind,
     toolKey: string | undefined,

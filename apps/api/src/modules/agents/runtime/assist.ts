@@ -176,11 +176,11 @@ export function extractPassport(
     }
   } else {
     const num =
-      /passport\s*(?:no\.?|number|#)?\s*[:\-]?\s*([A-Z]{1,2}\d{6,8})/i.exec(
+      /passport\s*(?:no\.?|number|#)?\s*[:-]?\s*([A-Z]{1,2}\d{6,8})/i.exec(
         text,
       );
     const exp =
-      /(?:expiry|expires?|date of expiry)\s*[:\-]?\s*(\d{4}-\d{2}-\d{2}|\d{2}[/.]\d{2}[/.]\d{4})/i.exec(
+      /(?:expiry|expires?|date of expiry)\s*[:-]?\s*(\d{4}-\d{2}-\d{2}|\d{2}[/.]\d{2}[/.]\d{4})/i.exec(
         text,
       );
     if (num) out.passportNumber = num[1].toUpperCase();
@@ -258,7 +258,7 @@ export function triageMessage(
   const c = classifySupport(text);
   const refs = [
     ...new Set(
-      (text.match(/\b[A-Z]{2,4}-[A-Z0-9]{5,}\b/g) ?? []).map((r) =>
+      (text.match(/\b[A-Z]{2,4}-[A-Z0-9]{5,}\b/g) ?? []).map((r: string) =>
         r.toUpperCase(),
       ),
     ),

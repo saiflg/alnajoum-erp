@@ -33,7 +33,7 @@ export function formatMoney(m: MoneyValue, language = 'en'): string {
 function lookup(facts: Facts, path: string): unknown {
   let cur: unknown = facts;
   for (const part of path.split('.')) {
-    if (cur && typeof cur === 'object' && part in (cur as object)) {
+    if (cur && typeof cur === 'object' && part in cur) {
       cur = (cur as Record<string, unknown>)[part];
     } else if (Array.isArray(cur) && /^\d+$/.test(part)) {
       cur = cur[Number(part)];
@@ -64,8 +64,7 @@ export function renderFacts(
       }
       if (isMoney(v)) return formatMoney(v, language);
       if (v instanceof Date) return v.toISOString().slice(0, 10);
-      if (typeof v === 'object') return JSON.stringify(v);
-      return String(v);
+      return typeof v === 'string' ? v : JSON.stringify(v);
     },
   );
   return { text, missing };
