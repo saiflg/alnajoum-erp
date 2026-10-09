@@ -61,6 +61,9 @@ interface FinalizeResult {
   reason?: string;
 }
 
+/** A PENDING checkout younger than this blocks a second one on the same invoice (see initiateCheckout). */
+const CHECKOUT_IN_PROGRESS_WINDOW_MS = 10 * 60 * 1000;
+
 @Injectable()
 export class PaymentsService {
   private readonly logger = new Logger(PaymentsService.name);
@@ -214,16 +217,46 @@ export class PaymentsService {
     // e.g. the mock provider in production.
     this.paymentProviderRouter.resolveByName(providerName);
 
-    const intent = await this.prisma.paymentIntent.create({
-      data: {
-        invoiceId,
-        customerId,
-        reference,
-        provider: providerName,
-        amount: balance,
-        currency: invoice.currency,
-        status: PaymentIntentStatus.PENDING,
-      },
+    // One live checkout per invoice. Without this, a double click, two browser tabs or a retry each
+    // create a full-balance intent and every one of them can settle, taking the customer's money
+    // twice. The check and the insert run under the invoice lock so concurrent requests queue up,
+    // and the balance is read again inside the lock because a payment may have landed meanwhile.
+    const intent = await this.prisma.$transaction(async (tx) => {
+      await lockInvoice(tx, invoiceId);
+      const standing = await invoiceStanding(tx, invoiceId);
+      if (
+        standing.status === InvoiceStatus.VOID ||
+        standing.status === InvoiceStatus.PAID ||
+        standing.outstanding <= 0
+      ) {
+        throw new ConflictException('This invoice has no outstanding balance');
+      }
+      const inProgress = await tx.paymentIntent.findFirst({
+        where: {
+          invoiceId,
+          status: PaymentIntentStatus.PENDING,
+          createdAt: {
+            gt: new Date(Date.now() - CHECKOUT_IN_PROGRESS_WINDOW_MS),
+          },
+        },
+        select: { id: true },
+      });
+      if (inProgress) {
+        throw new ConflictException(
+          'A payment for this invoice is already in progress. Complete it, or wait a few minutes before starting another.',
+        );
+      }
+      return tx.paymentIntent.create({
+        data: {
+          invoiceId,
+          customerId,
+          reference,
+          provider: providerName,
+          amount: standing.outstanding,
+          currency: invoice.currency,
+          status: PaymentIntentStatus.PENDING,
+        },
+      });
     });
 
     const webOrigin = this.configService.get<string>(
@@ -234,7 +267,7 @@ export class PaymentsService {
 
     const result = await this.paymentProvider.initiateCheckout({
       reference,
-      amount: balance,
+      amount: intent.amount,
       currency: invoice.currency,
       customerEmail: customer.identity.email,
       callbackUrl,

@@ -2584,13 +2584,35 @@ async function seedPhase7Crm() {
     include: { customer: true },
   });
   const branch = await prisma.branch.findFirstOrThrow();
+  // Same defaults the app creates on first boot (LeadsService.ensureDefaultStages), so a freshly migrated
+  // database can be demo-seeded before the API has ever run.
+  for (const [name, order, isWon, isLost] of [
+    ['New Lead', 1, false, false],
+    ['Contacted', 2, false, false],
+    ['Qualified', 3, false, false],
+    ['Quotation Sent', 4, false, false],
+    ['Negotiation', 5, false, false],
+    ['Payment Pending', 6, false, false],
+    ['Converted', 7, true, false],
+    ['Lost', 8, false, true],
+  ] as const) {
+    await prisma.leadStage.upsert({
+      where: { name },
+      create: { name, order, isWon, isLost },
+      update: {},
+    });
+  }
   const stages = await prisma.leadStage.findMany({ orderBy: { order: 'asc' } });
   const newStage = stages.find((s) => !s.isWon && !s.isLost)!;
   const qualifiedStage = stages[2] ?? newStage;
   const wonStage = stages.find((s) => s.isWon)!;
   const lostStage = stages.find((s) => s.isLost)!;
-  const category = await prisma.supportTicketCategory.findFirstOrThrow({
+  // The app creates its default support categories on first boot; a fresh database seeded before the API has
+  // ever run must not depend on that, so the one used here is created if missing (same name as the default).
+  const category = await prisma.supportTicketCategory.upsert({
     where: { name: 'Flight' },
+    create: { name: 'Flight' },
+    update: {},
   });
 
   // --- Campaign ---------------------------------------------------------

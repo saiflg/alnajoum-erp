@@ -44,6 +44,7 @@ describe('PaymentsService', () => {
       payment: { create: jest.fn() },
       paymentIntent: {
         create: jest.fn(),
+        findFirst: jest.fn().mockResolvedValue(null),
         findUnique: jest.fn(),
         update: jest.fn(),
         updateMany: jest.fn(),
@@ -333,6 +334,7 @@ describe('PaymentsService', () => {
       prisma.paymentIntent.create.mockResolvedValue({
         id: 'intent-1',
         reference: 'CHK-ABC123',
+        amount: 30_000,
       });
       paymentProvider.initiateCheckout.mockResolvedValue({
         authorizationUrl: 'https://mock-checkout.example/pay',
@@ -363,6 +365,59 @@ describe('PaymentsService', () => {
         authorizationUrl: 'https://mock-checkout.example/pay',
         reference: 'CHK-ABC123',
       });
+    });
+
+    it('refuses a second checkout while a recent one is still PENDING, and writes no second intent', async () => {
+      // Regression for a double-payment found by the Phase 24 financial reconciliation: two concurrent
+      // checkouts on one unpaid invoice each created a full-balance intent and both settled.
+      prisma.invoice.findUnique.mockResolvedValue({
+        ...baseInvoice,
+        status: InvoiceStatus.ISSUED,
+      });
+      prisma.customer.findUnique.mockResolvedValue({
+        id: 'customer-1',
+        identity: { email: 'amina@example.com' },
+      });
+      prisma.paymentIntent.findFirst.mockResolvedValue({
+        id: 'earlier-intent',
+      });
+
+      await expect(
+        service.initiateCheckout('customer-1', 'invoice-1'),
+      ).rejects.toThrow(/already in progress/);
+
+      expect(prisma.paymentIntent.create).not.toHaveBeenCalled();
+      expect(paymentProvider.initiateCheckout).not.toHaveBeenCalled();
+      // only a PENDING intent for THIS invoice, and only a recent one, blocks a new checkout
+      expect(prisma.paymentIntent.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            invoiceId: 'invoice-1',
+            status: PaymentIntentStatus.PENDING,
+            createdAt: { gt: expect.any(Date) },
+          }),
+        }),
+      );
+    });
+
+    it('re-reads the balance inside the lock: a payment that landed meanwhile stops the checkout', async () => {
+      prisma.invoice.findUnique
+        .mockResolvedValueOnce({ ...baseInvoice, status: InvoiceStatus.ISSUED })
+        // the standing read under the invoice lock now shows it fully paid
+        .mockResolvedValue({
+          ...baseInvoice,
+          status: InvoiceStatus.PAID,
+          payments: [{ amount: 50_000 }],
+        });
+      prisma.customer.findUnique.mockResolvedValue({
+        id: 'customer-1',
+        identity: { email: 'amina@example.com' },
+      });
+
+      await expect(
+        service.initiateCheckout('customer-1', 'invoice-1'),
+      ).rejects.toThrow(ConflictException);
+      expect(prisma.paymentIntent.create).not.toHaveBeenCalled();
     });
 
     it('records the DB-driven active provider on the PaymentIntent, not just the env var fallback', async () => {

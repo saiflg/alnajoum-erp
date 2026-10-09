@@ -1,18 +1,24 @@
 # Build context is the repo root (see docker-compose.prod.yml) — same
 # reasoning as apps/api/Dockerfile: this is a pnpm workspace.
 
-FROM node:22.11.0-bookworm-slim AS base
-RUN corepack enable
+FROM node:22.22.0-bookworm-slim AS base
+# pnpm is installed from npm at the exact version in package.json's "packageManager" field. Corepack is not
+# used: the corepack bundled with older node 22 images carries outdated signing keys and fails with
+# "Cannot find matching keyid" when it tries to download pnpm.
+# (pnpm 11 itself needs node >= 22.13, hence the base image pin above.)
+RUN npm install -g pnpm@11.18.0
 
 FROM base AS deps
 WORKDIR /repo
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json turbo.json .npmrc ./
 COPY apps/api/package.json apps/api/package.json
 COPY apps/web/package.json apps/web/package.json
-# Cache-mounted so a retry after a flaky-network failure doesn't
-# re-download every package from scratch.
+# Cache-mounted so a retry after a flaky-network failure doesn't re-download every package from scratch. The
+# second mount keeps pnpm's registry metadata between attempts, and the generous timeouts/retries let a slow link
+# finish instead of failing the whole build (pnpm's release-age check reads metadata for every package).
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
-    pnpm install --frozen-lockfile
+    --mount=type=cache,target=/root/.cache/pnpm \
+    pnpm install --frozen-lockfile --fetch-timeout 900000 --fetch-retries 8 --network-concurrency 8
 
 FROM deps AS build
 WORKDIR /repo

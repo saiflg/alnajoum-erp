@@ -8,7 +8,7 @@
 # Ampere A1 shape is arm64, and glibc images have far more reliable native
 # module support there than Alpine.
 
-FROM node:22.11.0-bookworm-slim AS base
+FROM node:22.22.0-bookworm-slim AS base
 # postgresql-client-16 provides pg_dump/pg_restore, used by BackupService
 # (Phase 11 "backup management") to shell out to a real, restorable
 # dump rather than a JS reimplementation — see that service's own doc
@@ -27,8 +27,12 @@ RUN apt-get update \
   && apt-get update \
   && apt-get install -y --no-install-recommends postgresql-client-16 \
   && apt-get purge -y --auto-remove gnupg wget \
-  && rm -rf /var/lib/apt/lists/* \
-  && corepack enable
+  && rm -rf /var/lib/apt/lists/*
+# pnpm is installed from npm at the exact version in package.json's "packageManager" field. Corepack is not
+# used: the corepack bundled with older node 22 images carries outdated signing keys and fails with
+# "Cannot find matching keyid" when it tries to download pnpm.
+# (pnpm 11 itself needs node >= 22.13, hence the base image pin above.)
+RUN npm install -g pnpm@11.18.0
 
 FROM base AS deps
 # Build tools are only needed to compile argon2/sharp's native bindings
@@ -40,10 +44,12 @@ WORKDIR /repo
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json turbo.json .npmrc ./
 COPY apps/api/package.json apps/api/package.json
 COPY apps/web/package.json apps/web/package.json
-# Cache-mounted so a retry after a flaky-network failure doesn't
-# re-download every package from scratch.
+# Cache-mounted so a retry after a flaky-network failure doesn't re-download every package from scratch. The
+# second mount keeps pnpm's registry metadata between attempts, and the generous timeouts/retries let a slow link
+# finish instead of failing the whole build (pnpm's release-age check reads metadata for every package).
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
-    pnpm install --frozen-lockfile
+    --mount=type=cache,target=/root/.cache/pnpm \
+    pnpm install --frozen-lockfile --fetch-timeout 900000 --fetch-retries 8 --network-concurrency 8
 
 FROM deps AS build
 WORKDIR /repo
