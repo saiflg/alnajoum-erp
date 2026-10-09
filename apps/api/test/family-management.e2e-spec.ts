@@ -5,6 +5,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { configureApp } from './../src/bootstrap';
+import { defaultCompanyId } from './default-company';
 
 async function flatJpeg(): Promise<Buffer> {
   return sharp({
@@ -292,9 +293,9 @@ describe('Family Management (e2e)', () => {
           `/api/v1/customers/me/family-members/${memberIdA}/documents?type=OTHER`,
         )
         .set('Authorization', `Bearer ${tokenB}`)
-        .attach('file', Buffer.from('nope'), {
-          filename: 'x.png',
-          contentType: 'image/png',
+        .attach('file', await noisyJpeg(), {
+          filename: 'x.jpg',
+          contentType: 'image/jpeg',
         })
         .expect(403);
     });
@@ -309,12 +310,7 @@ describe('Family Management (e2e)', () => {
     let memberId: string;
 
     it('sets up a company, branch, and branch manager for boundary checks', async () => {
-      const companyRes = await request(server)
-        .post('/api/v1/companies')
-        .set('Authorization', `Bearer ${adminAccessToken}`)
-        .send({ name: `Family Mgmt Test Co ${RUN_ID}` })
-        .expect(201);
-      companyId = companyRes.body.data.id;
+      companyId = await defaultCompanyId(server, adminAccessToken);
 
       await request(server)
         .post('/api/v1/branches')

@@ -4,6 +4,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { configureApp } from './../src/bootstrap';
+import { defaultCompanyId } from './default-company';
 
 const BOOTSTRAP_ADMIN_EMAIL = 'admin@alnajoum.travel';
 const BOOTSTRAP_ADMIN_PASSWORD = 'Alnajoum@2026';
@@ -172,12 +173,7 @@ describe('Payments & Invoicing (e2e)', () => {
     let invoiceTotal: number;
 
     it('sets up a company, STAFF, BRANCH_MANAGER, and FINANCE_OFFICER', async () => {
-      const companyRes = await request(server)
-        .post('/api/v1/companies')
-        .set('Authorization', `Bearer ${adminAccessToken}`)
-        .send({ name: `Payments Test Co ${RUN_ID}` })
-        .expect(201);
-      const companyId = companyRes.body.data.id;
+      const companyId = await defaultCompanyId(server, adminAccessToken);
 
       const rolesRes = await request(server)
         .get('/api/v1/rbac/roles')

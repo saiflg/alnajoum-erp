@@ -216,9 +216,9 @@ describe('Customer Management (e2e)', () => {
       const res = await request(server)
         .post('/api/v1/customers/me/documents?type=NATIONAL_ID')
         .set('Authorization', `Bearer ${tokenA}`)
-        .attach('file', Buffer.from('customer-a-id'), {
-          filename: 'id.png',
-          contentType: 'image/png',
+        .attach('file', await noisyJpeg(), {
+          filename: 'id.jpg',
+          contentType: 'image/jpeg',
         })
         .expect(201);
       documentIdA = res.body.data.id;

@@ -4,6 +4,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { configureApp } from './../src/bootstrap';
+import { defaultCompanyId } from './default-company';
 
 const BOOTSTRAP_ADMIN_EMAIL = 'admin@alnajoum.travel';
 const BOOTSTRAP_ADMIN_PASSWORD = 'Alnajoum@2026';
@@ -62,10 +63,14 @@ describe('Flight Booking (e2e)', () => {
   });
 
   describe('search and offers', () => {
-    it('rejects an unauthenticated search', async () => {
+    it('allows a public (rate-limited) search but requires a login to book', async () => {
       await request(server)
         .post('/api/v1/flights/search')
         .send(ONE_WAY_SEARCH_BODY)
+        .expect(201);
+      await request(server)
+        .post('/api/v1/flights/bookings/me')
+        .send({})
         .expect(401);
     });
 
@@ -400,21 +405,16 @@ describe('Flight Booking (e2e)', () => {
 
   describe('admin/staff booking on behalf of a customer + role boundaries', () => {
     const staffEmail = `${RUN_ID}.staff@testtravel.example`;
-    const branchManagerEmail = `${RUN_ID}.branchmgr@testtravel.example`;
+    const readOnlyEmail = `${RUN_ID}.readonly@testtravel.example`;
     const customerEmail = `${RUN_ID}.managed@example.com`;
     let companyId: string;
     let staffToken: string;
-    let branchManagerToken: string;
+    let readOnlyToken: string;
     let customerId: string;
     let bookingId: string;
 
-    it('sets up a company, a STAFF member, and a BRANCH_MANAGER', async () => {
-      const companyRes = await request(server)
-        .post('/api/v1/companies')
-        .set('Authorization', `Bearer ${adminAccessToken}`)
-        .send({ name: `Flight Test Co ${RUN_ID}` })
-        .expect(201);
-      companyId = companyRes.body.data.id;
+    it('sets up a company, a STAFF member, and a read-only FINANCE_OFFICER', async () => {
+      companyId = await defaultCompanyId(server, adminAccessToken);
 
       const rolesRes = await request(server)
         .get('/api/v1/rbac/roles')
@@ -423,8 +423,8 @@ describe('Flight Booking (e2e)', () => {
       const staffRoleId = rolesRes.body.data.find(
         (r: { name: string }) => r.name === 'STAFF',
       ).id;
-      const branchManagerRoleId = rolesRes.body.data.find(
-        (r: { name: string }) => r.name === 'BRANCH_MANAGER',
+      const readOnlyRoleId = rolesRes.body.data.find(
+        (r: { name: string }) => r.name === 'FINANCE_OFFICER',
       ).id;
 
       const staffCreateRes = await request(server)
@@ -450,17 +450,17 @@ describe('Flight Booking (e2e)', () => {
         .post('/api/v1/staff')
         .set('Authorization', `Bearer ${adminAccessToken}`)
         .send({
-          email: branchManagerEmail,
+          email: readOnlyEmail,
           firstName: 'Branch',
           lastName: 'Mgr',
           companyId,
           employeeCode: `BM-${RUN_ID}`,
-          roleId: branchManagerRoleId,
+          roleId: readOnlyRoleId,
         })
         .expect(201);
-      branchManagerToken = (
+      readOnlyToken = (
         await request(server).post('/api/v1/auth/login').send({
-          email: branchManagerEmail,
+          email: readOnlyEmail,
           password: bmCreateRes.body.data.temporaryPassword,
         })
       ).body.data.accessToken;
@@ -501,34 +501,34 @@ describe('Flight Booking (e2e)', () => {
       bookingId = res.body.data.id;
     });
 
-    it('branch manager (flight:read only) can list/view but not book or cancel', async () => {
+    it('finance officer (flight:read only) can list/view but not book or cancel', async () => {
       await request(server)
         .get('/api/v1/flights/bookings')
-        .set('Authorization', `Bearer ${branchManagerToken}`)
+        .set('Authorization', `Bearer ${readOnlyToken}`)
         .expect(200);
 
       await request(server)
         .get(`/api/v1/flights/bookings/${bookingId}`)
-        .set('Authorization', `Bearer ${branchManagerToken}`)
+        .set('Authorization', `Bearer ${readOnlyToken}`)
         .expect(200);
 
-      const offerId = await searchAndGetOfferId(server, branchManagerToken);
+      const offerId = await searchAndGetOfferId(server, readOnlyToken);
       await request(server)
         .post('/api/v1/flights/bookings')
-        .set('Authorization', `Bearer ${branchManagerToken}`)
+        .set('Authorization', `Bearer ${readOnlyToken}`)
         .send({ customerId, offerId, passengers: [{ type: 'ADULT' }] })
         .expect(403);
 
       await request(server)
         .post(`/api/v1/flights/bookings/${bookingId}/cancel`)
-        .set('Authorization', `Bearer ${branchManagerToken}`)
+        .set('Authorization', `Bearer ${readOnlyToken}`)
         .expect(403);
     });
 
-    it('staff (no flight:cancel) cannot cancel the admin-side booking', async () => {
+    it('finance officer (no flight:cancel) cannot cancel the admin-side booking', async () => {
       await request(server)
         .post(`/api/v1/flights/bookings/${bookingId}/cancel`)
-        .set('Authorization', `Bearer ${staffToken}`)
+        .set('Authorization', `Bearer ${readOnlyToken}`)
         .expect(403);
     });
 
