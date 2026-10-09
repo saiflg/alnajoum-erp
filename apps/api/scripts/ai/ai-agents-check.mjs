@@ -11,7 +11,7 @@ import { execFileSync } from 'node:child_process';
 
 const BASE = 'http://localhost:4000/api/v1';
 const DEMO = 'Demo@2026';
-const sql = (q) => execFileSync('docker', ['exec', '-i', 'alnajoum-postgres', 'psql', '-U', 'alnajoum', '-d', 'alnajoum_erp', '-At', '-c', q], { encoding: 'utf8' }).trim();
+const sql = (q) => execFileSync('docker', ['exec', '-i', 'alnajoum-postgres', 'psql', '-U', 'alnajoum', '-d', process.env.DB_NAME || 'alnajoum_erp', '-At', '-c', q], { encoding: 'utf8' }).trim();
 const num = (q) => Number(sql(q) || 0);
 
 // The mock payment provider settles a payment link by itself, so earlier runs leave the demo customer owing

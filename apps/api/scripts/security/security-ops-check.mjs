@@ -41,7 +41,7 @@ async function stepUp(token, password) {
   if (r.data?.stepUpToken) stepUps.set(token, r.data.stepUpToken);
   return r;
 }
-const sql = (q) => execFileSync('docker', ['exec', '-i', 'alnajoum-postgres', 'psql', '-U', 'alnajoum', '-d', 'alnajoum_erp', '-At', '-c', q], { encoding: 'utf8' }).trim();
+const sql = (q) => execFileSync('docker', ['exec', '-i', 'alnajoum-postgres', 'psql', '-U', 'alnajoum', '-d', process.env.DB_NAME || 'alnajoum_erp', '-At', '-c', q], { encoding: 'utf8' }).trim();
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const results = [];

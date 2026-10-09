@@ -125,22 +125,28 @@ WITH checks AS (
 
   -- ---- Online payment intents ------------------------------------------------------------------------------
   UNION ALL
-  SELECT 'intent: every SUCCEEDED intent produced exactly one payment with the intent reference', count(*), string_agg(id, ',') FILTER (WHERE rn <= 3)
+  -- A succeeded intent is accounted for by a Payment on the invoice and/or a wallet credit for any surplus
+  -- (a checkout that lands after the invoice was settled another way). Never neither, never a Payment twice.
+  SELECT 'intent: every SUCCEEDED intent is fully accounted for (payment + surplus credit = intent amount)', count(*), string_agg(id, ',') FILTER (WHERE rn <= 3)
   FROM (
     SELECT pi.id, row_number() OVER () rn
     FROM payment_intents pi
     WHERE pi.status = 'SUCCEEDED'
-      AND (SELECT count(*) FROM payments p WHERE p."paymentReference" = pi.reference) <> 1
+      AND (SELECT count(*) FROM payments p WHERE p."paymentReference" = pi.reference) > 1
+      OR (pi.status = 'SUCCEEDED'
+          AND coalesce((SELECT sum(p.amount) FROM payments p WHERE p."paymentReference" = pi.reference), 0)
+            + coalesce((SELECT sum(t.amount) FROM wallet_transactions t WHERE t.reference = 'SURPLUS-' || pi.reference AND t.status = 'COMPLETED'), 0)
+              <> pi.amount)
   ) x
 
   UNION ALL
-  SELECT 'intent: a payment taken through an intent has the intent amount', count(*), string_agg(pi.id, ',') FILTER (WHERE rn <= 3)
+  SELECT 'wallet: every surplus credit has exactly one matching ledger entry of the same amount', count(*), string_agg(id, ',') FILTER (WHERE rn <= 3)
   FROM (
-    SELECT pi.id, row_number() OVER () rn
-    FROM payment_intents pi
-    JOIN payments p ON p."paymentReference" = pi.reference
-    WHERE p.amount <> pi.amount
-  ) pi
+    SELECT t.id, row_number() OVER () rn
+    FROM wallet_transactions t
+    WHERE t.reference LIKE 'SURPLUS-%' AND t.status = 'COMPLETED'
+      AND (SELECT count(*) FROM journal_entries j WHERE j.reference = t.reference AND j.amount = t.amount AND j.status = 'POSTED') <> 1
+  ) x
 
   UNION ALL
   SELECT 'intent: no PENDING or FAILED intent has a payment', count(*), string_agg(id, ',') FILTER (WHERE rn <= 3)

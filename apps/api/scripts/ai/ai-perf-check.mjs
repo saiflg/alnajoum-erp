@@ -13,7 +13,7 @@ const arg = (n, d) => { const i = process.argv.indexOf(`--${n}`); return i > -1 
 const CONVS = arg('conversations', 40);
 const STAFF = arg('staff', 25);
 const BASE = 'http://localhost:4000/api/v1';
-const sql = (q) => execFileSync('docker', ['exec', '-i', 'alnajoum-postgres', 'psql', '-U', 'alnajoum', '-d', 'alnajoum_erp', '-At', '-c', q], { encoding: 'utf8' }).trim();
+const sql = (q) => execFileSync('docker', ['exec', '-i', 'alnajoum-postgres', 'psql', '-U', 'alnajoum', '-d', process.env.DB_NAME || 'alnajoum_erp', '-At', '-c', q], { encoding: 'utf8' }).trim();
 
 // The mock payment provider settles a payment link by itself, so earlier runs leave the demo customer owing
 // nothing. Make the starting state deterministic: if there is no unpaid invoice, book one through the assistant.

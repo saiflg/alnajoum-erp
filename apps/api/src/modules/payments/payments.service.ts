@@ -14,6 +14,8 @@ import {
   PaymentIntent,
   PaymentIntentStatus,
   PaymentMethod,
+  WalletTransactionStatus,
+  WalletTransactionType,
 } from '@prisma/client';
 import { randomBytes } from 'crypto';
 import {
@@ -22,7 +24,9 @@ import {
   lockInvoice,
 } from '../../common/db/payment-guards';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
+import { ACCOUNT_CODES } from '../finance/constants/account-codes.constant';
 import { FinancePostingService } from '../finance/finance-posting.service';
+import { LedgerService } from '../finance/ledger.service';
 import { IncentivesService } from '../incentives/incentives.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { RecordPaymentDto } from './dto/record-payment.dto';
@@ -80,6 +84,7 @@ export class PaymentsService {
     private readonly paymentProviderRouter: PaymentProviderRouter,
     @Inject(PAYMENT_PROVIDER)
     private readonly paymentProvider: PaymentProviderPort,
+    private readonly ledgerService: LedgerService,
   ) {}
 
   async recordPayment(
@@ -453,43 +458,94 @@ export class PaymentsService {
       }
       await lockInvoice(tx, intent.invoiceId);
       const standing = await invoiceStanding(tx, intent.invoiceId);
-      const payment = await tx.payment.create({
-        data: {
-          paymentReference: intent.reference,
-          invoiceId: intent.invoiceId,
-          amount: intent.amount,
-          method: PaymentMethod.ONLINE,
-          note: `Paid online via ${intent.provider}`,
-          recordedByStaffId: null,
-        },
-      });
-      return { payment, standing };
+
+      // The customer has really paid, so every naira is accounted for - but it must not push the
+      // invoice past its total. The part that settles the invoice becomes the Payment; any surplus (the
+      // invoice was settled another way or voided while this checkout was open, e.g. an abandoned
+      // checkout that completes late) is credited to the customer's own wallet as credit on account, in
+      // this same transaction, with its own ledger entry. Finance can refund it from there.
+      const open =
+        standing.status === InvoiceStatus.VOID
+          ? 0
+          : Math.max(standing.outstanding, 0);
+      const applied = Math.min(intent.amount, open);
+      const surplus = intent.amount - applied;
+
+      const payment =
+        applied > 0
+          ? await tx.payment.create({
+              data: {
+                paymentReference: intent.reference,
+                invoiceId: intent.invoiceId,
+                amount: applied,
+                method: PaymentMethod.ONLINE,
+                note: `Paid online via ${intent.provider}`,
+                recordedByStaffId: null,
+              },
+            })
+          : null;
+
+      if (surplus > 0) {
+        const holder = await tx.customer.findUniqueOrThrow({
+          where: { id: intent.customerId },
+          select: { companyId: true },
+        });
+        const wallet = await tx.wallet.upsert({
+          where: { customerId: intent.customerId },
+          create: { customerId: intent.customerId, currency: intent.currency },
+          update: {},
+        });
+        const credit = await tx.walletTransaction.create({
+          data: {
+            walletId: wallet.id,
+            type: WalletTransactionType.DEPOSIT,
+            status: WalletTransactionStatus.COMPLETED,
+            amount: surplus,
+            currency: intent.currency,
+            description: `Surplus from online payment ${intent.reference}: the invoice was already ${
+              standing.status === InvoiceStatus.VOID ? 'voided' : 'settled'
+            }`,
+            reference: `SURPLUS-${intent.reference}`,
+            invoiceId: intent.invoiceId,
+          },
+        });
+        await this.ledgerService.post(
+          {
+            debitCode: ACCOUNT_CODES.BANK_ACCOUNTS,
+            creditCode: ACCOUNT_CODES.CUSTOMER_WALLET_LIABILITY,
+            amount: surplus,
+            currency: intent.currency,
+            reference: credit.reference,
+            description: credit.description,
+            sourceModule: 'WALLET',
+            sourceId: credit.id,
+            companyId: holder.companyId,
+          },
+          tx,
+        );
+      }
+      return { payment, standing, applied, surplus };
     });
     if (!recorded) {
       return { ok: true };
     }
-    const onlinePayment = recorded.payment;
-    // The customer has really paid, so the payment is recorded whatever happened to the invoice in
-    // the meantime (settled another way, voided). A surplus is never silently swallowed: it is logged
-    // for Finance to refund or credit to the customer's wallet. There is no automatic refund yet.
-    if (
-      recorded.standing.status === InvoiceStatus.VOID ||
-      intent.amount > Math.max(recorded.standing.outstanding, 0)
-    ) {
-      this.logger.error(
-        `Online payment ${intent.reference} (${intent.amount} ${intent.currency}) landed on invoice ` +
-          `${intent.invoiceId} which was ${recorded.standing.status} with ` +
-          `${recorded.standing.outstanding} outstanding: surplus needs refunding or wallet credit.`,
+    if (recorded.surplus > 0) {
+      this.logger.warn(
+        `Online payment ${intent.reference} landed on invoice ${intent.invoiceId} (${recorded.standing.status}, ` +
+          `${recorded.standing.outstanding} outstanding): ${recorded.applied} applied, ` +
+          `${recorded.surplus} ${intent.currency} credited to the customer's wallet.`,
       );
     }
 
-    const invoiceForLedger = await this.prisma.invoice.findUniqueOrThrow({
-      where: { id: intent.invoiceId },
-    });
-    await this.financePostingService.postRevenueForPayment(
-      onlinePayment,
-      invoiceForLedger,
-    );
+    if (recorded.payment) {
+      const invoiceForLedger = await this.prisma.invoice.findUniqueOrThrow({
+        where: { id: intent.invoiceId },
+      });
+      await this.financePostingService.postRevenueForPayment(
+        recorded.payment,
+        invoiceForLedger,
+      );
+    }
 
     const updatedInvoice = await this.invoicesService.recomputeStatus(
       intent.invoiceId,
@@ -508,17 +564,19 @@ export class PaymentsService {
         customer.identity.email,
         {
           invoiceNumber: updatedInvoice.invoiceNumber,
-          amount: intent.amount,
-          balance: updatedInvoice.totalAmount - totalPaidNow,
+          amount: recorded.applied,
+          balance: Math.max(updatedInvoice.totalAmount - totalPaidNow, 0),
           currency: updatedInvoice.currency,
         },
       );
     }
 
-    await this.incentivesService.applyForInvoicePayment(
-      intent.invoiceId,
-      intent.amount,
-    );
+    if (recorded.applied > 0) {
+      await this.incentivesService.applyForInvoicePayment(
+        intent.invoiceId,
+        recorded.applied,
+      );
+    }
 
     this.eventEmitter.emit('invoice.payment.succeeded', {
       invoiceId: intent.invoiceId,

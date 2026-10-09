@@ -15,6 +15,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { FinancePostingService } from '../finance/finance-posting.service';
+import { LedgerService } from '../finance/ledger.service';
 import { IncentivesService } from '../incentives/incentives.service';
 import { IntegrationsService } from '../integrations/integrations.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -37,6 +38,7 @@ describe('PaymentsService', () => {
   let integrationsService: { getActiveProvider: jest.Mock };
   let eventEmitter: { emit: jest.Mock };
   let paymentProviderRouter: { resolveByName: jest.Mock };
+  let ledgerService: { post: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
@@ -49,7 +51,9 @@ describe('PaymentsService', () => {
         update: jest.fn(),
         updateMany: jest.fn(),
       },
-      customer: { findUnique: jest.fn() },
+      customer: { findUnique: jest.fn(), findUniqueOrThrow: jest.fn() },
+      wallet: { upsert: jest.fn() },
+      walletTransaction: { create: jest.fn() },
     } as typeof prisma;
     // Interactive-transaction plumbing used by the concurrency guards (src/common/db/payment-guards).
     (prisma as Record<string, unknown>).$executeRaw = jest
@@ -84,6 +88,7 @@ describe('PaymentsService', () => {
     paymentProviderRouter = {
       resolveByName: jest.fn().mockReturnValue(paymentProvider),
     };
+    ledgerService = { post: jest.fn().mockResolvedValue({ id: 'je-1' }) };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -101,6 +106,7 @@ describe('PaymentsService', () => {
           provide: FinancePostingService,
           useValue: { postRevenueForPayment: jest.fn() },
         },
+        { provide: LedgerService, useValue: ledgerService },
       ],
     }).compile();
 
@@ -622,8 +628,10 @@ describe('PaymentsService', () => {
       expect(prisma.payment.create).not.toHaveBeenCalled();
     });
 
-    it('still records money the gateway really took when the invoice was settled meanwhile, and flags the surplus', async () => {
-      const error = jest.spyOn(Logger.prototype, 'error').mockImplementation();
+    it('credits money the gateway really took to the customer wallet when the invoice was settled meanwhile (nothing is applied to the invoice)', async () => {
+      // Found by the Phase 24 financial reconciliation: an abandoned checkout completed hours later, after
+      // cash had already settled the invoice, and left it over-paid by a whole payment.
+      const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
       prisma.paymentIntent.findUnique.mockResolvedValue(pendingIntent);
       paymentProvider.verifyCheckout.mockResolvedValue({
         reference: 'CHK-ABC123',
@@ -638,6 +646,118 @@ describe('PaymentsService', () => {
         totalAmount: 30_000,
         payments: [{ amount: 30_000 }],
       });
+      prisma.customer.findUniqueOrThrow.mockResolvedValue({
+        companyId: 'company-1',
+      });
+      prisma.wallet.upsert.mockResolvedValue({ id: 'wallet-1' });
+      prisma.walletTransaction.create.mockResolvedValue({
+        id: 'wt-1',
+        reference: 'SURPLUS-CHK-ABC123',
+        description: 'Surplus',
+      });
+      prisma.invoice.findUniqueOrThrow.mockResolvedValue({ id: 'invoice-1' });
+      prisma.customer.findUnique.mockResolvedValue(null);
+      invoicesService.recomputeStatus.mockResolvedValue({
+        id: 'invoice-1',
+        invoiceNumber: 'INV-1',
+        totalAmount: 30_000,
+        currency: 'NGN',
+        payments: [{ amount: 30_000 }],
+      });
+      invoicesService.getInvoice.mockResolvedValue({ id: 'invoice-1' });
+
+      await service.verifyCheckout('customer-1', 'invoice-1', 'CHK-ABC123');
+
+      // the invoice is not pushed past its total...
+      expect(prisma.payment.create).not.toHaveBeenCalled();
+      // ...the whole amount becomes credit on the customer's wallet...
+      expect(prisma.walletTransaction.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          walletId: 'wallet-1',
+          type: 'DEPOSIT',
+          status: 'COMPLETED',
+          amount: 30_000,
+          reference: 'SURPLUS-CHK-ABC123',
+          invoiceId: 'invoice-1',
+        }),
+      });
+      // ...with its own, balanced ledger entry, in the same transaction.
+      expect(ledgerService.post).toHaveBeenCalledWith(
+        expect.objectContaining({
+          amount: 30_000,
+          reference: 'SURPLUS-CHK-ABC123',
+          sourceModule: 'WALLET',
+          companyId: 'company-1',
+        }),
+        expect.anything(),
+      );
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('credited to the customer'),
+      );
+      warn.mockRestore();
+    });
+
+    it('applies only the outstanding part to the invoice and credits the rest, when a checkout lands after a partial settlement', async () => {
+      prisma.paymentIntent.findUnique.mockResolvedValue(pendingIntent);
+      paymentProvider.verifyCheckout.mockResolvedValue({
+        reference: 'CHK-ABC123',
+        success: true,
+        amount: 30_000,
+        currency: 'NGN',
+      });
+      prisma.paymentIntent.updateMany.mockResolvedValue({ count: 1 });
+      // 20,000 of 30,000 already paid -> only 10,000 is still owed.
+      prisma.invoice.findUnique.mockResolvedValue({
+        status: InvoiceStatus.PARTIALLY_PAID,
+        totalAmount: 30_000,
+        payments: [{ amount: 20_000 }],
+      });
+      prisma.payment.create.mockResolvedValue({ id: 'p-1' });
+      prisma.customer.findUniqueOrThrow.mockResolvedValue({
+        companyId: 'company-1',
+      });
+      prisma.wallet.upsert.mockResolvedValue({ id: 'wallet-1' });
+      prisma.walletTransaction.create.mockResolvedValue({
+        id: 'wt-1',
+        reference: 'SURPLUS-CHK-ABC123',
+        description: 'Surplus',
+      });
+      prisma.invoice.findUniqueOrThrow.mockResolvedValue({ id: 'invoice-1' });
+      prisma.customer.findUnique.mockResolvedValue(null);
+      invoicesService.recomputeStatus.mockResolvedValue({
+        id: 'invoice-1',
+        invoiceNumber: 'INV-1',
+        totalAmount: 30_000,
+        currency: 'NGN',
+        payments: [{ amount: 20_000 }, { amount: 10_000 }],
+      });
+      invoicesService.getInvoice.mockResolvedValue({ id: 'invoice-1' });
+
+      await service.verifyCheckout('customer-1', 'invoice-1', 'CHK-ABC123');
+
+      expect(prisma.payment.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ amount: 10_000 }),
+      });
+      expect(prisma.walletTransaction.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ amount: 20_000 }),
+      });
+      expect(ledgerService.post).toHaveBeenCalledTimes(1);
+    });
+
+    it('creates no wallet credit when the payment exactly settles the invoice', async () => {
+      prisma.paymentIntent.findUnique.mockResolvedValue(pendingIntent);
+      paymentProvider.verifyCheckout.mockResolvedValue({
+        reference: 'CHK-ABC123',
+        success: true,
+        amount: 30_000,
+        currency: 'NGN',
+      });
+      prisma.paymentIntent.updateMany.mockResolvedValue({ count: 1 });
+      prisma.invoice.findUnique.mockResolvedValue({
+        status: InvoiceStatus.ISSUED,
+        totalAmount: 30_000,
+        payments: [],
+      });
       prisma.payment.create.mockResolvedValue({ id: 'p-1' });
       prisma.invoice.findUniqueOrThrow.mockResolvedValue({ id: 'invoice-1' });
       prisma.customer.findUnique.mockResolvedValue(null);
@@ -646,17 +766,17 @@ describe('PaymentsService', () => {
         invoiceNumber: 'INV-1',
         totalAmount: 30_000,
         currency: 'NGN',
-        payments: [{ amount: 30_000 }, { amount: 30_000 }],
+        payments: [{ amount: 30_000 }],
       });
       invoicesService.getInvoice.mockResolvedValue({ id: 'invoice-1' });
 
       await service.verifyCheckout('customer-1', 'invoice-1', 'CHK-ABC123');
 
-      expect(prisma.payment.create).toHaveBeenCalled();
-      expect(error).toHaveBeenCalledWith(
-        expect.stringContaining('surplus needs refunding'),
-      );
-      error.mockRestore();
+      expect(prisma.payment.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ amount: 30_000 }),
+      });
+      expect(prisma.walletTransaction.create).not.toHaveBeenCalled();
+      expect(ledgerService.post).not.toHaveBeenCalled();
     });
 
     it('writes the intent claim and the payment in one transaction under the invoice lock', async () => {

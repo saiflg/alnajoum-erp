@@ -83,6 +83,39 @@ check('the invoice is PAID once the one payment covers it', status === 'PAID', s
 const late = await raw('POST', `/invoices/me/${invoiceId}/checkout`, { token: customer });
 check('a fully paid invoice refuses a new checkout', late.status === 409, `${late.status}`);
 
+// 5. A checkout that completes AFTER the invoice was settled another way (an abandoned checkout finishing late)
+//    must not over-pay the invoice: the surplus becomes ledgered credit on the customer's wallet.
+{
+  const bookUnpaid = async () => {
+    const a = await raw('POST', '/ai/assistant/message', { token: customer, body: { content: 'Find me a flight from Lagos to Abuja on 15 December' } });
+    await raw('POST', '/ai/assistant/message', { token: customer, body: { content: 'confirm 1', conversationId: a.data?.conversationId } });
+    return openInvoice();
+  };
+  const lateInvoice = await bookUnpaid();
+  const total = num(`select "totalAmount" from invoices where id='${lateInvoice}'`);
+  const start = await raw('POST', `/invoices/me/${lateInvoice}/checkout`, { token: customer });
+  const lateRef = start.data?.reference;
+  check('a checkout is opened on a second unpaid invoice', start.status >= 200 && start.status < 300 && !!lateRef, `${start.status}`);
+
+  // staff settle the invoice in cash while that checkout is still open
+  const adminToken = await login('chidi.eze@demo.alnajoum.travel');
+  const cash = await raw('POST', `/invoices/${lateInvoice}/payments`, { token: adminToken, body: { amount: total, method: 'CASH', note: 'settled at the counter' } });
+  check('the invoice is settled in cash while the checkout is open', cash.status >= 200 && cash.status < 300, `${cash.status}`);
+
+  const walletBefore = num(`select coalesce(sum(t.amount),0) from wallet_transactions t join wallets w on w.id=t."walletId" where w."customerId"='${customerId}' and t.status='COMPLETED'`);
+  const settle = await raw('POST', `/invoices/me/${lateInvoice}/checkout/verify`, { token: customer, body: { reference: lateRef } });
+  check('the late checkout is accepted (the customer really paid)', settle.status >= 200 && settle.status < 300, `${settle.status}`);
+  const paid = num(`select coalesce(sum(amount),0) from payments where "invoiceId"='${lateInvoice}'`);
+  check('the invoice is NOT over-paid by the late checkout', paid === total, `paid ${paid} of ${total}`);
+  check('no payment row was created for the late checkout', num(`select count(*) from payments where "paymentReference"='${lateRef}'`) === 0);
+  const walletAfter = num(`select coalesce(sum(t.amount),0) from wallet_transactions t join wallets w on w.id=t."walletId" where w."customerId"='${customerId}' and t.status='COMPLETED'`);
+  check('the whole amount was credited to the customer wallet', walletAfter - walletBefore === total, `+${walletAfter - walletBefore} (expected +${total})`);
+  check('the credit has its own ledger entry for the same amount', num(`select count(*) from journal_entries where reference='SURPLUS-${lateRef}' and amount=${total} and status='POSTED'`) === 1);
+  check('the intent is marked SUCCEEDED exactly once', sql(`select status from payment_intents where reference='${lateRef}'`) === 'SUCCEEDED');
+  const again = await raw('POST', `/invoices/me/${lateInvoice}/checkout/verify`, { token: customer, body: { reference: lateRef } });
+  check('confirming the same checkout again changes nothing (no second credit)', num(`select count(*) from wallet_transactions where reference='SURPLUS-${lateRef}'`) === 1, `${again.status}`);
+}
+
 const failed = results.filter((r) => !r).length;
 console.log(`\n${results.length - failed} passed, ${failed} FAILED`);
 process.exit(failed ? 1 : 0);
