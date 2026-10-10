@@ -12,9 +12,14 @@ export default function AdminDashboardPage() {
   return (
     <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'COMPANY_ADMIN']}>
       <AppShell title="Admin Dashboard" navLinks={ADMIN_NAV}>
-        <PageHeader scene="city" title={user ? `Welcome, ${user.email}` : 'Welcome'} subtitle="Phase 1 covers authentication, RBAC, and Company / Branch / Staff management. Use the navigation above to manage those records." />
+        <PageHeader scene="city" title={user ? `Welcome, ${user.email}` : 'Welcome'} subtitle="Use the navigation to manage your company, or jump straight to a workspace below." />
         <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
           {[
+            { href: '/admin/executive', label: 'Executive analytics' },
+            { href: '/admin/control-tower', label: 'Control tower' },
+            { href: '/admin/ai', label: 'AI Control Center' },
+            { href: '/admin/workflows', label: 'Workflows & automation' },
+            { href: '/admin/security', label: 'Security & compliance' },
             { href: '/admin/companies', label: 'Manage Companies' },
             { href: '/admin/branches', label: 'Manage Branches' },
             { href: '/admin/staff', label: 'Manage Staff' },
