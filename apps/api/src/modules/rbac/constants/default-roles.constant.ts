@@ -48,6 +48,9 @@ export const DEFAULT_ROLE_DEFINITIONS: Array<{
     description: 'Manages a single company: its branches, staff, and roles.',
     isSystem: true,
     permissions: [
+      // Phase 26 - identification cards and the Communication Centre
+      ...Object.values(PERMISSIONS.STAFF_CARD),
+      ...Object.values(PERMISSIONS.COMM),
       // Phase 23 — AI agent layer
       PERMISSIONS.AI.COPILOT_USE,
       PERMISSIONS.AI.OPERATIONS_VIEW,
@@ -271,6 +274,16 @@ export const DEFAULT_ROLE_DEFINITIONS: Array<{
     description: 'Manages operations and staff within an assigned branch.',
     isSystem: true,
     permissions: [
+      // Phase 26 - may verify cards and see them; works with contacts and drafts campaigns, but cannot approve or send
+      PERMISSIONS.STAFF_CARD.READ,
+      PERMISSIONS.STAFF_CARD.SCAN,
+      PERMISSIONS.COMM.CONTACT_READ,
+      PERMISSIONS.COMM.CONTACT_MANAGE,
+      PERMISSIONS.COMM.SEGMENT_MANAGE,
+      PERMISSIONS.COMM.CAMPAIGN_READ,
+      PERMISSIONS.COMM.CAMPAIGN_CREATE,
+      PERMISSIONS.COMM.REPORT_VIEW,
+      PERMISSIONS.COMM.AI_ASSIST,
       // Phase 23 — AI agent layer
       PERMISSIONS.AI.COPILOT_USE,
       PERMISSIONS.AI.OPERATIONS_VIEW,
@@ -461,6 +474,10 @@ export const DEFAULT_ROLE_DEFINITIONS: Array<{
     description: 'Baseline internal staff access.',
     isSystem: true,
     permissions: [
+      // Phase 26 - any staff member may verify a card; contacts can be looked up and added (consent is separate)
+      PERMISSIONS.STAFF_CARD.SCAN,
+      PERMISSIONS.COMM.CONTACT_READ,
+      PERMISSIONS.COMM.CONTACT_MANAGE,
       // Phase 23 — AI agent layer
       PERMISSIONS.AI.COPILOT_USE,
       PERMISSIONS.AI.CONVERSATION_MANAGE,
@@ -553,6 +570,9 @@ export const DEFAULT_ROLE_DEFINITIONS: Array<{
       "Read-only oversight: audit trail, security events, and every module's reports — no create/update/approve access anywhere.",
     isSystem: true,
     permissions: [
+      PERMISSIONS.STAFF_CARD.READ,
+      PERMISSIONS.COMM.CAMPAIGN_READ,
+      PERMISSIONS.COMM.REPORT_VIEW,
       PERMISSIONS.AUDIT.READ,
       PERMISSIONS.SECURITY.VIEW_EVENTS,
       PERMISSIONS.APPROVAL.VIEW,

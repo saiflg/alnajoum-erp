@@ -1,4 +1,4 @@
-// Alnajoum Travel ERP — Phase 1 data model
+// Alnajoum Travel ERP â€” Phase 1 data model
 // Identity is the single authentication principal for both customers (public
 // website / customer portal) and staff (internal ERP). It carries credentials,
 // verification state and role assignments. Domain-specific profile data lives
@@ -59,23 +59,23 @@ model Identity {
   notifications Notification[]
   aiUsageLogs   AiUsageLog[]
 
-  // Phase 6 — finance: who posted a journal entry / recorded a company
+  // Phase 6 â€” finance: who posted a journal entry / recorded a company
   // investment, when it wasn't a Staff-attributed action (e.g. a system
   // job) or when the finance screens simply record the logged-in identity
   // directly rather than looking up their Staff row a second time.
   journalEntries     JournalEntry[]
   companyInvestments CompanyInvestment[]
 
-  // Phase 7 — per-identity notification channel preferences.
+  // Phase 7 â€” per-identity notification channel preferences.
   notificationPreference NotificationPreference?
 
-  // Phase 11 — 2FA recovery codes and API keys this identity owns.
+  // Phase 11 â€” 2FA recovery codes and API keys this identity owns.
   recoveryCodes         TwoFactorRecoveryCode[]
   apiKeys               ApiKey[]
   approvalRequestsMade  ApprovalRequest[]       @relation("ApprovalRequester")
   approvalDecisionsMade ApprovalDecision[]      @relation("ApprovalDecider")
 
-  // Phase 18 — mobile app device registrations and self-service password
+  // Phase 18 â€” mobile app device registrations and self-service password
   // reset (no account-recovery flow existed before this phase at all).
   mobileDevices       MobileDevice[]
   passwordResetTokens PasswordResetToken[]
@@ -96,11 +96,11 @@ model Customer {
   identityId String   @unique
   identity   Identity @relation(fields: [identityId], references: [id], onDelete: Cascade)
 
-  // Phase 11 spec #2/#3 — the tenant boundary. Required (not derived only
+  // Phase 11 spec #2/#3 â€” the tenant boundary. Required (not derived only
   // from assignedBranch, which is nullable for a self-registered customer
   // with no staff/branch assigned yet) so every customer is isolable even
   // before anyone picks them up. Defaults to the single pre-Phase-11
-  // Company for every existing row (see the Phase 11 migration) —
+  // Company for every existing row (see the Phase 11 migration) â€”
   // multi-tenant support is additive, not a breaking change for the one
   // agency that has used this platform so far.
   companyId String
@@ -114,16 +114,16 @@ model Customer {
 
   whatsapp String?
 
-  // Phase 14 — the `whatsapp` field above stays the number itself
+  // Phase 14 â€” the `whatsapp` field above stays the number itself
   // (unchanged); these track the Meta-policy consent/verification state
   // for it. `whatsapp` can be set (e.g. copied from `phone` at signup)
-  // with no consent yet — opt-in is a distinct, explicit event, never
+  // with no consent yet â€” opt-in is a distinct, explicit event, never
   // inferred from the number simply being on file.
   whatsappOptIn      Boolean   @default(false)
   whatsappOptInAt    DateTime?
   whatsappOptOutAt   DateTime?
   // Set once this phone number has completed the OTP link flow (spec
-  // #7/#8) — required before a conversation on this number may see
+  // #7/#8) â€” required before a conversation on this number may see
   // anything beyond public self-service content.
   whatsappVerifiedAt DateTime?
   preferredLanguage  String?   @default("en")
@@ -144,7 +144,7 @@ model Customer {
 
   customerType CustomerType @default(INDIVIDUAL)
 
-  // Staff/branch this customer's relationship is managed by. Both optional —
+  // Staff/branch this customer's relationship is managed by. Both optional â€”
   // most customers are self-registered and unassigned until a manager picks
   // them up (see StaffModule's "my customers" view).
   assignedStaffId  String?
@@ -175,7 +175,7 @@ model Customer {
   travelPackages           TravelPackage[]
   aiConversations          AiConversation[]
 
-  // Phase 7 — CRM, support, communication.
+  // Phase 7 â€” CRM, support, communication.
   convertedFromLeads Lead[]
   tasks              Task[]
   customerNotes      CustomerNote[]
@@ -187,7 +187,7 @@ model Customer {
   referralCode       ReferralCode?           @relation("ReferralCodeOwner")
   referredBy         Referral?               @relation("ReferredCustomer")
 
-  // Phase 14 — WhatsApp.
+  // Phase 14 â€” WhatsApp.
   whatsappConversations WhatsAppConversation[]
   whatsappConsent       WhatsAppConsent?
 
@@ -196,6 +196,9 @@ model Customer {
   @@index([companyId])
   @@index([passportNumberIndex])
   @@map("customers")
+
+  // Phase 26
+  commContact CommContact?
 }
 
 enum DocumentType {
@@ -206,7 +209,7 @@ enum DocumentType {
   VACCINATION_CERTIFICATE
   BIRTH_CERTIFICATE
   OTHER
-  // Added for visa application document management (see VisaDocument) —
+  // Added for visa application document management (see VisaDocument) â€”
   // appended rather than reordered so the existing values above keep their
   // Postgres enum identity.
   BANK_STATEMENT
@@ -215,7 +218,7 @@ enum DocumentType {
   FLIGHT_ITINERARY
   GUARANTOR_ID
   GUARANTOR_DOCUMENT
-  // Phase 9 — configurable country visa rules can require proof of travel
+  // Phase 9 â€” configurable country visa rules can require proof of travel
   // insurance; appended for the same "never reorder/remove" reason as the
   // block above.
   TRAVEL_INSURANCE
@@ -268,7 +271,7 @@ model FamilyMember {
   updatedAt DateTime @updatedAt
 
   // Phase 8: restricted-access next-of-kin contact for a pilgrim who is a
-  // family member rather than the customer themself — mirrors Customer's
+  // family member rather than the customer themself â€” mirrors Customer's
   // pre-existing emergencyContactName/Phone fields, gated the same way (see
   // HajjOpsController's EMERGENCY_CONTACT_VIEW permission).
   emergencyContactName  String?
@@ -321,7 +324,7 @@ model Staff {
   isActive     Boolean   @default(true)
 
   // Required before an incentive payout can be attempted (see
-  // StaffPayoutsService) — nullable since most staff never earn a payable
+  // StaffPayoutsService) â€” nullable since most staff never earn a payable
   // incentive; never exposed on any list/summary endpoint, only the staff
   // member's own "my payout details" view and the finance payout screen.
   bankName          String?
@@ -329,7 +332,7 @@ model Staff {
   bankAccountName   String?
 
   // Phase 6 spec #12: a verified account can't be silently swapped out from
-  // under Finance — StaffService.updateBankDetails() resets these to
+  // under Finance â€” StaffService.updateBankDetails() resets these to
   // false/null whenever bankName/bankAccountNumber/bankAccountName actually
   // change, and only an authorized re-verification (FINANCE.VERIFY_PAYOUT_
   // ACCOUNT) flips it back, which StaffPayoutsService.attemptPayout() now
@@ -366,7 +369,7 @@ model Staff {
   verifiedGuarantors       Guarantor[]
   assignedVisaApplications VisaApplication[]         @relation("AssignedVisaApplications")
 
-  // Phase 9 — visa & immigration operations.
+  // Phase 9 â€” visa & immigration operations.
   submittedVisaApplications    VisaSubmission[]
   approvedChecklistExceptions  DocumentChecklistException[]
   acknowledgedProviderMessages VisaProviderMessage[]
@@ -380,14 +383,14 @@ model Staff {
   completedHotelBookings       HotelBooking[]               @relation("CompletedHotelBookings")
   createdTravelPackages        TravelPackage[]              @relation("CreatedTravelPackages")
 
-  // Phase 6 — finance.
+  // Phase 6 â€” finance.
   createdExpenses            Expense[]           @relation("CreatedExpenses")
   approvedExpenses           Expense[]           @relation("ApprovedExpenses")
   recordedSupplierPayments   SupplierPayment[]
   closedDailyClosings        DailyClosing[]
   importedBankStatementLines BankStatementLine[]
 
-  // Phase 7 — CRM, support, communication.
+  // Phase 7 â€” CRM, support, communication.
   assignedLeads         Lead[]                  @relation("AssignedLeads")
   createdLeads          Lead[]                  @relation("CreatedLeads")
   leadActivities        LeadActivity[]
@@ -401,7 +404,7 @@ model Staff {
   assignedComplaints    Complaint[]             @relation("AssignedComplaints")
   complaintNotesCreated ComplaintNote[]
 
-  // Phase 8 — Hajj & Umrah operations.
+  // Phase 8 â€” Hajj & Umrah operations.
   coordinatedHajjGroups     HajjGroup[]                @relation("HajjGroupCoordinator")
   coordinatedUmrahGroups    UmrahGroup[]               @relation("UmrahGroupCoordinator")
   pilgrimCheckIns           PilgrimCheckIn[]
@@ -410,21 +413,26 @@ model Staff {
   flightAncillaries         FlightAncillary[]
   flightScheduleChanges     FlightScheduleChange[]
 
-  // Phase 14 — WhatsApp.
+  // Phase 14 â€” WhatsApp.
   assignedWhatsappConversations WhatsAppConversation[]
   whatsappMessagesSent          WhatsAppMessage[]
 
-  // Phase 16 — supplier management.
+  // Phase 16 â€” supplier management.
   suppliersManaged          Supplier[]         @relation("SupplierAccountManager")
   supplierDocumentsUploaded SupplierDocument[]
 
   @@index([companyId])
   @@index([branchId])
   @@map("staff")
+
+  // Phase 26 - the photograph printed on the staff identification card, and the card history
+  photoFilename String?
+  idCards       StaffIdCard[]
+  commContact   CommContact?
 }
 
 /**
- * Phase 11 spec #2 — this IS the platform's tenant/organization boundary,
+ * Phase 11 spec #2 â€” this IS the platform's tenant/organization boundary,
  * not a separate concept: every Branch/Staff already hangs off a Company,
  * so formalizing multi-tenancy means completing this model's fields and
  * threading `companyId` through the records that were still missing it
@@ -435,17 +443,17 @@ model Company {
   id                 String  @id @default(cuid())
   name               String
   legalName          String?
-  tradingName        String? // Phase 11 — the public-facing brand name, when it differs from the legal name
+  tradingName        String? // Phase 11 â€” the public-facing brand name, when it differs from the legal name
   registrationNumber String? @unique
   email              String?
   phone              String?
   address            String?
   country            String? // Phase 11 spec #2
-  currency           String  @default("NGN") // Phase 11 — this tenant's default/base currency (ISO 4217); a booking's own transaction currency is never overwritten by this
-  timezone           String  @default("Africa/Lagos") // Phase 11 — IANA zone, drives display only; every timestamp is still stored in UTC
-  taxId              String? // Phase 11 spec #2 — tax registration number, where applicable
-  subscriptionPlan   String? // Phase 11 — free-text plan name (e.g. "Standard", "Enterprise"); no billing engine exists to enforce it yet
-  subscriptionStatus String? // Phase 11 — free-text (e.g. "ACTIVE", "TRIAL", "SUSPENDED"); informational only, never used to gate access on its own
+  currency           String  @default("NGN") // Phase 11 â€” this tenant's default/base currency (ISO 4217); a booking's own transaction currency is never overwritten by this
+  timezone           String  @default("Africa/Lagos") // Phase 11 â€” IANA zone, drives display only; every timestamp is still stored in UTC
+  taxId              String? // Phase 11 spec #2 â€” tax registration number, where applicable
+  subscriptionPlan   String? // Phase 11 â€” free-text plan name (e.g. "Standard", "Enterprise"); no billing engine exists to enforce it yet
+  subscriptionStatus String? // Phase 11 â€” free-text (e.g. "ACTIVE", "TRIAL", "SUSPENDED"); informational only, never used to gate access on its own
   website            String?
   logoUrl            String?
   isActive           Boolean @default(true)
@@ -469,13 +477,13 @@ model Company {
   ratePlans              RatePlan[]
   hotelAllotments        HotelAllotment[]
 
-  // Phase 19 — revenue management.
+  // Phase 19 â€” revenue management.
   pricingRules    PricingRule[]
   pricingTraces   PricingTrace[]
   pricingPolicies PricingPolicy[]
   promotions      Promotion[]
 
-  // Phase 21 — workflow automation.
+  // Phase 21 â€” workflow automation.
   workflowDefinitions WorkflowDefinition[]
   hajjGroups          HajjGroup[]
   umrahGroups         UmrahGroup[]
@@ -492,7 +500,7 @@ model Company {
   dataSubjectRequests DataSubjectRequest[]
   breakGlassGrants    BreakGlassGrant[]
 
-  // Phase 23 — AI agentic operations layer
+  // Phase 23 â€” AI agentic operations layer
   aiExecutions       AiExecution[]
   aiApprovals        AiApproval[]
   aiMemories         AiMemory[]
@@ -504,6 +512,17 @@ model Company {
   aiBriefings        AiBriefing[]
 
   @@map("companies")
+
+  // Phase 26 - staff identification cards and the communication centre
+  staffIdCards       StaffIdCard[]
+  staffCardSettings  StaffCardSettings?
+  commContacts       CommContact[]
+  commSegments       CommSegment[]
+  commTemplates      CommTemplate[]
+  commCampaigns      CommCampaign[]
+  commSuppressions   CommSuppression[]
+  commSettings       CommSettings?
+  commPolicies       CommNotificationPolicy[]
 }
 
 model Branch {
@@ -534,17 +553,17 @@ model Branch {
   hotelBookings       HotelBooking[]
   travelPackages      TravelPackage[]
 
-  // Phase 6 — per-branch accounting (spec #21).
+  // Phase 6 â€” per-branch accounting (spec #21).
   ledgerAccounts LedgerAccount[]
   journalEntries JournalEntry[]
   expenses       Expense[]
   dailyClosings  DailyClosing[]
 
-  // Phase 7 — CRM, support.
+  // Phase 7 â€” CRM, support.
   assignedLeads  Lead[]
   supportTickets SupportTicket[]
 
-  // Phase 14 — WhatsApp.
+  // Phase 14 â€” WhatsApp.
   whatsappConversations WhatsAppConversation[]
 
   @@unique([companyId, code])
@@ -613,7 +632,7 @@ model IdentityRole {
 }
 
 /**
- * Phase 11 spec #16 — this already carries most of what a "session"
+ * Phase 11 spec #16 â€” this already carries most of what a "session"
  * needs (device/browser via userAgent, IP, issued/expiry/revoked times);
  * SessionsService presents it as a session list/revoke API rather than a
  * duplicate Session model. `lastActivityAt` is the one genuinely new
@@ -632,7 +651,7 @@ model RefreshToken {
 
   createdByIp    String?
   userAgent      String?
-  lastActivityAt DateTime? // Phase 11 — updated opportunistically, not on every single request
+  lastActivityAt DateTime? // Phase 11 â€” updated opportunistically, not on every single request
 
   createdAt DateTime @default(now())
 
@@ -641,11 +660,11 @@ model RefreshToken {
 }
 
 /**
- * Phase 18 — self-service password reset (no account-recovery flow of any
+ * Phase 18 â€” self-service password reset (no account-recovery flow of any
  * kind existed before this phase). Deliberately mirrors RefreshToken's
  * "store only a hash, never the plaintext token" shape: the emailed link
  * carries the plaintext, only its SHA-256 hash is persisted. Single-use
- * (usedAt) and short-lived (expiresAt) — same discipline as a payment
+ * (usedAt) and short-lived (expiresAt) â€” same discipline as a payment
  * idempotency key, since a reset link is itself a bearer credential.
  */
 model PasswordResetToken {
@@ -670,14 +689,14 @@ enum MobilePlatform {
 }
 
 /**
- * Phase 18 — one row per installed app instance (not per login session;
+ * Phase 18 â€” one row per installed app instance (not per login session;
  * RefreshToken already covers that). `deviceId` is a client-generated
  * stable installation identifier (e.g. Expo's installation ID), so a
  * reinstall registers as a new device rather than silently reusing an old
  * row. `pushToken` is nullable because a device can be registered (and
  * listed/revoked from "manage devices") before push permission is ever
  * granted. `revokedAt` is how a customer's self-service "sign out this
- * device" and this phase's push fan-out both recognize a dead device —
+ * device" and this phase's push fan-out both recognize a dead device â€”
  * revoked devices are skipped for push, same "soft state, not a delete"
  * discipline as RefreshToken.revokedAt.
  */
@@ -692,7 +711,7 @@ model MobileDevice {
   osVersion  String?
 
   pushToken    String?
-  pushProvider String? // 'EXPO' | 'FCM' | 'APNS' — null until a token is registered
+  pushProvider String? // 'EXPO' | 'FCM' | 'APNS' â€” null until a token is registered
 
   lastActiveAt DateTime  @default(now())
   revokedAt    DateTime?
@@ -707,10 +726,10 @@ model MobileDevice {
 }
 
 /**
- * Phase 18 — backend-controlled mobile app configuration (spec #32/#42):
+ * Phase 18 â€” backend-controlled mobile app configuration (spec #32/#42):
  * minimum/recommended version, force-update, and maintenance mode, per
  * platform. Singleton-per-platform, same "no row needed until an admin
- * actually sets one" shape as FinanceSettings — MobileAppConfigService
+ * actually sets one" shape as FinanceSettings â€” MobileAppConfigService
  * returns sensible defaults (no force-update, no maintenance mode) when
  * a platform has no row yet.
  */
@@ -734,7 +753,7 @@ model AuditLog {
   identityId String?
   identity   Identity? @relation(fields: [identityId], references: [id], onDelete: SetNull)
 
-  // Phase 11 spec #25/#26 — tenant/branch context on the log row itself
+  // Phase 11 spec #25/#26 â€” tenant/branch context on the log row itself
   // (not just derivable from identity, since a system job or a since-
   // deleted identity may have neither) so the admin audit search can
   // filter by tenant/branch directly, in SQL, without a join per row.
@@ -749,7 +768,7 @@ model AuditLog {
   entityId   String?
   metadata   Json?
 
-  // Phase 11 spec #11/#25 — a reason and a before/after snapshot for the
+  // Phase 11 spec #11/#25 â€” a reason and a before/after snapshot for the
   // audit rows that represent a decision or a configuration change
   // (approvals, settings, role/permission edits). Left null for routine
   // create/read entries where there's no "previous state" to speak of.
@@ -782,7 +801,7 @@ enum FlightProviderName {
 enum FlightBookingStatus {
   PENDING
   CONFIRMED
-  // Phase 4 additions — appended, not renamed/removed, so every earlier
+  // Phase 4 additions â€” appended, not renamed/removed, so every earlier
   // reference to PENDING/CONFIRMED/CANCELLED/FAILED keeps working exactly
   // as before (see FlightsService.spec's existing assertions).
   TICKETED
@@ -792,11 +811,11 @@ enum FlightBookingStatus {
   REISSUED
   CANCELLED
   FAILED
-  // Phase 10 additions — same append-only discipline. ON_HOLD/HOLD_EXPIRED
+  // Phase 10 additions â€” same append-only discipline. ON_HOLD/HOLD_EXPIRED
   // only apply to a booking created via createBooking(..., { hold: true })
   // against a provider whose capabilities().hold is true (spec #9).
   // VOID_REQUESTED/VOIDED are driven by FlightVoidsService, distinct from
-  // the refund workflow (spec #18 — void is "the ticket never existed",
+  // the refund workflow (spec #18 â€” void is "the ticket never existed",
   // refund is "the ticket existed and is being cancelled with a penalty").
   ON_HOLD
   HOLD_EXPIRED
@@ -900,13 +919,13 @@ model FlightBooking {
   cabinClass  CabinClass
 
   // Full offer snapshot (all legs, segments, fare basis, etc.) as returned
-  // by the provider at booking time — provider payloads vary too much in
+  // by the provider at booking time â€” provider payloads vary too much in
   // shape to model relationally, and a snapshot also preserves what was
   // actually purchased even if the provider's own record later changes.
   itinerary Json
 
   // Costing/markup snapshot, same "never recompute later" principle as
-  // VisaApplication.companyCostSnapshot — a later pricing-rule edit must
+  // VisaApplication.companyCostSnapshot â€” a later pricing-rule edit must
   // never retroactively change an already-booked price. totalAmount above
   // is what the customer actually pays; providerCost is what the provider
   // charged the agency for it, and markupAmount is the difference the
@@ -919,7 +938,7 @@ model FlightBooking {
   branchId String?
   branch   Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
 
-  // Populated once ticketing succeeds (see FlightTicketingService.issueTicket) —
+  // Populated once ticketing succeeds (see FlightTicketingService.issueTicket) â€”
   // never before, per the spec's "do not mark a booking as ticketed until
   // ticket issuance is actually confirmed."
   pnr               String?
@@ -930,7 +949,7 @@ model FlightBooking {
   // Provider-supplied restriction/fare messages and rules, captured at
   // search/offer time and carried through to the booking so a staff member
   // reviewing a completed booking still sees exactly what the customer was
-  // shown before they booked — never invented, only ever copied from what
+  // shown before they booked â€” never invented, only ever copied from what
   // the provider actually returned (see FLIGHT_PROVIDER_WARNING_FALLBACK).
   providerWarnings Json?
   fareRules        Json?
@@ -943,25 +962,25 @@ model FlightBooking {
   // payment and duplicate ticket issuance... use idempotency keys").
   idempotencyKey String? @unique
 
-  // Phase 10 spec #9 — set when this booking was created with hold: true
+  // Phase 10 spec #9 â€” set when this booking was created with hold: true
   // against a provider whose capabilities().hold is true. Null for every
   // instant-ticketed booking (the pre-Phase-10 default). Never let payment
-  // proceed once this has passed — see FlightsService.issueTicket's guard.
+  // proceed once this has passed â€” see FlightsService.issueTicket's guard.
   holdExpiresAt DateTime?
 
-  // Phase 10 spec #40 — same isOfflineEntry/offlineReason convention as
+  // Phase 10 spec #40 â€” same isOfflineEntry/offlineReason convention as
   // VisaApplication: a booking staff recorded from a phone call/walk-in
   // rather than a live provider search, never fabricating a provider
-  // order. Still flows through the same finance/incentive/audit pipeline —
+  // order. Still flows through the same finance/incentive/audit pipeline â€”
   // see FlightIncentivesService's manual-booking approval gate.
   isOfflineEntry Boolean @default(false)
   offlineReason  String?
 
-  // Phase 10 spec #21 — set when this booking bills a corporate account
+  // Phase 10 spec #21 â€” set when this booking bills a corporate account
   // instead of (or alongside) the individual customer; null for every
   // ordinary self-service/staff booking. Policy limits (max fare, allowed
   // cabins, approval requirement) are enforced against this account at
-  // booking time — see FlightsService.enforceCorporatePolicy.
+  // booking time â€” see FlightsService.enforceCorporatePolicy.
   corporateAccountId      String?
   corporateAccount        CorporateAccount? @relation(fields: [corporateAccountId], references: [id], onDelete: SetNull)
   // Set at booking time when corporateAccount.requiresApproval is true;
@@ -987,7 +1006,7 @@ model FlightBooking {
   @@index([branchId])
   @@index([pricingRuleId])
   @@index([corporateAccountId])
-  // Phase 20 — analytics scans by date range; the audit found no date index at all.
+  // Phase 20 â€” analytics scans by date range; the audit found no date index at all.
   @@index([status, createdAt])
   @@map("flight_bookings")
 }
@@ -995,8 +1014,8 @@ model FlightBooking {
 /**
  * Refund workflow for a cancelled/partially-cancelled FlightBooking (spec
  * #15). refundAmount is always computed, never assumed to equal the full
- * ticket price — see FlightRefundsService.calculateRefund:
- * refundAmount = ticketPrice − providerPenalty − agencyFee (+ refundableTaxes)
+ * ticket price â€” see FlightRefundsService.calculateRefund:
+ * refundAmount = ticketPrice âˆ’ providerPenalty âˆ’ agencyFee (+ refundableTaxes)
  */
 model FlightRefund {
   id String @id @default(cuid())
@@ -1029,7 +1048,7 @@ model FlightRefund {
 /**
  * Flight-change/reissue workflow (spec #16). Every request creates its own
  * row rather than mutating the booking in place, so the full change history
- * is preserved exactly as the spec asks — a booking can be reissued more
+ * is preserved exactly as the spec asks â€” a booking can be reissued more
  * than once, each with its own before/after snapshot and fare math.
  */
 model FlightReissue {
@@ -1066,7 +1085,7 @@ enum FlightVoidStatus {
 }
 
 /**
- * Phase 10 spec #18 — ticket void, deliberately a separate model/workflow
+ * Phase 10 spec #18 â€” ticket void, deliberately a separate model/workflow
  * from FlightRefund: a void undoes a ticket within the airline's same-day
  * void window as if it never existed (no penalty, full reversal), while a
  * refund cancels an already-accepted ticket with a penalty. Only
@@ -1085,7 +1104,7 @@ model FlightVoid {
 
   ticketNumbers String[] // snapshot of FlightBookingPassenger.ticketNumber at request time
   voidDeadline  DateTime
-  amountVoided  Int // whole amount reversed — a void has no penalty, unlike FlightRefund
+  amountVoided  Int // whole amount reversed â€” a void has no penalty, unlike FlightRefund
   currency      String
 
   status           FlightVoidStatus @default(REQUESTED)
@@ -1113,7 +1132,7 @@ enum FlightAncillaryStatus {
 }
 
 /**
- * Phase 10 spec #19 — a baggage/seat/meal/other add-on purchased against an
+ * Phase 10 spec #19 â€” a baggage/seat/meal/other add-on purchased against an
  * existing booking, recorded separately from the base fare (never folded
  * into FlightBooking.totalAmount) so accounting/reporting can distinguish
  * ancillary revenue from ticket revenue, per the spec's own instruction.
@@ -1142,7 +1161,7 @@ model FlightAncillary {
 }
 
 /**
- * Configurable agency markup rule (spec #18) — resolved by
+ * Configurable agency markup rule (spec #18) â€” resolved by
  * FlightPricingService against a search/offer's route, airline, cabin,
  * booking staff, and branch. The most specific match (highest `priority`
  * among every rule whose scope fields all match or are left blank) wins;
@@ -1158,7 +1177,7 @@ model FlightPricingRule {
   amount  Int? // whole currency units, for FIXED
   percent Float? // e.g. 5 = 5%, for PERCENTAGE
 
-  // Scope — every non-null field here must match for the rule to apply;
+  // Scope â€” every non-null field here must match for the rule to apply;
   // leaving a field null makes the rule indifferent to it.
   airlineCode String?
   origin      String?
@@ -1177,7 +1196,7 @@ model FlightPricingRule {
   isActive Boolean @default(true)
 
   // Optional: route/airline-specific incentive policy override, falling
-  // back to the platform default IncentivePolicy when unset — reuses the
+  // back to the platform default IncentivePolicy when unset â€” reuses the
   // exact same policy engine Phase 3 built for visa incentives rather than
   // inventing a second one (see FlightIncentivesService).
   incentivePolicyId String?
@@ -1204,10 +1223,10 @@ enum FlightServiceFeeType {
 }
 
 /**
- * Phase 10 spec #26 — configurable flat/percentage fees layered on top of
- * FlightPricingRule's fare markup, e.g. a flat ₦2,000 ticketing fee applied
+ * Phase 10 spec #26 â€” configurable flat/percentage fees layered on top of
+ * FlightPricingRule's fare markup, e.g. a flat â‚¦2,000 ticketing fee applied
  * to every ticket issued regardless of route/airline. Resolved by
- * FlightServiceFeesService.resolve(type) — the single active fee for a
+ * FlightServiceFeesService.resolve(type) â€” the single active fee for a
  * given type wins; deliberately simpler than FlightPricingRule's
  * route/airline scoping since service fees are a flat agency charge, not a
  * fare markup.
@@ -1229,21 +1248,21 @@ model FlightServiceFee {
 }
 
 /**
- * Phase 10 spec #30 — administrator-configured provider try-order for
- * flight *search only* (never booking/ticketing — see
+ * Phase 10 spec #30 â€” administrator-configured provider try-order for
+ * flight *search only* (never booking/ticketing â€” see
  * FlightProviderRoutingService's doc comment and spec #31's duplicate-
  * booking protection). A rule with origin/destination left null applies
- * globally; a route-scoped rule (e.g. "NG → SA") takes priority over the
+ * globally; a route-scoped rule (e.g. "NG â†’ SA") takes priority over the
  * global default when both exist, same specific-beats-generic resolution
  * as FlightPricingRule/CountryVisaRule.
  */
 model FlightProviderRoutingRule {
   id String @id @default(cuid())
 
-  origin      String? // ISO country code or IATA airport code prefix, staff's choice — free text, never parsed
+  origin      String? // ISO country code or IATA airport code prefix, staff's choice â€” free text, never parsed
   destination String?
 
-  // Ordered list of FlightProviderName values, e.g. ["DUFFEL","TRAVELPORT","SABRE"] —
+  // Ordered list of FlightProviderName values, e.g. ["DUFFEL","TRAVELPORT","SABRE"] â€”
   // stored as JSON rather than a relation table since the order itself (not
   // just membership) is the data being configured.
   providerPriority Json
@@ -1274,12 +1293,12 @@ enum FlightSupplierStatus {
 }
 
 /**
- * Phase 10 spec #22/#23 — a supplier *master record*, distinct from the
+ * Phase 10 spec #22/#23 â€” a supplier *master record*, distinct from the
  * existing generic SupplierPayable/SupplierPayment AP ledger (which is
  * free-text-keyed and shared across Flight/Hotel/Visa). This is what a
  * FlightSupplier actually IS (contract terms, credit limit, API status);
  * SupplierPayable rows are linked to it via the new optional
- * flightSupplierId below rather than duplicating balance-tracking — the
+ * flightSupplierId below rather than duplicating balance-tracking â€” the
  * balance itself is always computed live from those linked payables/
  * payments (see FlightSuppliersService.getBalance), same
  * never-a-stored-balance-column discipline as Wallet.
@@ -1287,7 +1306,7 @@ enum FlightSupplierStatus {
 model FlightSupplier {
   id String @id @default(cuid())
 
-  // Phase 11 spec #2/#65 fix — a supplier's negotiated commission/markup/
+  // Phase 11 spec #2/#65 fix â€” a supplier's negotiated commission/markup/
   // credit terms are exactly the kind of commercially sensitive per-tenant
   // data spec #2's tenant isolation is about; each company maintains its
   // own supplier list rather than sharing one platform-wide catalogue.
@@ -1298,7 +1317,7 @@ model FlightSupplier {
   type FlightSupplierType
 
   providerCode String? // e.g. matches FlightProviderName when this supplier IS a provider account
-  apiProvider  String? // free-text — which FlightProviderPort implementation settles through this supplier, if any
+  apiProvider  String? // free-text â€” which FlightProviderPort implementation settles through this supplier, if any
 
   currency          String @default("NGN")
   commissionPercent Float? // supplier pays the agency this % back
@@ -1310,7 +1329,7 @@ model FlightSupplier {
   settlementCycle String? // free text, e.g. "Weekly"
 
   status    FlightSupplierStatus @default(ACTIVE)
-  apiStatus String? // free-text last-known API health, e.g. "Connected" | "Auth failed" — set by whatever sync/health-check calls this supplier
+  apiStatus String? // free-text last-known API health, e.g. "Connected" | "Auth failed" â€” set by whatever sync/health-check calls this supplier
 
   notes String?
 
@@ -1333,7 +1352,7 @@ enum FlightSupplierContractStatus {
 }
 
 /**
- * Phase 10 spec #24 — a supplier agreement, versioned as its own row (a
+ * Phase 10 spec #24 â€” a supplier agreement, versioned as its own row (a
  * supplier can have several contracts over time) rather than overwriting
  * FlightSupplier's own commission/markup fields, so history is preserved.
  */
@@ -1370,7 +1389,7 @@ model FlightSupplierContract {
 
 /**
  * Internal record-keeping for a negotiated group reservation (spec #17).
- * Deliberately not modeled as a live provider order — no provider in this
+ * Deliberately not modeled as a live provider order â€” no provider in this
  * abstraction exposes an automated group-booking API, so this is staff-
  * managed: negotiate the fare and deposit terms outside the ERP, then
  * record the agreement and manifest here against a deposit/balance invoice.
@@ -1432,7 +1451,7 @@ model FlightGroupPassenger {
 /**
  * Every provider round-trip, for diagnostics and the admin "Provider
  * Success Rate / Provider Errors" report (spec #24/#25). Deliberately thin:
- * safeMessage is a sanitized, human-readable summary — never the raw
+ * safeMessage is a sanitized, human-readable summary â€” never the raw
  * request/response body, which could carry API secrets or passenger PII.
  */
 model ProviderTransactionLog {
@@ -1467,10 +1486,10 @@ enum FlightWebhookEventStatus {
 }
 
 /**
- * Phase 10 spec #32 — every inbound provider webhook call, recorded before
+ * Phase 10 spec #32 â€” every inbound provider webhook call, recorded before
  * processing. `externalId` (the provider's own event id) is unique, so a
  * retried webhook delivery is a no-op rather than double-applying its
- * effect — the idempotency mechanism spec #32/#31 asks for, mirroring
+ * effect â€” the idempotency mechanism spec #32/#31 asks for, mirroring
  * FlightBooking.idempotencyKey's own uniqueness-based approach.
  */
 model FlightWebhookEvent {
@@ -1480,7 +1499,7 @@ model FlightWebhookEvent {
   eventType  String
   externalId String             @unique
 
-  // Sanitized payload only — never the raw provider secret/signature
+  // Sanitized payload only â€” never the raw provider secret/signature
   // header, same "no unnecessary sensitive data" rule ProviderTransactionLog
   // already follows.
   payload Json
@@ -1508,7 +1527,7 @@ enum FlightScheduleChangeStatus {
 }
 
 /**
- * Phase 10 spec #43 — an airline-initiated schedule change on an already-
+ * Phase 10 spec #43 â€” an airline-initiated schedule change on an already-
  * ticketed booking. old/newSegmentSnapshot are full FlightSegment[] JSON
  * captures (see flight-provider.port.ts), never a diffed/interpreted
  * summary, so staff can review exactly what the provider reported.
@@ -1578,7 +1597,7 @@ enum PaymentMethod {
   CARD
   OTHER
   // Customer-initiated checkout through PaymentProviderPort (Paystack in
-  // production, the mock provider by default) — the only method not
+  // production, the mock provider by default) â€” the only method not
   // recorded by a staff member.
   ONLINE
   // Debited from the customer's wallet balance (see Wallet/WalletTransaction).
@@ -1597,7 +1616,7 @@ model Invoice {
 
   // Nullable: every invoice today is billed to a Customer *except* a
   // corporate travel booking, which bills a CorporateAccount instead (see
-  // corporateBookingId below) — those don't appear in a customer's own
+  // corporateBookingId below) â€” those don't appear in a customer's own
   // invoice list, only in the corporate travel admin views and the general
   // admin invoice list.
   customerId String?
@@ -1609,21 +1628,21 @@ model Invoice {
   flightBookingId String?        @unique
   flightBooking   FlightBooking? @relation(fields: [flightBookingId], references: [id], onDelete: SetNull)
 
-  // Same nullable/unique shape as flightBookingId — an invoice generated
+  // Same nullable/unique shape as flightBookingId â€” an invoice generated
   // from a Hajj or Umrah registration instead of a flight booking.
   hajjRegistrationId  String?            @unique
   hajjRegistration    HajjRegistration?  @relation(fields: [hajjRegistrationId], references: [id], onDelete: SetNull)
   umrahRegistrationId String?            @unique
   umrahRegistration   UmrahRegistration? @relation(fields: [umrahRegistrationId], references: [id], onDelete: SetNull)
 
-  // Same nullable/unique shape again — an invoice generated from a hotel
+  // Same nullable/unique shape again â€” an invoice generated from a hotel
   // booking or vehicle rental instead of the above.
   hotelBookingId  String?        @unique
   hotelBooking    HotelBooking?  @relation(fields: [hotelBookingId], references: [id], onDelete: SetNull)
   vehicleRentalId String?        @unique
   vehicleRental   VehicleRental? @relation(fields: [vehicleRentalId], references: [id], onDelete: SetNull)
 
-  // Same nullable/unique shape again — an invoice generated from a visa
+  // Same nullable/unique shape again â€” an invoice generated from a visa
   // application's processing fee, or a corporate travel booking's
   // consolidated per-traveler line items.
   visaApplicationId  String?           @unique
@@ -1631,18 +1650,18 @@ model Invoice {
   corporateBookingId String?           @unique
   corporateBooking   CorporateBooking? @relation(fields: [corporateBookingId], references: [id], onDelete: SetNull)
 
-  // Same nullable/unique shape again — an invoice generated from a flight
+  // Same nullable/unique shape again â€” an invoice generated from a flight
   // group booking's deposit/balance agreement.
   flightGroupBooking FlightGroupBooking?
 
-  // Same shape again — an invoice generated from a staff-built travel
+  // Same shape again â€” an invoice generated from a staff-built travel
   // package (spec #11-#14).
   travelPackage TravelPackage?
 
   status InvoiceStatus @default(ISSUED)
 
   currency    String
-  totalAmount Int // whole currency units, no minor-unit subdivision — matches FlightBooking.totalAmount
+  totalAmount Int // whole currency units, no minor-unit subdivision â€” matches FlightBooking.totalAmount
 
   // Set when a staff action generated the invoice; null for a
   // system-generated invoice from a customer's own self-service booking.
@@ -1688,7 +1707,7 @@ model Payment {
   note   String?
 
   // Payments are always recorded by a staff member (cash/bank transfer/POS
-  // handled in-office) — there's no customer self-service payment path
+  // handled in-office) â€” there's no customer self-service payment path
   // until a real online gateway (Paystack/Flutterwave) is integrated.
   recordedByStaffId String?
   recordedByStaff   Staff?  @relation(fields: [recordedByStaffId], references: [id], onDelete: SetNull)
@@ -1697,11 +1716,11 @@ model Payment {
   createdAt DateTime @default(now())
 
   // Set only when this Payment was created by approving a manual payment
-  // submission (see ManualPaymentSubmission) — the reverse of its paymentId.
+  // submission (see ManualPaymentSubmission) â€” the reverse of its paymentId.
   manualPaymentSubmission ManualPaymentSubmission?
 
   @@index([invoiceId])
-  // Phase 20 — cash-collected sums payments by paid date.
+  // Phase 20 â€” cash-collected sums payments by paid date.
   @@index([paidAt])
   @@map("payments")
 }
@@ -1710,7 +1729,7 @@ model Payment {
  * One customer-initiated online checkout attempt against an invoice.
  * Created PENDING before redirecting to the provider's hosted checkout
  * page; flipped to SUCCEEDED (which also creates the matching Payment row)
- * or FAILED once the provider confirms the outcome — via the browser
+ * or FAILED once the provider confirms the outcome â€” via the browser
  * returning to the verify endpoint, and/or the provider's webhook, since
  * either can arrive first or the browser callback may never happen at all
  * (tab closed mid-payment).
@@ -1724,7 +1743,7 @@ model PaymentIntent {
   customerId String
   customer   Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
 
-  // The provider's transaction reference — what ties an initiated checkout
+  // The provider's transaction reference â€” what ties an initiated checkout
   // to the provider's later verify/webhook callback.
   reference String @unique
   provider  String // "mock" | "paystack"
@@ -1766,7 +1785,7 @@ enum NotificationType {
   INCENTIVE_GENERATED
   INCENTIVE_APPROVED
   INCENTIVE_PAID
-  // Phase 18 — self-service password reset.
+  // Phase 18 â€” self-service password reset.
   PASSWORD_RESET
   // Phase 21 - messages sent by the workflow engine.
   WORKFLOW_MESSAGE
@@ -1786,7 +1805,7 @@ enum NotificationChannel {
 }
 
 /**
- * Append-only send log — every attempt is recorded regardless of outcome,
+ * Append-only send log â€” every attempt is recorded regardless of outcome,
  * so a failed send is visible without needing real inbox access. Not
  * linked to other models by foreign key (mirrors AuditLog): the recipient
  * address and rendered body are the durable record, since the underlying
@@ -1804,7 +1823,7 @@ model Notification {
   errorMessage String?
 
   // Set when this notification also belongs in an identity's in-app feed
-  // (dashboard "Notifications" widget) — the append-only send log above is
+  // (dashboard "Notifications" widget) â€” the append-only send log above is
   // reused as the in-app store rather than duplicating rows into a second
   // table. Null for notifications that only ever left the system by email
   // (e.g. the public contact form).
@@ -1812,7 +1831,7 @@ model Notification {
   identity   Identity? @relation(fields: [identityId], references: [id], onDelete: SetNull)
   isRead     Boolean   @default(false)
 
-  // Phase 7 spec #21's "related booking/application" — free-form, same
+  // Phase 7 spec #21's "related booking/application" â€” free-form, same
   // pattern as WalletTransaction.invoiceId / BankStatementLine.matchedId.
   relatedType String?
   relatedId   String?
@@ -1827,7 +1846,7 @@ model Notification {
 }
 
 // ---------------------------------------------------------------------------
-// Phase 2 — Wallet
+// Phase 2 â€” Wallet
 // ---------------------------------------------------------------------------
 
 enum WalletTransactionType {
@@ -1864,9 +1883,9 @@ model Wallet {
 
 /**
  * Ledger-safe: the wallet never carries a stored balance column. Balance is
- * always the sum of `amount` (signed — positive credits, negative debits)
+ * always the sum of `amount` (signed â€” positive credits, negative debits)
  * across this wallet's COMPLETED transactions, computed on read. This makes
- * an incorrect balance structurally impossible — there is nothing to drift
+ * an incorrect balance structurally impossible â€” there is nothing to drift
  * out of sync with the transaction history, because the history *is* the
  * balance. See WalletService.getBalance().
  */
@@ -1886,7 +1905,7 @@ model WalletTransaction {
   description String
   reference   String @unique
 
-  // What this transaction paid for / originated from, when applicable —
+  // What this transaction paid for / originated from, when applicable â€”
   // e.g. the invoice a wallet PAYMENT settled, or the PaymentIntent
   // reference for an online DEPOSIT. Free-form on purpose: a wallet
   // transaction can point at very different kinds of source records.
@@ -1905,7 +1924,7 @@ model WalletTransaction {
 }
 
 // ---------------------------------------------------------------------------
-// Phase 2 — Hajj & Umrah package management
+// Phase 2 â€” Hajj & Umrah package management
 // ---------------------------------------------------------------------------
 
 enum PackageStatus {
@@ -1929,7 +1948,7 @@ model HajjPackage {
   description String?
 
   price        Int // selling price per pilgrim, whole currency units
-  internalCost Int? // cost price per pilgrim — never exposed on customer-facing routes
+  internalCost Int? // cost price per pilgrim â€” never exposed on customer-facing routes
   currency     String @default("NGN")
 
   durationDays  Int?
@@ -1964,11 +1983,11 @@ model HajjPackage {
 }
 
 /**
- * One family head's registration against a package — may cover several
+ * One family head's registration against a package â€” may cover several
  * pilgrims (see HajjRegistrationPilgrim), mirroring how FlightBooking covers
  * several FlightBookingPassenger rows. Generates exactly one Invoice, whose
  * existing partial-payment machinery (Payment/PaymentIntent, PARTIALLY_PAID
- * status) is what implements Hajj installment payments — no separate
+ * status) is what implements Hajj installment payments â€” no separate
  * installment ledger needed.
  */
 model HajjRegistration {
@@ -1987,7 +2006,7 @@ model HajjRegistration {
   status RegistrationStatus @default(PENDING)
 
   currency    String
-  totalAmount Int // package.price × pilgrim count, snapshotted at registration time
+  totalAmount Int // package.price Ã— pilgrim count, snapshotted at registration time
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2016,13 +2035,13 @@ model HajjRegistrationPilgrim {
   lastName       String
   passportNumber String?
 
-  // Phase 8: optional travel-cohort assignment — a pilgrim's family/
+  // Phase 8: optional travel-cohort assignment â€” a pilgrim's family/
   // customer record is never duplicated, only linked to a group container.
   groupId String?
   group   HajjGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
 
   // Phase 8 spec #33: a short, random, internal-only identifier for QR
-  // check-in — deliberately opaque (no passport/financial data encoded),
+  // check-in â€” deliberately opaque (no passport/financial data encoded),
   // generated once on first read by HajjOpsService.ensurePilgrimCode().
   pilgrimCode String? @unique
 
@@ -2047,7 +2066,7 @@ model UmrahPackage {
   description String?
   packageType UmrahPackageType @default(GROUP)
 
-  costPrice     Int // internal cost per pilgrim — never exposed on customer-facing routes
+  costPrice     Int // internal cost per pilgrim â€” never exposed on customer-facing routes
   sellingPrice  Int
   currency      String @default("NGN")
   // Staff incentive rule evaluated on each approved payment against a
@@ -2135,7 +2154,7 @@ model UmrahRegistrationPilgrim {
 }
 
 // ---------------------------------------------------------------------------
-// Phase 2 — Manual (offline) payments requiring finance approval
+// Phase 2 â€” Manual (offline) payments requiring finance approval
 // ---------------------------------------------------------------------------
 
 enum ManualPaymentStatus {
@@ -2148,7 +2167,7 @@ enum ManualPaymentStatus {
 /**
  * A staff-submitted claim that a customer paid by cash or bank transfer.
  * Deliberately separate from Payment: submitting one has NO effect on the
- * invoice or any ledger — only approving it (PaymentsService creates the
+ * invoice or any ledger â€” only approving it (PaymentsService creates the
  * real Payment row atomically with the status flip) does. This is what
  * "never affect the official financial ledger before approval" means in
  * code: the ledger-affecting row simply doesn't exist yet.
@@ -2198,21 +2217,21 @@ enum IncentiveStatus {
   REJECTED
   PAID
   // Phase 6 spec #29: an incentive tied to a booking that later gets
-  // refunded/cancelled must not remain payable — set by
+  // refunded/cancelled must not remain payable â€” set by
   // LedgerService.cancelIncentivesForSource() when a flight/hotel/visa
   // refund is processed. Terminal, like REJECTED; never set on an already
-  // PAID incentive (money already moved — see the refund services' guard).
+  // PAID incentive (money already moved â€” see the refund services' guard).
   CANCELLED
 }
 
 /**
  * A staff incentive earned from an approved payment against a Hajj/Umrah
- * registration, or (from Phase 3) from the margin on a visa application —
+ * registration, or (from Phase 3) from the margin on a visa application â€”
  * computed from the package's incentiveRule or the VisaService's
  * IncentivePolicy respectively.
  * Phase 1/2 rows (sourceType HAJJ_REGISTRATION/UMRAH_REGISTRATION) were
  * "informational only" and are backfilled to PAID by the migration that
- * added `status` — they were already-settled history, not something that
+ * added `status` â€” they were already-settled history, not something that
  * suddenly needs approval. Phase 3 visa incentives are the first to use the
  * real PENDING -> APPROVED -> PAID workflow end to end (see
  * VisaIncentivesService and StaffPayoutsService).
@@ -2230,7 +2249,7 @@ model StaffIncentive {
   description String
 
   status          IncentiveStatus @default(PENDING)
-  // Reference number shown to staff/finance, e.g. "INC-2026-000123" —
+  // Reference number shown to staff/finance, e.g. "INC-2026-000123" â€”
   // distinct from `id` (cuid) for the same reason invoiceNumber/
   // bookingReference exist alongside their own ids elsewhere.
   referenceNumber String?         @unique
@@ -2245,7 +2264,7 @@ model StaffIncentive {
   policyId String?
   policy   IncentivePolicy? @relation(fields: [policyId], references: [id], onDelete: SetNull)
 
-  // Which customer this incentive was earned from — set for visa
+  // Which customer this incentive was earned from â€” set for visa
   // incentives, null for Hajj/Umrah (those already carry the customer via
   // their registration).
   customerId String?
@@ -2281,19 +2300,19 @@ enum IncentivePolicyType {
  * Configurable incentive policy an admin attaches to a VisaService (or
  * leaves unset, in which case DEFAULT_INCENTIVE_POLICY in
  * visa-incentives.service.ts applies). `config` holds the type-specific
- * parameters — kept as JSON rather than one column per policy type because
+ * parameters â€” kept as JSON rather than one column per policy type because
  * the shape genuinely varies:
  * FULL_MARGIN             {}
  * PERCENT_OF_MARGIN       { "percent": 50 }
  * FIXED_AMOUNT            { "amount": 50000 }
  * STAFF_COMPANY_SPLIT     { "staffPercent": 70 }
  * STAFF_BRANCH_COMPANY_SPLIT { "staffPercent": 60, "branchPercent": 15 }
- * CUSTOM                  { "amount": 50000 } or { "percent": 30 } — an
+ * CUSTOM                  { "amount": 50000 } or { "percent": 30 } â€” an
  * admin-labeled variant of one of the above, kept
  * distinct so reporting can tell "we picked a
  * bespoke number for this service" apart from the
  * standard presets.
- * Only the staff share is ever recorded as a StaffIncentive row — the
+ * Only the staff share is ever recorded as a StaffIncentive row â€” the
  * "company"/"branch" shares are the remainder of the margin, implicit
  * rather than posted as their own ledger entries (this system has no
  * branch-level P&L ledger to post them into yet).
@@ -2329,7 +2348,7 @@ enum PayoutStatus {
  * One payout attempt against an APPROVED StaffIncentive. Deliberately
  * separate from StaffIncentive (same reasoning as ManualPaymentSubmission
  * vs Payment): the incentive's APPROVED status doesn't move money by
- * itself, only a successful StaffPayout does — see
+ * itself, only a successful StaffPayout does â€” see
  * StaffPayoutsService.attemptPayout(). A failed attempt never deletes the
  * money owed; it just leaves the incentive payable again for retry.
  */
@@ -2347,7 +2366,7 @@ model StaffPayout {
 
   status PayoutStatus @default(PENDING)
 
-  // "mock" today — see StaffPayoutProviderPort; a real bank-transfer/payroll
+  // "mock" today â€” see StaffPayoutProviderPort; a real bank-transfer/payroll
   // API is a DI-binding change away, same pattern as every other provider
   // in this codebase (Flight/Payment/Notification).
   provider          String
@@ -2366,13 +2385,13 @@ model StaffPayout {
 }
 
 // ---------------------------------------------------------------------------
-// Integration credentials — lets an admin paste real API keys (Duffel,
+// Integration credentials â€” lets an admin paste real API keys (Duffel,
 // Sabre, Amadeus, Paystack, OPay, SMTP) through /admin/integrations instead
 // of SSHing into the server to edit .env.prod. One row per (category,
 // provider); `config` holds provider-specific secret fields as JSON (never
-// echoed back to the client — see IntegrationsService). Which provider is
+// echoed back to the client â€” see IntegrationsService). Which provider is
 // active per category is a runtime setting (isActive), not a deploy-time
-// env var — FlightProviderRouter/PaymentProviderRouter/
+// env var â€” FlightProviderRouter/PaymentProviderRouter/
 // NotificationProviderRouter re-check this on every call, so flipping the
 // switch here takes effect immediately, no restart needed. The FLIGHT_
 // PROVIDER/PAYMENT_PROVIDER/NOTIFICATION_PROVIDER env vars remain the
@@ -2383,11 +2402,11 @@ enum IntegrationCategory {
   NOTIFICATION
   HOTEL
   VISA
-  // Phase 13 — reuses this same credential store/admin UI for the AI
+  // Phase 13 â€” reuses this same credential store/admin UI for the AI
   // provider's API key/model/limits rather than a parallel settings
   // mechanism (see AiProviderRouter).
   AI
-  // Phase 14 — same reasoning, for WhatsAppProviderRouter.
+  // Phase 14 â€” same reasoning, for WhatsAppProviderRouter.
   WHATSAPP
 }
 
@@ -2409,7 +2428,7 @@ enum AiUsageStatus {
   // The AI provider picked a query from AnalyticsQueryRegistry's allowlist
   // and it ran successfully.
   MATCHED
-  // The AI provider didn't recognize the question as any known query — a
+  // The AI provider didn't recognize the question as any known query â€” a
   // real, expected outcome (spec #37's "never fabricate certainty"), not
   // an error.
   UNMATCHED
@@ -2418,10 +2437,10 @@ enum AiUsageStatus {
 }
 
 /**
- * Phase 13 spec #40 — an audit trail of AI usage, deliberately separate
+ * Phase 13 spec #40 â€” an audit trail of AI usage, deliberately separate
  * from AuditLog: this logs *requests to the AI layer itself* (a question,
  * which provider/model answered it, whether it matched a known query),
- * never the actual business data an answer surfaced — that's already
+ * never the actual business data an answer surfaced â€” that's already
  * covered by whatever service executed the matched query. `question` is
  * the caller's own free-text input, kept short server-side (never a full
  * prompt/system-message dump) so this stays a usage log, not a transcript
@@ -2435,7 +2454,7 @@ model AiUsageLog {
   companyId  String?
   company    Company?  @relation(fields: [companyId], references: [id], onDelete: SetNull)
 
-  requestType String // "analytics_query" — more assistant types append here later, never rename existing values
+  requestType String // "analytics_query" â€” more assistant types append here later, never rename existing values
   provider    String // "mock" | "openai-compatible"
   model       String?
 
@@ -2453,16 +2472,16 @@ model AiUsageLog {
 }
 
 // ---------------------------------------------------------------------------
-// Phase 14 — WhatsApp conversation engine. Deliberately scoped: this is the
+// Phase 14 â€” WhatsApp conversation engine. Deliberately scoped: this is the
 // foundation (provider abstraction, conversations/messages, consent, OTP
 // linking, webhook idempotency) plus one real capability (booking lookup),
 // not the full 136-item spec (no separate Template/Automation/Campaign/
-// Media models yet — those are real, larger subsystems layered on top of
+// Media models yet â€” those are real, larger subsystems layered on top of
 // this once it's proven). WhatsApp is a CHANNEL on top of the existing
 // ERP, never a second source of truth: it reuses Customer (including the
-// existing `whatsapp` field for the number itself — only opt-in/verification
+// existing `whatsapp` field for the number itself â€” only opt-in/verification
 // state is new here), NotificationPreferencesService's existing
-// `whatsappEnabled` toggle (a DIFFERENT concern — see WhatsAppConsent's own
+// `whatsappEnabled` toggle (a DIFFERENT concern â€” see WhatsAppConsent's own
 // comment), CustomerTimelineEvent for CRM history, and FlightsService for
 // booking data.
 // ---------------------------------------------------------------------------
@@ -2510,7 +2529,7 @@ enum WhatsAppConsentStatus {
 }
 
 /**
- * One thread per customer phone number per company — the unit staff work
+ * One thread per customer phone number per company â€” the unit staff work
  * from in the inbox. `customerId` is nullable because a message can arrive
  * from a number with no matching Customer yet (identification happens
  * server-side by phone lookup, never trusted from the message itself).
@@ -2525,7 +2544,7 @@ model WhatsAppConversation {
 
   customerId  String?
   customer    Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  // E.164 (the WhatsApp wa_id) — the raw join key before/without a matched
+  // E.164 (the WhatsApp wa_id) â€” the raw join key before/without a matched
   // Customer, and still authoritative even after one is matched.
   phoneNumber String
 
@@ -2534,7 +2553,7 @@ model WhatsAppConversation {
   assignedStaff   Staff?                     @relation(fields: [assignedStaffId], references: [id], onDelete: SetNull)
   language        String?
 
-  // Spec #85 — staff takeover suppresses the self-service menu/automation
+  // Spec #85 â€” staff takeover suppresses the self-service menu/automation
   // for this conversation until released, without touching `status`
   // (which staff also drive for triage/SLA, a separate concern).
   automationPaused Boolean @default(false)
@@ -2562,7 +2581,7 @@ model WhatsAppMessage {
   conversationId String
   conversation   WhatsAppConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
-  // The provider's own message id — null until an outbound send actually
+  // The provider's own message id â€” null until an outbound send actually
   // returns one, or absent on some inbound event shapes. Used for
   // reconciling delivery/read status webhooks back to the right row.
   providerMessageId String? @unique
@@ -2573,7 +2592,7 @@ model WhatsAppMessage {
   mediaUrl      String?
   mediaMimeType String?
 
-  // Spec #87 — an internal note is stored as a message so it appears
+  // Spec #87 â€” an internal note is stored as a message so it appears
   // in-thread for staff, but is never included in anything sent to the
   // provider/customer; every read path serving customer-visible content
   // must filter it out explicitly.
@@ -2588,7 +2607,7 @@ model WhatsAppMessage {
   failedAt      DateTime?
   failureReason String?
 
-  // Spec #43 — deterministic key (e.g. "booking-ticketed:{bookingId}") for
+  // Spec #43 â€” deterministic key (e.g. "booking-ticketed:{bookingId}") for
   // automated/triggered sends, so a restarted job can't double-send.
   // Null for ordinary staff replies, which have no natural dedupe key.
   idempotencyKey String? @unique
@@ -2628,7 +2647,7 @@ model WhatsAppConsent {
 }
 
 /**
- * Spec #13/#43 — every provider webhook call lands here first, keyed by
+ * Spec #13/#43 â€” every provider webhook call lands here first, keyed by
  * the provider's own event id (or a payload hash when the provider gives
  * none), before any business processing runs. The unique constraint IS
  * the idempotency guarantee: a redelivered webhook fails the insert and
@@ -2652,11 +2671,11 @@ model WhatsAppWebhookEvent {
 }
 
 /**
- * Phase 14 spec #7/#8 — short-lived OTP for linking a WhatsApp
+ * Phase 14 spec #7/#8 â€” short-lived OTP for linking a WhatsApp
  * conversation to an existing customer account before any sensitive data
  * (booking details, documents, payment info) is shown over the channel.
- * `codeHash` never stores the plaintext code — same discipline as
- * password/refresh-token hashing elsewhere in this codebase — and the
+ * `codeHash` never stores the plaintext code â€” same discipline as
+ * password/refresh-token hashing elsewhere in this codebase â€” and the
  * code itself is never written to logs or audit metadata.
  */
 model WhatsAppOtpChallenge {
@@ -2674,7 +2693,7 @@ model WhatsAppOtpChallenge {
 }
 
 // ---------------------------------------------------------------------------
-// Hotel booking — same provider-abstraction / search / book / invoice shape
+// Hotel booking â€” same provider-abstraction / search / book / invoice shape
 // as flights (see FlightBooking above and HotelProviderPort), for the
 // "Domestic and international hotel stays" module.
 // ---------------------------------------------------------------------------
@@ -2736,7 +2755,7 @@ enum TravelPackageCategory {
 }
 
 /**
- * Admin-managed hotel catalog (spec #1) — the "Manual hotel inventory"
+ * Admin-managed hotel catalog (spec #1) â€” the "Manual hotel inventory"
  * branch of the provider abstraction (spec #4): CatalogHotelProviderService
  * implements the exact same HotelProviderPort as the mock/future-real
  * providers, searching these rows instead of a remote API. Same reasoning
@@ -2780,7 +2799,7 @@ model Hotel {
 }
 
 /**
- * One bookable room product at a Hotel — cost/price live here exactly like
+ * One bookable room product at a Hotel â€” cost/price live here exactly like
  * VisaService.companyCost/sellingPrice; margin is computed at read time
  * (never stored), same "never hard-coded" principle as Phase 4's flight
  * markup. Prices are per room-night; HotelsService multiplies by nights x
@@ -2792,7 +2811,7 @@ model HotelRoomType {
   hotel   Hotel  @relation(fields: [hotelId], references: [id], onDelete: Cascade)
 
   name         String // "Deluxe Double", "Executive Suite", ...
-  category     String // SINGLE/DOUBLE/TWIN/TRIPLE/QUAD/SUITE/FAMILY/VIP — free text, not an enum, so a hotel can name its own categories
+  category     String // SINGLE/DOUBLE/TWIN/TRIPLE/QUAD/SUITE/FAMILY/VIP â€” free text, not an enum, so a hotel can name its own categories
   description  String?
   capacity     Int
   bedType      String?
@@ -2800,7 +2819,7 @@ model HotelRoomType {
   mealPlan     MealPlan @default(ROOM_ONLY)
 
   supplierCost Int // per room-night, whole currency units
-  sellingPrice Int // per room-night — margin = sellingPrice - supplierCost
+  sellingPrice Int // per room-night â€” margin = sellingPrice - supplierCost
   currency     String @default("NGN")
 
   totalRooms        Int     @default(1) // simple availability count, not date-ranged inventory
@@ -2813,7 +2832,7 @@ model HotelRoomType {
 
   bookings HotelBooking[]
 
-  // Phase 17 — see RatePlan/HotelAllotment's own doc comments for why
+  // Phase 17 â€” see RatePlan/HotelAllotment's own doc comments for why
   // these are tenant-scoped rows hanging off this platform-wide room
   // type, not the other way around.
   ratePlans  RatePlan[]
@@ -2871,7 +2890,7 @@ model HotelRefund {
 }
 
 /**
- * Package builder (spec #11-#14) — a staff-composed bundle of components
+ * Package builder (spec #11-#14) â€” a staff-composed bundle of components
  * (flight/hotel/visa/transport/...), each snapshotted with its own
  * cost/price so the package total, margin, and staff incentive all derive
  * from the same numbers a customer sees, never a second guess at pricing.
@@ -2894,7 +2913,7 @@ model TravelPackage {
   hajjPackageId  String?
   umrahPackageId String?
 
-  totalCost  Int // sum of component costs — computed at creation, snapshotted
+  totalCost  Int // sum of component costs â€” computed at creation, snapshotted
   totalPrice Int // sum of component selling prices
   currency   String @default("NGN")
 
@@ -2968,12 +2987,12 @@ model HotelBooking {
   rooms        Int
   guests       Int
 
-  // Full offer snapshot as returned by the provider at booking time — same
+  // Full offer snapshot as returned by the provider at booking time â€” same
   // reasoning as FlightBooking.itinerary.
   offerSnapshot Json
 
   // Set when the offer came from the internal Hotel/HotelRoomType catalog
-  // (the CATALOG provider) rather than an external search provider — null
+  // (the CATALOG provider) rather than an external search provider â€” null
   // for a MOCK-provider booking, same nullable/optional shape as
   // FlightBooking.pricingRuleId.
   hotelId       String?
@@ -2981,17 +3000,17 @@ model HotelBooking {
   roomTypeId    String?
   hotelRoomType HotelRoomType? @relation(fields: [roomTypeId], references: [id], onDelete: SetNull)
 
-  // Costing snapshot — same "never recompute later" principle as every
+  // Costing snapshot â€” same "never recompute later" principle as every
   // other module's *Snapshot fields. Null for a MOCK-provider booking
   // (no internal cost to know), always set for a CATALOG booking.
   supplierCost Int?
   markupAmount Int?
 
-  // Phase 17 — true when this booking successfully claimed a night against
+  // Phase 17 â€” true when this booking successfully claimed a night against
   // a HotelAllotment row (see HotelAllotment's own doc comment) at creation
   // time. Recorded explicitly rather than re-derived at cancellation time,
   // since the allotment configuration for this room type may have changed
-  // (or been added/removed) between booking and cancellation — cancelling
+  // (or been added/removed) between booking and cancellation â€” cancelling
   // must release exactly what THIS booking actually claimed, never guess
   // based on today's config.
   usedAllotment Boolean @default(false)
@@ -3020,17 +3039,17 @@ model HotelBooking {
   @@index([bookedByStaffId])
   @@index([hotelId])
   @@index([roomTypeId])
-  // Phase 20 — hotel bookings had no status, branch or date index.
+  // Phase 20 â€” hotel bookings had no status, branch or date index.
   @@index([status, createdAt])
   @@index([branchId])
   @@map("hotel_bookings")
 }
 
 // ============================================================================
-// Phase 17 — Hotel rate-plan management and date-ranged allotment inventory.
+// Phase 17 â€” Hotel rate-plan management and date-ranged allotment inventory.
 //
 // Hotel/HotelRoomType (above) are platform-wide catalogs with no companyId
-// of their own (see Hotel's own doc comment) — exactly the situation
+// of their own (see Hotel's own doc comment) â€” exactly the situation
 // Supplier's doc comment already reasons through for Phase 16. RatePlan and
 // HotelAllotment are therefore tenant-scoped (companyId, mandatory) and link
 // to HotelRoomType via a plain one-directional foreign key, never the other
@@ -3039,30 +3058,30 @@ model HotelBooking {
 // hotel selling independent allotments to several travel agencies.
 //
 // Neither model is consulted by the public, unauthenticated search endpoint
-// (HotelsController.search is @Public() — there is no tenant to resolve a
+// (HotelsController.search is @Public() â€” there is no tenant to resolve a
 // company-specific rate/allotment against for an anonymous request, and
 // changing that would be a much larger, separate change to how this
 // multi-tenant platform resolves a caller's company from a public request).
-// Both are resolved instead at booking time, once a customerId — and
-// through it, a companyId — is always known: see HotelsService.createBooking
+// Both are resolved instead at booking time, once a customerId â€” and
+// through it, a companyId â€” is always known: see HotelsService.createBooking
 // for where this plugs in. Customer-facing price is never altered by a rate
 // plan; only the internal supplierCost/margin calculation is. Committed to
 // production before this comment was: no existing overselling protection
-// (HotelRoomType.totalRooms was never checked against existing bookings) —
+// (HotelRoomType.totalRooms was never checked against existing bookings) â€”
 // this feature closes that gap for room types a company has actually
 // configured an allotment for, not for every room type platform-wide (a
 // separate, smaller fix, deliberately not attempted here).
 // ============================================================================
 
 /**
- * Spec #5 — a company's negotiated per-room-night pricing for one room
+ * Spec #5 â€” a company's negotiated per-room-night pricing for one room
  * type, over a date window. Deliberately NOT used to change the price a
  * customer already saw at search time (HotelRoomType.sellingPrice stays
- * the one customer-facing number) — its role in this increment is the
+ * the one customer-facing number) â€” its role in this increment is the
  * internal supplierCost figure HotelsService.resolveSupplierCost() uses
  * for margin tracking, once a company-specific plan matches the stay.
  * `grossPrice` is captured for completeness (spec #5 lists it) but not
- * yet consumed by any booking-flow code — a real future use (e.g.
+ * yet consumed by any booking-flow code â€” a real future use (e.g.
  * repricing an offer against this instead of the flat catalog price) is
  * a separate, larger change.
  * Versioned by convention, not by database constraint: create a new row
@@ -3070,7 +3089,7 @@ model HotelBooking {
  * fields, same "never overwrite historical commercial terms" discipline
  * as SupplierContract. A single continuous effectiveFrom/effectiveTo
  * window per row means true day-of-week (weekday vs. weekend) pricing
- * within one season needs several narrow-window rows rather than one —
+ * within one season needs several narrow-window rows rather than one â€”
  * a known simplification, not full calendar-grid pricing.
  */
 model RatePlan {
@@ -3090,8 +3109,8 @@ model RatePlan {
   occupancy Int?
 
   currency   String @default("NGN")
-  netPrice   Int // per room-night — what this company is charged
-  grossPrice Int? // per room-night — informational reference sell price, see doc comment above
+  netPrice   Int // per room-night â€” what this company is charged
+  grossPrice Int? // per room-night â€” informational reference sell price, see doc comment above
 
   commissionPercent Float?
   taxPercent        Float?
@@ -3122,18 +3141,18 @@ model RatePlan {
 }
 
 /**
- * Spec #6/#7 — one row per (company, room type, calendar day). A stay of
+ * Spec #6/#7 â€” one row per (company, room type, calendar day). A stay of
  * N nights claims N consecutive rows. `date` is always normalized to
  * midnight UTC by the service layer, never a caller-supplied arbitrary
  * timestamp, so the unique constraint below reliably means "one row per
  * day" rather than depending on every caller passing an already-truncated
  * value.
  * remaining = totalAllocated - bookedCount - heldCount - blockedCount,
- * computed on read (spec #7's own formula) — never a separately-stored
+ * computed on read (spec #7's own formula) â€” never a separately-stored
  * column, so it can never drift from the counters it's derived from.
  * Claiming a night is a single atomic UPDATE guarded by this same
  * arithmetic in its WHERE clause (see HotelAllotmentsService.claimNights)
- * — the multi-column comparison Prisma's query builder can't express is
+ * â€” the multi-column comparison Prisma's query builder can't express is
  * the one deliberate, narrow use of raw SQL in this feature, mirroring
  * PaymentIntent's updateMany-based atomic claim (this codebase's existing
  * precedent for "only the caller that actually changes the row proceeds")
@@ -3148,7 +3167,7 @@ model HotelAllotment {
   roomTypeId String
   roomType   HotelRoomType @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
 
-  date DateTime // date-only semantics — always midnight UTC
+  date DateTime // date-only semantics â€” always midnight UTC
 
   totalAllocated Int
   bookedCount    Int @default(0)
@@ -3171,7 +3190,7 @@ model HotelAllotment {
 }
 
 // ---------------------------------------------------------------------------
-// Vehicle rental — car, van, or bus, with or without a driver. Nigerian car
+// Vehicle rental â€” car, van, or bus, with or without a driver. Nigerian car
 // hire is overwhelmingly chauffeur-driven, so withDriver defaults true
 // rather than being an afterthought.
 // ---------------------------------------------------------------------------
@@ -3232,11 +3251,11 @@ model VehicleRental {
 }
 
 // ---------------------------------------------------------------------------
-// Visa Processing — document collection + staff-tracked application status
+// Visa Processing â€” document collection + staff-tracked application status
 // for a single applicant (the customer or one of their family members).
 // Deliberately reuses the existing CustomerDocument/FamilyMemberDocument
 // upload pipeline (DocumentType already has PASSPORT/VISA/PHOTO) instead of
-// a separate upload path — an application just points at whichever
+// a separate upload path â€” an application just points at whichever
 // customer/family member the documents already live under. Generates one
 // Invoice for the processing fee, same shape as HotelBooking/VehicleRental.
 // ---------------------------------------------------------------------------
@@ -3252,7 +3271,7 @@ enum VisaType {
 }
 
 enum VisaApplicationStatus {
-  // Phase 2 statuses — kept exactly as-is so existing rows/history and the
+  // Phase 2 statuses â€” kept exactly as-is so existing rows/history and the
   // Phase 2 own/admin controllers keep working unmodified.
   SUBMITTED
   IN_REVIEW
@@ -3261,7 +3280,7 @@ enum VisaApplicationStatus {
   REJECTED
   ISSUED
   CANCELLED
-  // Phase 3 additions — the richer workflow VisaWorkflowService drives for
+  // Phase 3 additions â€” the richer workflow VisaWorkflowService drives for
   // any application created against a VisaService (the catalog). Appended
   // rather than replacing the Phase 2 set for the same reason DocumentType
   // was appended to above: Postgres enum values are cheap to add, risky to
@@ -3277,7 +3296,7 @@ enum VisaApplicationStatus {
   PROCESSING
   ADDITIONAL_INFO_REQUIRED
   COMPLETED
-  // Phase 9 — an issued visa whose expiryDate (see VisaApplication) has
+  // Phase 9 â€” an issued visa whose expiryDate (see VisaApplication) has
   // passed; set by the expiry-tracking sweep (VisaOpsAutomationService),
   // never by staff directly. Appended, same reasoning as every other enum
   // extension in this file.
@@ -3293,15 +3312,15 @@ enum VisaServiceStatus {
 }
 
 /**
- * The visa "product catalog" — what Phase 3 adds on top of Phase 2's
+ * The visa "product catalog" â€” what Phase 3 adds on top of Phase 2's
  * free-text destinationCountry/visaType. A VisaApplication may optionally
  * point at one of these (visaServiceId); when it does, companyCost/
  * sellingPrice/margin are snapshotted onto the application at submission
  * time (see VisaApplicationsService.submit) so later catalog price changes
- * never retroactively alter an already-submitted application's numbers —
+ * never retroactively alter an already-submitted application's numbers â€”
  * same "snapshot what was actually agreed" principle as
  * FlightBooking.itinerary or HotelBooking.offerSnapshot.
- * margin is deliberately NOT a stored column — it's always
+ * margin is deliberately NOT a stored column â€” it's always
  * `sellingPrice - companyCost`, computed wherever it's needed (API
  * responses, reports), the same "the source of truth is the inputs, not a
  * cached derivation" principle as Wallet's computed-on-read balance.
@@ -3311,7 +3330,7 @@ model VisaService {
   serviceCode String @unique // e.g. "VS-UK-TOURIST-001"
 
   country      String
-  visaType     String // free-text, not the VisaType enum — the real world has far more visa categories than that fixed set covers
+  visaType     String // free-text, not the VisaType enum â€” the real world has far more visa categories than that fixed set covers
   visaCategory String?
   description  String?
 
@@ -3322,7 +3341,7 @@ model VisaService {
 
   supplierName String?
   supplierCost Int? // what the supplier/embassy/agent charges Alnajoum, whole currency units
-  companyCost  Int // Alnajoum's all-in cost (>= supplierCost when set) — what margin is computed against
+  companyCost  Int // Alnajoum's all-in cost (>= supplierCost when set) â€” what margin is computed against
   sellingPrice Int // what the customer is charged
   currency     String  @default("NGN")
 
@@ -3336,11 +3355,11 @@ model VisaService {
   isAvailable        Boolean           @default(true)
   status             VisaServiceStatus @default(DRAFT)
 
-  // The "business configuration requires a guarantor" switch (spec #6) —
+  // The "business configuration requires a guarantor" switch (spec #6) â€”
   // defaults true since most visa types in this business genuinely need
   // one; an admin can turn it off per service (e.g. a low-risk transit
   // visa). A staff-recorded exemption on a specific application
-  // (VisaApplication.guarantorExempt) can still override this per-case —
+  // (VisaApplication.guarantorExempt) can still override this per-case â€”
   // see VisaService.isGuarantorRequired() in visa.service.ts.
   requiresGuarantor Boolean @default(true)
 
@@ -3367,7 +3386,7 @@ enum ApprovalStatus {
 }
 
 /**
- * A guarantor/sponsor vouching for an applicant — required by
+ * A guarantor/sponsor vouching for an applicant â€” required by
  * VisaWorkflowService.isGuarantorRequired() unless the applicant is staff
  * or the service is configured as exempt. One guarantor is scoped to one
  * application (not reused across applications) since the responsibility
@@ -3416,7 +3435,7 @@ enum VisaDocumentStatus {
 
 /**
  * A document attached to a specific visa application (or, when
- * guarantorId is set instead, to a guarantor) — distinct from the older
+ * guarantorId is set instead, to a guarantor) â€” distinct from the older
  * CustomerDocument/FamilyMemberDocument (which live on the profile, not
  * tied to one application) because Phase 3 needs per-application
  * verification status and expiry tracking that a profile-level document
@@ -3458,7 +3477,7 @@ model VisaDocument {
 }
 
 /**
- * Staff-only internal note thread on an application — "Add internal
+ * Staff-only internal note thread on an application â€” "Add internal
  * notes" from the spec, kept as an append-only list (like AuditLog)
  * rather than a single overwritable field so the review history is never
  * lost.
@@ -3486,7 +3505,7 @@ model VisaApplication {
   customerId String
   customer   Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
 
-  // Exactly one applicant per application — set when it's for a family
+  // Exactly one applicant per application â€” set when it's for a family
   // member rather than the customer themself, same shape as
   // FlightBookingPassenger/HajjRegistrationPilgrim.
   familyMemberId String?
@@ -3497,7 +3516,7 @@ model VisaApplication {
   appliedByStaffId String?
   appliedByStaff   Staff?  @relation(fields: [appliedByStaffId], references: [id], onDelete: SetNull)
 
-  // The visa officer currently responsible for this application — distinct
+  // The visa officer currently responsible for this application â€” distinct
   // from appliedByStaffId (who submitted it, often a different person from
   // whoever processes it). Set via VisaWorkflowService.assign(), gated by
   // the visa:assign permission.
@@ -3514,14 +3533,14 @@ model VisaApplication {
   applicantPassportNumber String?
 
   status    VisaApplicationStatus @default(SUBMITTED)
-  // Latest staff-visible note — what's missing, why it was rejected, etc.
+  // Latest staff-visible note â€” what's missing, why it was rejected, etc.
   // Phase 1 tracks only the current status + note (like HotelBooking/
   // VehicleRental's single `status` column); a full transition history would
   // be a natural follow-up once this is in real use.
   staffNote String?
 
   currency    String
-  totalAmount Int // processing fee, whole currency units — see VISA_PROCESSING_FEES
+  totalAmount Int // processing fee, whole currency units â€” see VISA_PROCESSING_FEES
 
   notes String? // free-text from the applicant at submission time
 
@@ -3531,7 +3550,7 @@ model VisaApplication {
   visaServiceId String?
   visaService   VisaService? @relation(fields: [visaServiceId], references: [id], onDelete: SetNull)
 
-  // Snapshotted from VisaService at submission time — see VisaService's
+  // Snapshotted from VisaService at submission time â€” see VisaService's
   // own doc comment for why these aren't just re-read from the catalog.
   companyCostSnapshot  Int?
   sellingPriceSnapshot Int?
@@ -3540,7 +3559,7 @@ model VisaApplication {
   guarantor             Guarantor? @relation(fields: [guarantorId], references: [id], onDelete: SetNull)
   guarantorRequired     Boolean    @default(false)
   // A staff-authorized exemption from an otherwise-required guarantor
-  // (e.g. the applicant is a known staff member or VIP) — never
+  // (e.g. the applicant is a known staff member or VIP) â€” never
   // settable by the customer themselves; always audited when set (see
   // VisaService.submit()).
   guarantorExempt       Boolean    @default(false)
@@ -3553,20 +3572,20 @@ model VisaApplication {
   isOfflineEntry Boolean @default(false)
   offlineReason  String?
 
-  // --- Phase 9 additions — all nullable/defaulted so every existing row
+  // --- Phase 9 additions â€” all nullable/defaulted so every existing row
   // stays valid without a backfill. ---
 
   // Snapshotted from CountryVisaRule at submission time (same "never let a
   // later config change retroactively alter an already-submitted
-  // application" principle as companyCostSnapshot above) — the number of
+  // application" principle as companyCostSnapshot above) â€” the number of
   // days used to compute slaDueAt below.
   slaTargetDays Int?
   // Set once the application enters UNDER_REVIEW (see VisaApplicationsService
-  // / VisaSlaService) — "expected completion", same shape as
+  // / VisaSlaService) â€” "expected completion", same shape as
   // SupportTicket.slaResponseDueAt from Phase 7.
   slaDueAt      DateTime?
 
-  // Spec #26 — set once a visa is actually issued (VisaSubmissionsService
+  // Spec #26 â€” set once a visa is actually issued (VisaSubmissionsService
   // records these from the provider's/embassy's response, never guessed).
   issueDate        DateTime?
   expiryDate       DateTime?
@@ -3583,7 +3602,7 @@ model VisaApplication {
   providerMessages    VisaProviderMessage[]
   checklistExceptions DocumentChecklistException[]
   refund              VisaRefund?
-  // Linked to StaffIncentive by sourceType "VISA_APPLICATION" + sourceId —
+  // Linked to StaffIncentive by sourceType "VISA_APPLICATION" + sourceId â€”
   // a polymorphic reference (not a Prisma relation) matching how
   // HAJJ_REGISTRATION/UMRAH_REGISTRATION incentives already work; see
   // VisaIncentivesService.
@@ -3597,14 +3616,14 @@ model VisaApplication {
 }
 
 // ---------------------------------------------------------------------------
-// Phase 9 — enterprise visa & immigration operations, built on top of
+// Phase 9 â€” enterprise visa & immigration operations, built on top of
 // everything above rather than beside it:
 //   - A "visa type" stays whatever free-text string VisaService.visaType
-//     already accepts — CountryVisaRule keys off the same string, no new
+//     already accepts â€” CountryVisaRule keys off the same string, no new
 //     enum, no hard-coded per-country logic anywhere in code.
 //   - The document checklist (spec #9) is computed live from
 //     CountryVisaRule + the existing CustomerDocument/FamilyMemberDocument/
-//     VisaDocument tables — never a stored, driftable copy — same
+//     VisaDocument tables â€” never a stored, driftable copy â€” same
 //     discipline as Customer360Service.segments() in Phase 7.
 //   - Guarantor, payment, and incentive logic are untouched; Phase 9 only
 //     adds the provider-submission and refund pieces that were genuinely
@@ -3613,7 +3632,7 @@ model VisaApplication {
 // ---------------------------------------------------------------------------
 
 /**
- * Per-country (optionally per-visa-type) configurable requirements —
+ * Per-country (optionally per-visa-type) configurable requirements â€”
  * spec #4. A row with visaType = "" (sentinel, not null) is that country's
  * fallback/default rule; a row with visaType set overrides it for that
  * specific type. CountryVisaRulesService.getApplicableRule() picks the more
@@ -3624,19 +3643,19 @@ model VisaApplication {
 model CountryVisaRule {
   id       String @id @default(cuid())
   country  String
-  // Matches VisaApplication.visaType's actual stored convention — always
+  // Matches VisaApplication.visaType's actual stored convention â€” always
   // one of the VisaType enum's literal values (e.g. "PILGRIMAGE",
   // "TOURIST"), since VisaService.submit() writes dto.visaType (the enum)
   // straight into that free-text column. NOT VisaService (the catalog
   // model)'s own separate, differently-cased visaType convention (e.g.
-  // "Pilgrimage") — getApplicableRule() is looked up against the
+  // "Pilgrimage") â€” getApplicableRule() is looked up against the
   // application, so this must key on the same values it holds.
   visaType String @default("") // "" = applies to every type for this country
 
   requiredDocumentTypes DocumentType[]
   optionalDocumentTypes DocumentType[]
 
-  minPassportValidityMonths Int? // spec #11 — never a hard-coded universal rule
+  minPassportValidityMonths Int? // spec #11 â€” never a hard-coded universal rule
   photoRequirements         String?
   guarantorRequired         Boolean @default(false)
 
@@ -3644,7 +3663,7 @@ model CountryVisaRule {
   appointmentRequired Boolean @default(false)
   insuranceRequired   Boolean @default(false)
 
-  feeAmount   Int? // informational default — VisaService pricing is still what's actually charged
+  feeAmount   Int? // informational default â€” VisaService pricing is still what's actually charged
   feeCurrency String?
 
   restrictions String?
@@ -3660,7 +3679,7 @@ model CountryVisaRule {
 }
 
 /**
- * Spec #9's "allow authorized administrators to configure exceptions" —
+ * Spec #9's "allow authorized administrators to configure exceptions" â€”
  * an audited, reasoned override letting a specific application submit
  * despite a missing mandatory document, without weakening the checklist
  * rule for every other application of the same type.
@@ -3684,12 +3703,12 @@ model DocumentChecklistException {
 }
 
 enum VisaProviderName {
-  MANUAL // staff record what an embassy/agent/visa center told them — no API
+  MANUAL // staff record what an embassy/agent/visa center told them â€” no API
   MOCK // deterministic simulated provider for localhost/demo/tests
 }
 
 /**
- * Spec #14 — the actual "submitted to the provider" event, distinct from a
+ * Spec #14 â€” the actual "submitted to the provider" event, distinct from a
  * staff member merely clicking a status dropdown. One row per submission
  * attempt (a resubmission after ADDITIONAL_INFO_REQUIRED creates a new
  * row, preserving history rather than overwriting it).
@@ -3705,7 +3724,7 @@ model VisaSubmission {
   provider          VisaProviderName
   externalReference String?
   // The provider's own status vocabulary, kept verbatim and separate from
-  // VisaApplication.status — spec #16: "do not blindly overwrite internal
+  // VisaApplication.status â€” spec #16: "do not blindly overwrite internal
   // statuses... record provider status separately where necessary".
   providerStatus    String?
   providerMessage   String?
@@ -3727,7 +3746,7 @@ enum ProviderMessageSeverity {
 }
 
 /**
- * Spec #17 — provider/visa-center messages surfaced to authorized staff, independent of the raw providerStatus string on VisaSubmission.
+ * Spec #17 â€” provider/visa-center messages surfaced to authorized staff, independent of the raw providerStatus string on VisaSubmission.
  */
 model VisaProviderMessage {
   id            String          @id @default(cuid())
@@ -3755,8 +3774,8 @@ enum VisaRefundStatus {
 }
 
 /**
- * Spec #23 — mirrors HotelRefund's exact shape and calculation
- * (refundAmount = amountPaid − supplierPenalty − agencyFee); posts through
+ * Spec #23 â€” mirrors HotelRefund's exact shape and calculation
+ * (refundAmount = amountPaid âˆ’ supplierPenalty âˆ’ agencyFee); posts through
  * the same FinancePostingService.postRefund/cancelIncentivesForSource used
  * by hotel/flight refunds rather than a new finance code path.
  */
@@ -3785,10 +3804,10 @@ model VisaRefund {
 }
 
 // ---------------------------------------------------------------------------
-// Corporate Travel — staff-managed booking on behalf of a corporate client's
+// Corporate Travel â€” staff-managed booking on behalf of a corporate client's
 // traveling employees, with one consolidated Invoice (one InvoiceLineItem
 // per traveler) covering the whole trip. Staff-only: corporate clients don't
-// get a customer portal login in this phase — "company-level booking on
+// get a customer portal login in this phase â€” "company-level booking on
 // behalf of staff travelers" is literally staff creating and managing these
 // on the client's behalf, reusing the existing Staff/Branch structure
 // (managedBranchId, bookedByStaffId) rather than inventing a parallel one.
@@ -3814,7 +3833,7 @@ model CorporateAccount {
   billingAddress     String?
   contactPersonName  String?
 
-  // Which Alnajoum branch manages this account — what "consolidated
+  // Which Alnajoum branch manages this account â€” what "consolidated
   // invoicing ... per branch" groups by in the admin view, alongside "per
   // company" (i.e. per CorporateAccount) grouping.
   managedBranchId String?
@@ -3822,18 +3841,18 @@ model CorporateAccount {
 
   isActive Boolean @default(true)
 
-  // Phase 10 spec #21 — corporate travel policy, enforced by
+  // Phase 10 spec #21 â€” corporate travel policy, enforced by
   // FlightsService.enforceCorporatePolicy whenever a flight booking links
   // to this account. Every field is optional/empty-means-unrestricted,
   // same "no rule configured = nothing blocks it" discipline as
-  // CountryVisaRule — a corporate account with no policy set behaves
+  // CountryVisaRule â€” a corporate account with no policy set behaves
   // exactly as before this phase.
   creditLimit         Int? // outstanding CorporateBooking total this account may carry before requiring approval
   maxFareAmount       Int? // no single flight booking on this account may exceed this, in `maxFareCurrency`
   maxFareCurrency     String?
   allowedCabinClasses CabinClass[] // empty = every cabin allowed
   preferredAirlines   String[] // IATA codes; empty = no preference enforced
-  requiresApproval    Boolean      @default(false) // every booking on this account needs staff sign-off (FlightBooking.corporateApprovalStatus) before ticketing — same ad-hoc per-module approval pattern as ManualPaymentSubmission/Guarantor, no shared approval-engine exists in this codebase
+  requiresApproval    Boolean      @default(false) // every booking on this account needs staff sign-off (FlightBooking.corporateApprovalStatus) before ticketing â€” same ad-hoc per-module approval pattern as ManualPaymentSubmission/Guarantor, no shared approval-engine exists in this codebase
   advanceBookingDays  Int? // minimum days before departure a booking must be made
 
   createdAt DateTime @default(now())
@@ -3880,8 +3899,8 @@ model CorporateBooking {
   bookedByStaffId String
   bookedByStaff   Staff  @relation(fields: [bookedByStaffId], references: [id], onDelete: Restrict)
 
-  // Free-text description of the trip as a whole, e.g. "Lagos–Abuja return
-  // flights, 12–15 Sept, 3 staff" — corporate bookings aggregate travelers
+  // Free-text description of the trip as a whole, e.g. "Lagosâ€“Abuja return
+  // flights, 12â€“15 Sept, 3 staff" â€” corporate bookings aggregate travelers
   // and amounts rather than searching a live provider offer, since what's
   // actually being booked (flights, hotels, ground transport, or a mix) is
   // arranged per traveler and only the consolidated total/invoice needs to
@@ -3912,7 +3931,7 @@ model CorporateBookingTraveler {
   travelerId String
   traveler   CorporateTraveler @relation(fields: [travelerId], references: [id], onDelete: Restrict)
 
-  // e.g. "Return flight LOS-ABV" — one consolidated-invoice line item per
+  // e.g. "Return flight LOS-ABV" â€” one consolidated-invoice line item per
   // traveler, snapshotted at booking time.
   description String
   amount      Int
@@ -3923,11 +3942,11 @@ model CorporateBookingTraveler {
 }
 
 // ---------------------------------------------------------------------------
-// Phase 6 — Enterprise finance: chart of accounts, double-entry ledger,
+// Phase 6 â€” Enterprise finance: chart of accounts, double-entry ledger,
 // expenses, supplier payables, company investment, daily closing, bank
 // reconciliation. Every module that already moves money (payments, wallet,
 // incentives/payouts, refunds) posts INTO this ledger through LedgerService
-// rather than getting its own parallel accounting — see finance.module.ts.
+// rather than getting its own parallel accounting â€” see finance.module.ts.
 // ---------------------------------------------------------------------------
 
 enum AccountType {
@@ -3940,7 +3959,7 @@ enum AccountType {
 
 /**
  * One line of the chart of accounts (spec #2). `code` is what application
- * code posts against — FinanceConstants.SYSTEM_ACCOUNT_CODES — so a system
+ * code posts against â€” FinanceConstants.SYSTEM_ACCOUNT_CODES â€” so a system
  * account's `code` must never be reassigned once seeded, the same rule this
  * codebase already applies to RBAC permission keys. isSystem just prevents
  * deleting/retyping one from the admin screen; an admin can still freely
@@ -3955,11 +3974,11 @@ model LedgerAccount {
   isSystem Boolean @default(true)
   isActive Boolean @default(true)
 
-  // Null = a company-wide account (the overwhelming majority — cash,
+  // Null = a company-wide account (the overwhelming majority â€” cash,
   // receivables, most revenue/expense lines). Set only when a report needs
   // to slice one account per branch (spec #21's branch accounting), which
   // this phase doesn't do by default to avoid needlessly fragmenting the
-  // chart of accounts — BranchAccountingService derives per-branch
+  // chart of accounts â€” BranchAccountingService derives per-branch
   // revenue/expense from the source records' own branchId instead.
   branchId String?
   branch   Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
@@ -3982,7 +4001,7 @@ enum JournalEntryStatus {
 
 /**
  * The double-entry ledger (spec #3). Deliberately a debit-account/
- * credit-account *pair* per row rather than an N-line journal — the spec's
+ * credit-account *pair* per row rather than an N-line journal â€” the spec's
  * own field list ("Debit account, Credit account, Amount...") describes
  * exactly this shape, and it makes an unbalanced entry structurally
  * impossible: there is no sum-of-debits-equals-sum-of-credits invariant to
@@ -3992,7 +4011,7 @@ enum JournalEntryStatus {
  * sharing the same `reference`.
  * Append-only: POSTED entries are never edited or deleted (spec #3's "never
  * permanently delete posted financial transactions"). A correction posts a
- * new entry with accounts swapped and links back via reversalOfId — see
+ * new entry with accounts swapped and links back via reversalOfId â€” see
  * LedgerService.reverseEntry().
  */
 model JournalEntry {
@@ -4007,17 +4026,17 @@ model JournalEntry {
   creditAccountId String
   creditAccount   LedgerAccount @relation("CreditAccount", fields: [creditAccountId], references: [id], onDelete: Restrict)
 
-  amount   Int // whole currency units, always positive — direction is which account is debit vs credit
+  amount   Int // whole currency units, always positive â€” direction is which account is debit vs credit
   currency String
 
   // Groups related legs of one business event (e.g. all entries posted for
-  // one Payment share its paymentReference) — not unique by itself, unlike
+  // one Payment share its paymentReference) â€” not unique by itself, unlike
   // Payment.paymentReference.
   reference   String
   description String
 
   // "PAYMENT" | "WALLET" | "INCENTIVE" | "PAYOUT" | "REFUND" | "EXPENSE" |
-  // "INVESTMENT" | "SUPPLIER_PAYMENT" | "MANUAL" — which module's code
+  // "INVESTMENT" | "SUPPLIER_PAYMENT" | "MANUAL" â€” which module's code
   // called LedgerService.post(), for filtering and for
   // ProfitAndLossService/CashFlowService to know how to bucket a row.
   sourceModule String
@@ -4056,7 +4075,7 @@ enum ExpenseStatus {
 
 /**
  * Spec #19. Only an APPROVED expense that's been marked PAID posts a ledger
- * entry (debit the chosen expense account, credit Cash/Bank) — see
+ * entry (debit the chosen expense account, credit Cash/Bank) â€” see
  * ExpensesService.approve()/markPaid(), mirroring how a ManualPaymentSubmission
  * has zero ledger effect until approved.
  */
@@ -4109,7 +4128,7 @@ enum InvestmentType {
 
 /**
  * Spec #15/#16: equity, never revenue. WITHDRAWAL (an owner draw) is its own
- * type rather than an Expense — reduces equity directly, distinct from an
+ * type rather than an Expense â€” reduces equity directly, distinct from an
  * operating expense, per spec #16's explicit warning not to conflate the two.
  */
 model CompanyInvestment {
@@ -4145,7 +4164,7 @@ enum SupplierPayableStatus {
 }
 
 /**
- * Spec #20. One row per booking's supplier cost obligation — created
+ * Spec #20. One row per booking's supplier cost obligation â€” created
  * automatically when a flight is ticketed / hotel booking is completed /
  * visa application's company cost is set (see SupplierPayablesService.
  * createFromBooking(), called from the existing ticketing/completion flows
@@ -4154,12 +4173,12 @@ enum SupplierPayableStatus {
 model SupplierPayable {
   id String @id @default(cuid())
 
-  // Phase 11 spec #2/#65 fix — resolved from the source booking's customer
+  // Phase 11 spec #2/#65 fix â€” resolved from the source booking's customer
   // at creation time (see FinancePostingService.postCostOfServiceForBooking)
   // rather than joined through sourceModule/sourceId at read time, since
   // that pointer is polymorphic and Prisma can't express a relation-based
   // filter across three different target tables. Kept even when
-  // flightSupplierId also resolves to a company — this is the company that
+  // flightSupplierId also resolves to a company â€” this is the company that
   // owes the money (the booking's), which is what actually matters here.
   companyId String
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -4168,19 +4187,19 @@ model SupplierPayable {
   sourceModule String // "FLIGHT_BOOKING" | "HOTEL_BOOKING" | "VISA_APPLICATION"
   sourceId     String
 
-  // Phase 10 — links this payable to a FlightSupplier master record when
+  // Phase 10 â€” links this payable to a FlightSupplier master record when
   // one exists for `supplierName`, so FlightSuppliersService.getBalance()
   // can compute a real per-supplier exposure. Null for every payable that
   // predates this phase or belongs to a supplier with no master record yet
-  // (Hotel/Visa suppliers, or a flight supplier not yet onboarded) — the
+  // (Hotel/Visa suppliers, or a flight supplier not yet onboarded) â€” the
   // existing supplierName free-text keeps working exactly as before.
   flightSupplierId String?
   flightSupplier   FlightSupplier? @relation(fields: [flightSupplierId], references: [id], onDelete: SetNull)
 
-  // Phase 16 — same best-effort-link-by-name pattern as flightSupplierId
+  // Phase 16 â€” same best-effort-link-by-name pattern as flightSupplierId
   // above, against the new domain-agnostic Supplier model instead (for
   // Hotel/Visa/Hajj/Umrah payables, which have never had a master record
-  // to link to until now — see Supplier's own doc comment). A payable can
+  // to link to until now â€” see Supplier's own doc comment). A payable can
   // have at most one of flightSupplierId/supplierId populated in
   // practice (FinancePostingService only searches FlightSupplier for a
   // FLIGHT_BOOKING payable), but both stay independently nullable rather
@@ -4231,14 +4250,14 @@ model SupplierPayment {
 }
 
 // ============================================================================
-// Phase 16 — Enterprise Supplier Marketplace foundation.
+// Phase 16 â€” Enterprise Supplier Marketplace foundation.
 //
 // FlightSupplier/FlightSupplierContract (above) already fully cover flight
-// commercial-supplier management (Phase 10/11) — this is NOT a replacement
+// commercial-supplier management (Phase 10/11) â€” this is NOT a replacement
 // or migration of that model, and flights keep using it exactly as before.
 // This is the domain-agnostic supplier master record that Hotel/Visa/Hajj/
 // Umrah have never had (SupplierPayable.supplierName has been free-text-only
-// for those domains since Phase 11 — see that model's own comment). Every
+// for those domains since Phase 11 â€” see that model's own comment). Every
 // design choice here (tenant-scoped, contract versioned separately from the
 // supplier row, balance computed live from SupplierPayable rather than
 // stored) deliberately mirrors FlightSupplier's already-proven shape.
@@ -4266,7 +4285,7 @@ enum SupplierType {
 }
 
 // Spec #3's onboarding workflow, modeled as a single status column rather
-// than a separate "application" table — SuppliersService enforces the
+// than a separate "application" table â€” SuppliersService enforces the
 // forward-only transition order (with SUSPENDED/TERMINATED reachable from
 // ACTIVE, and REACTIVATED going back to ACTIVE from SUSPENDED), same
 // "status column + a service method that validates the transition" pattern
@@ -4301,7 +4320,7 @@ enum SupplierRiskStatus {
 model Supplier {
   id String @id @default(cuid())
 
-  // Same tenant-isolation reasoning as FlightSupplier — a supplier's
+  // Same tenant-isolation reasoning as FlightSupplier â€” a supplier's
   // negotiated terms are commercially sensitive per-tenant data.
   companyId String
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -4320,7 +4339,7 @@ model Supplier {
 
   currency           String  @default("NGN")
   settlementCurrency String?
-  paymentTerms       String? // free text, e.g. "Net 30" — same convention as FlightSupplier.paymentTerms
+  paymentTerms       String? // free text, e.g. "Net 30" â€” same convention as FlightSupplier.paymentTerms
   settlementCycle    String?
   creditLimit        Int?
   depositRequired    Int?
@@ -4349,10 +4368,10 @@ model Supplier {
   payables  SupplierPayable[]
   ratePlans RatePlan[]
 
-  // Phase 16 spec #6/#11/#12 — deliberately does NOT link directly to
+  // Phase 16 spec #6/#11/#12 â€” deliberately does NOT link directly to
   // Hotel/VisaService/HajjPackage/UmrahPackage. Those are platform-wide
   // catalogs with no companyId of their own (see Hotel's own doc comment:
-  // "Admin-managed hotel catalog... same reasoning as VisaService" — the
+  // "Admin-managed hotel catalog... same reasoning as VisaService" â€” the
   // same is true of HajjPackage/UmrahPackage), while a Supplier is
   // correctly tenant-scoped exactly like FlightSupplier. Linking a
   // shared, cross-tenant catalog row to one specific company's supplier
@@ -4389,7 +4408,7 @@ model SupplierDocument {
   supplier   Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
 
   label    String // e.g. "Certificate of Incorporation", "Bank Verification Letter"
-  fileUrl  String // path under the existing document-storage abstraction (see document-storage.util.ts) — not a raw filesystem path
+  fileUrl  String // path under the existing document-storage abstraction (see document-storage.util.ts) â€” not a raw filesystem path
   mimeType String
 
   expiresAt DateTime? // spec #34's contract-expiry-alert follow-up reads this; not itself alerted on in this increment
@@ -4460,13 +4479,13 @@ enum DailyClosingStatus {
 /**
  * Spec #22. `summary` freezes the day's totals (cash/bank/online payments,
  * wallet movement, refunds, expenses, payouts, supplier payments) at close
- * time — DailyClosingService computes it fresh from the ledger and other
+ * time â€” DailyClosingService computes it fresh from the ledger and other
  * tables, then stores the snapshot rather than leaving it to be recomputed
  * (and silently drift) later. A closed day isn't literally read-only at the
  * database level (nothing in this codebase enforces that), but every
  * finance screen that lets you backdate/edit a financial record checks
  * DailyClosingService.isDateClosed() first and requires an explicit reversal
- * entry instead — see spec #22's "changes require authorized correction/
+ * entry instead â€” see spec #22's "changes require authorized correction/
  * reversal" and LedgerService.reverseEntry().
  */
 model DailyClosing {
@@ -4494,14 +4513,14 @@ model DailyClosing {
 }
 
 /**
- * Singleton (id is always "default") — configurable payout approval
+ * Singleton (id is always "default") â€” configurable payout approval
  * thresholds (spec #14). tier1Max is the ceiling a Finance Officer alone
  * can approve; between tier1Max and tier2Max additionally requires
  * FINANCE.APPROVE_HIGH_VALUE (Company Admin+); above tier2Max additionally
- * requires FINANCE.APPROVE_EXECUTIVE (Super Admin) — enforced in
+ * requires FINANCE.APPROVE_EXECUTIVE (Super Admin) â€” enforced in
  * VisaIncentivesService.approve() against the acting identity's permission
  * set, not a separate dual-signature workflow (a genuine simplification
- * from the spec's "multiple approvals" language — see the Phase 6 QA
+ * from the spec's "multiple approvals" language â€” see the Phase 6 QA
  * report's Known Limitations).
  */
 model FinanceSettings {
@@ -4524,7 +4543,7 @@ enum BankStatementLineStatus {
 /**
  * Spec #23. Lines can be entered manually (localhost / no bank-feed
  * integration exists yet) or imported from a CSV export of a bank
- * statement — either way they land here as UNMATCHED and Finance works
+ * statement â€” either way they land here as UNMATCHED and Finance works
  * through them via BankReconciliationService.match()/ignore().
  */
 model BankStatementLine {
@@ -4538,7 +4557,7 @@ model BankStatementLine {
 
   status BankStatementLineStatus @default(UNMATCHED)
 
-  // "PAYMENT" | "EXPENSE" | "SUPPLIER_PAYMENT" | "STAFF_PAYOUT" — loose
+  // "PAYMENT" | "EXPENSE" | "SUPPLIER_PAYMENT" | "STAFF_PAYOUT" â€” loose
   // match, same free-form pattern as WalletTransaction.invoiceId.
   matchedType String?
   matchedId   String?
@@ -4553,14 +4572,14 @@ model BankStatementLine {
 }
 
 // ---------------------------------------------------------------------------
-// Phase 7 — Enterprise CRM, customer support, communication & task management.
+// Phase 7 â€” Enterprise CRM, customer support, communication & task management.
 // Reuses everything already built rather than duplicating it: Customer
 // already carries assignedStaffId/assignedBranchId (used here for both
 // customers and, via its own copy, leads); NotificationsService/
 // NotificationProviderPort already IS the email/SMS/WhatsApp abstraction
 // spec #15/#17 ask for (MockNotificationProviderService already satisfies
 // spec #36's "testable without real credentials, logs would-be sends");
-// AuditService remains the system-action log — CustomerTimelineEvent below
+// AuditService remains the system-action log â€” CustomerTimelineEvent below
 // is deliberately a separate, customer-facing subset of "important events"
 // rather than a duplicate of it.
 // ---------------------------------------------------------------------------
@@ -4591,7 +4610,7 @@ enum LeadStatus {
 }
 
 /**
- * Configurable pipeline stages (spec #5) — an admin-managed ordered list,
+ * Configurable pipeline stages (spec #5) â€” an admin-managed ordered list,
  * not a hardcoded enum, since "administrators can create additional
  * stages" is explicit. Seeded with the spec's own 7 default stages (see
  * LeadsService.ensureDefaultStages(), idempotent like
@@ -4640,12 +4659,12 @@ model Lead {
   campaignId String?
   campaign   Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
 
-  // Set once converted — spec #6's "do not create duplicate customer
+  // Set once converted â€” spec #6's "do not create duplicate customer
   // records" / "preserve the lead history": the Lead row is never deleted
   // on conversion, only linked forward.
   // Deliberately NOT @unique: two separate leads (e.g. two enquiries months
   // apart) can both turn out to be the same real person and both get
-  // linked to the one deduplicated Customer they resolve to — spec #6's
+  // linked to the one deduplicated Customer they resolve to â€” spec #6's
   // "do not create duplicate customer records" is enforced by
   // LeadsService.convert()'s phone/email lookup, not by a DB constraint
   // that would wrongly forbid a second lead from ever reusing that customer.
@@ -4668,10 +4687,13 @@ model Lead {
   @@index([assignedStaffId])
   @@index([campaignId])
   @@map("leads")
+
+  // Phase 26
+  commContacts CommContact[]
 }
 
 /**
- * Stage-change / contact-attempt history — spec #6's "preserve the lead history" in practice.
+ * Stage-change / contact-attempt history â€” spec #6's "preserve the lead history" in practice.
  */
 model LeadActivity {
   id     String @id @default(cuid())
@@ -4725,7 +4747,7 @@ enum TaskRelatedType {
 
 /**
  * One Task model covers both spec #7 (Follow-Up System) and spec #8 (Staff
- * Task Management) — a follow-up IS a Task with relatedType FOLLOW_UP,
+ * Task Management) â€” a follow-up IS a Task with relatedType FOLLOW_UP,
  * rather than two parallel systems sharing the same staff/due-date/status/
  * priority shape. Spec #9 lists what auto-creates one (isAutoCreated=true).
  */
@@ -4785,7 +4807,7 @@ enum TicketPriority {
 }
 
 /**
- * Configurable categories (spec #11) — same admin-extendable-list pattern as LeadStage.
+ * Configurable categories (spec #11) â€” same admin-extendable-list pattern as LeadStage.
  */
 model SupportTicketCategory {
   id       String  @id @default(cuid())
@@ -4818,7 +4840,7 @@ model SupportTicket {
   status TicketStatus @default(OPEN)
 
   // SLA (spec #13) snapshotted at creation from the active SlaRule for this
-  // priority — a later rule-config change never reaches back and re-dates
+  // priority â€” a later rule-config change never reaches back and re-dates
   // an in-flight ticket's deadline.
   slaResponseDueAt DateTime?
   firstRespondedAt DateTime?
@@ -4837,7 +4859,7 @@ model SupportTicket {
   @@index([status])
   @@index([assignedStaffId])
   @@index([priority])
-  // Phase 20 — ticket analytics are by creation date.
+  // Phase 20 â€” ticket analytics are by creation date.
   @@index([createdAt])
   @@map("support_tickets")
 }
@@ -4849,11 +4871,11 @@ enum TicketMessageAuthorType {
 
 /**
  * Doubles as the customer-visible message thread AND the live-chat
- * transport (spec #14) — a "conversation" is a ticket whose messages
+ * transport (spec #14) â€” a "conversation" is a ticket whose messages
  * arrive close together; portals poll this list the same way
  * Notification.listForIdentity is already polled, rather than adding a
  * WebSocket gateway this codebase has never needed. isInternal is spec
- * #12's "clearly separate CUSTOMER MESSAGE from INTERNAL STAFF NOTE" —
+ * #12's "clearly separate CUSTOMER MESSAGE from INTERNAL STAFF NOTE" â€”
  * every customer-facing read path filters it out server-side.
  */
 model SupportTicketMessage {
@@ -4876,7 +4898,7 @@ model SupportTicketMessage {
 }
 
 /**
- * Spec #13 — configurable per-priority response deadline.
+ * Spec #13 â€” configurable per-priority response deadline.
  */
 model SlaRule {
   id              String         @id @default(cuid())
@@ -4887,7 +4909,7 @@ model SlaRule {
 }
 
 /**
- * Spec #25 — configurable, ordered escalation steps per priority.
+ * Spec #25 â€” configurable, ordered escalation steps per priority.
  */
 model EscalationRule {
   id String @id @default(cuid())
@@ -4920,7 +4942,7 @@ enum MessageTemplateChannel {
 }
 
 /**
- * Spec #22 — {{variable}} substitution only, never eval()'d: rendering
+ * Spec #22 â€” {{variable}} substitution only, never eval()'d: rendering
  * (TemplatesService.render) does one regex pass against a plain
  * string-to-string map and HTML-escapes every substituted value, so a
  * template can never execute code even if a variable's value looks like
@@ -4943,9 +4965,9 @@ model MessageTemplate {
 }
 
 /**
- * Spec #19 — per-identity channel opt-out. A NotificationType listed in
+ * Spec #19 â€” per-identity channel opt-out. A NotificationType listed in
  * MANDATORY_NOTIFICATION_TYPES (notifications constants) always sends
- * regardless of this row — "administrators can define mandatory
+ * regardless of this row â€” "administrators can define mandatory
  * notifications users cannot disable."
  */
 model NotificationPreference {
@@ -4957,7 +4979,7 @@ model NotificationPreference {
   smsEnabled      Boolean @default(true)
   whatsappEnabled Boolean @default(true)
   inAppEnabled    Boolean @default(true)
-  // Phase 18 — mobile push, same opt-out shape as every other channel.
+  // Phase 18 â€” mobile push, same opt-out shape as every other channel.
   pushEnabled     Boolean @default(true)
 
   updatedAt DateTime @updatedAt
@@ -4982,7 +5004,7 @@ model CustomerNote {
 }
 
 /**
- * Spec #3's free-form custom tags — the fixed segment categories (Hajj/Umrah/Visa/Flight/Hotel/New/Returning Customer) are computed from actual bookings in CrmService rather than stored, so they can never drift out of sync with reality.
+ * Spec #3's free-form custom tags â€” the fixed segment categories (Hajj/Umrah/Visa/Flight/Hotel/New/Returning Customer) are computed from actual bookings in CrmService rather than stored, so they can never drift out of sync with reality.
  */
 model CustomerTag {
   id   String @id @default(cuid())
@@ -5024,7 +5046,7 @@ enum TimelineEventType {
   FEEDBACK_SUBMITTED
   COMPLAINT_SUBMITTED
   STAFF_NOTE
-  // Phase 14 — a WhatsApp conversation starting is what lands on the
+  // Phase 14 â€” a WhatsApp conversation starting is what lands on the
   // timeline (not every individual message, which would flood it); see
   // WhatsAppConversationsService.
   WHATSAPP_CONVERSATION_STARTED
@@ -5032,7 +5054,7 @@ enum TimelineEventType {
 }
 
 /**
- * Spec #2 — a deliberately narrow, customer-facing subset of "important events" (not a duplicate of AuditLog, which stays the full system-action log).
+ * Spec #2 â€” a deliberately narrow, customer-facing subset of "important events" (not a duplicate of AuditLog, which stays the full system-action log).
  */
 model CustomerTimelineEvent {
   id         String   @id @default(cuid())
@@ -5054,7 +5076,7 @@ model CustomerTimelineEvent {
 }
 
 /**
- * Spec #23 — isApproved gates visibility; nothing publishes a rating/comment automatically.
+ * Spec #23 â€” isApproved gates visibility; nothing publishes a rating/comment automatically.
  */
 model CustomerFeedback {
   id         String   @id @default(cuid())
@@ -5212,19 +5234,19 @@ model Referral {
 }
 
 // ---------------------------------------------------------------------------
-// Phase 8 — Enterprise Hajj & Umrah pilgrim management, operations & group
+// Phase 8 â€” Enterprise Hajj & Umrah pilgrim management, operations & group
 // control. Deliberately reuses existing infrastructure rather than
 // duplicating it:
 //   - A "pilgrim" is still a HajjRegistrationPilgrim/UmrahRegistrationPilgrim
-//     row, already linked to Customer/FamilyMember without a new table —
+//     row, already linked to Customer/FamilyMember without a new table â€”
 //     groups below are pure travel-cohort containers pilgrims optionally
 //     join, not a parallel pilgrim record.
 //   - Installments, amount paid, and outstanding balance are computed from
-//     the existing HajjRegistration/UmrahRegistration → Invoice → Payment
+//     the existing HajjRegistration/UmrahRegistration â†’ Invoice â†’ Payment
 //     chain (see HajjOpsService), never re-stored here.
 //   - Visa/flight/hotel readiness is computed by matching a pilgrim's
 //     customerId/familyMemberId against VisaApplication/FlightBookingPassenger
-//     /HotelBookingGuest at read time — no synced/duplicated status field.
+//     /HotelBookingGuest at read time â€” no synced/duplicated status field.
 //   - Operational reminder tasks reuse the Phase 7 Task model
 //     (relatedType: HAJJ_GROUP/UMRAH_GROUP) and TasksService.createAuto's
 //     existing idempotency, not a second task system.
@@ -5340,7 +5362,7 @@ enum VehicleFleetStatus {
   OUT_OF_SERVICE
 }
 
-// Internal fleet used for pilgrim transport — deliberately distinct from
+// Internal fleet used for pilgrim transport â€” deliberately distinct from
 // VehicleRental (a customer-facing marketplace booking with a third-party
 // provider); no overlap in purpose or data.
 model Vehicle {
@@ -5380,7 +5402,7 @@ model Driver {
   lastName  String
   phone     String
 
-  // Sensitive — never returned on a list endpoint, only a permission-gated
+  // Sensitive â€” never returned on a list endpoint, only a permission-gated
   // single-driver detail view (same convention as Staff.bankAccountNumber).
   licenseNumber String?
 
@@ -5423,7 +5445,7 @@ model Transport {
   company   Company?      @relation(fields: [companyId], references: [id], onDelete: Restrict)
   type      TransportType
 
-  // Exactly one of these is set — same "exactly one" convention as
+  // Exactly one of these is set â€” same "exactly one" convention as
   // HajjRegistrationPilgrim.customerId/familyMemberId.
   hajjGroupId  String?
   hajjGroup    HajjGroup?  @relation(fields: [hajjGroupId], references: [id], onDelete: SetNull)
@@ -5464,14 +5486,14 @@ enum PilgrimCheckInEvent {
   DEPARTURE
 }
 
-// QR-based check-in event log (spec #34) — the QR payload itself is just
+// QR-based check-in event log (spec #34) â€” the QR payload itself is just
 // HajjRegistrationPilgrim/UmrahRegistrationPilgrim.pilgrimCode, an opaque
 // internal id that never encodes passport/financial data.
 model PilgrimCheckIn {
   id          String      @id @default(cuid())
   pilgrimType PilgrimType
   // Polymorphic by design (HajjRegistrationPilgrim.id or
-  // UmrahRegistrationPilgrim.id) — same convention already used for
+  // UmrahRegistrationPilgrim.id) â€” same convention already used for
   // StaffIncentive's sourceType/sourceId pairing.
   pilgrimId   String
 
@@ -5495,7 +5517,7 @@ enum ReadinessStatus {
 
 // Spec #30: the readiness/departure-checklist status is computed live
 // (HajjOpsService.computeReadiness) from real documents/visa/payment/flight/
-// hotel state — this table exists only for the explicit, audited manual
+// hotel state â€” this table exists only for the explicit, audited manual
 // override staff cannot apply without the CHECKLIST_OVERRIDE permission.
 model PilgrimReadinessOverride {
   id          String      @id @default(cuid())
@@ -5514,7 +5536,7 @@ model PilgrimReadinessOverride {
 }
 
 // ---------------------------------------------------------------------------
-// Phase 8 continued — room allocation, group manifest support.
+// Phase 8 continued â€” room allocation, group manifest support.
 // Deliberately a lightweight, group-scoped room roster rather than wiring
 // into the Phase 5 Hotel/HotelRoomType catalog: HajjPackage/UmrahPackage's
 // `hotel` field has always been free text (packages aren't booked through
@@ -5536,11 +5558,11 @@ model RoomAllocation {
   umrahGroupId String?
   umrahGroup   UmrahGroup? @relation(fields: [umrahGroupId], references: [id], onDelete: Cascade)
 
-  // Snapshotted at creation time — always equal to hotelBooking.hotelName
+  // Snapshotted at creation time â€” always equal to hotelBooking.hotelName
   // when linked (see RoomAllocationService.create), free text otherwise.
   // Packages have never been booked through the Phase 5 catalog (see this
   // file's Phase 8 header comment), so free text stays the default; this
-  // link is what "deeper hotel-catalog integration" means in practice —
+  // link is what "deeper hotel-catalog integration" means in practice â€”
   // an optional, traceable connection to a real, priced, dated booking
   // when ops actually makes one, not a requirement to always have one.
   hotelName String
@@ -5548,7 +5570,7 @@ model RoomAllocation {
   hotelBookingId String?
   hotelBooking   HotelBooking? @relation(fields: [hotelBookingId], references: [id], onDelete: SetNull)
 
-  roomType   String? // e.g. "Double", "Quad" — free text, matches package.hotel's own convention
+  roomType   String? // e.g. "Double", "Quad" â€” free text, matches package.hotel's own convention
   roomNumber String
   capacity   Int     @default(2)
 
@@ -5575,7 +5597,7 @@ model RoomAllocationOccupant {
 
   createdAt DateTime @default(now())
 
-  // A pilgrim occupies at most one room per allocation batch — same pilgrim
+  // A pilgrim occupies at most one room per allocation batch â€” same pilgrim
   // can't be double-booked into two rooms of the same group.
   @@unique([roomAllocationId, pilgrimType, pilgrimId])
   @@index([pilgrimType, pilgrimId])
@@ -5583,21 +5605,21 @@ model RoomAllocationOccupant {
 }
 
 // ---------------------------------------------------------------------------
-// Phase 11 — Enterprise Administration, Security, Multi-Tenant Controls &
+// Phase 11 â€” Enterprise Administration, Security, Multi-Tenant Controls &
 // System Governance. Builds on what already existed rather than duplicating
 // it: Company already IS the tenant boundary (spec #2), IdentityRole already
 // supports company/branch-scoped role grants (spec #6), RefreshToken already
 // carries most of a "session" (spec #16), Identity.twoFactorEnabled/
 // twoFactorSecret columns already existed but were never wired to anything
-// (spec #15) — TwoFactorRecoveryCode below is the one genuinely missing
+// (spec #15) â€” TwoFactorRecoveryCode below is the one genuinely missing
 // piece for that. AuditLog (extended above) remains the single audit trail
-// rather than a parallel "SecurityEvent" table — security events are just
+// rather than a parallel "SecurityEvent" table â€” security events are just
 // AuditLog rows with a "security.*" action prefix, keeping one place to
 // search (spec #18/#25/#26).
 // ---------------------------------------------------------------------------
 
 /**
- * Spec #15 — TOTP recovery codes. Stored hashed (argon2, same as
+ * Spec #15 â€” TOTP recovery codes. Stored hashed (argon2, same as
  * passwords) and single-use; shown to the identity in full exactly once,
  * at generation time, then never again (TwoFactorService never returns
  * the plaintext after that response).
@@ -5623,9 +5645,9 @@ enum ApiKeyStatus {
 }
 
 /**
- * Spec #19 — machine-to-machine API access, separate from the
+ * Spec #19 â€” machine-to-machine API access, separate from the
  * user-session JWT flow. The raw key is shown once at creation and never
- * stored or displayed again — only its hash and a short, non-secret
+ * stored or displayed again â€” only its hash and a short, non-secret
  * prefix (for the owner to recognize which key is which in a list).
  */
 model ApiKey {
@@ -5634,9 +5656,9 @@ model ApiKey {
   ownerIdentity   Identity @relation(fields: [ownerIdentityId], references: [id], onDelete: Cascade)
 
   name        String
-  keyPrefix   String // first 8 chars of the raw key, safe to display — lets the owner tell keys apart without ever re-showing the secret
+  keyPrefix   String // first 8 chars of the raw key, safe to display â€” lets the owner tell keys apart without ever re-showing the secret
   keyHash     String   @unique
-  permissions String[] // subset of PERMISSIONS keys this key may exercise — never broader than its owner's own roles
+  permissions String[] // subset of PERMISSIONS keys this key may exercise â€” never broader than its owner's own roles
 
   status     ApiKeyStatus @default(ACTIVE)
   expiresAt  DateTime?
@@ -5652,7 +5674,7 @@ model ApiKey {
 // Named ApprovalRequestStatus, not ApprovalStatus, to avoid colliding with
 // the pre-existing ApprovalStatus enum (PENDING/APPROVED/REJECTED) used by
 // VisaApplication.approvalStatus/CorporateAccount's corporateApprovalStatus
-// — those ad hoc per-module flows are untouched by this generic engine.
+// â€” those ad hoc per-module flows are untouched by this generic engine.
 enum ApprovalRequestStatus {
   REQUESTED
   UNDER_REVIEW
@@ -5661,12 +5683,12 @@ enum ApprovalRequestStatus {
 }
 
 /**
- * Spec #10/#11 — a reusable, generic approval workflow that any module can
+ * Spec #10/#11 â€” a reusable, generic approval workflow that any module can
  * route a sensitive action through, rather than every module inventing
  * its own ad hoc approval state machine. This does NOT replace the
  * existing narrower approval patterns that already work (ManualPayment
  * Submission's finance review, Phase 10's manual-booking approval gate,
- * StaffIncentive's own PENDING->APPROVED lifecycle) — those stay exactly
+ * StaffIncentive's own PENDING->APPROVED lifecycle) â€” those stay exactly
  * as they are. This is for NEW call sites (see FlightRefundsService's
  * threshold check) that need configurable multi-level approval with
  * amount-based thresholds, which nothing existing provides.
@@ -5677,7 +5699,7 @@ model ApprovalRequest {
   companyId String?
   company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
 
-  type     String // e.g. "FLIGHT_REFUND", "SUPPLIER_PAYMENT" — matches ApprovalThresholdRule.type
+  type     String // e.g. "FLIGHT_REFUND", "SUPPLIER_PAYMENT" â€” matches ApprovalThresholdRule.type
   amount   Int?
   currency String?
 
@@ -5691,11 +5713,11 @@ model ApprovalRequest {
   status ApprovalRequestStatus @default(REQUESTED)
 
   // Snapshot of what would change if approved, and what actually changed
-  // once it is — spec #11's "record previous state / new state".
+  // once it is â€” spec #11's "record previous state / new state".
   previousState Json?
   newState      Json?
 
-  requiredApprovals Int                @default(1) // resolved from ApprovalThresholdRule at creation time — never recomputed later, so a mid-flight threshold change can't retroactively change what a pending request needs
+  requiredApprovals Int                @default(1) // resolved from ApprovalThresholdRule at creation time â€” never recomputed later, so a mid-flight threshold change can't retroactively change what a pending request needs
   decisions         ApprovalDecision[]
 
   createdAt  DateTime  @default(now())
@@ -5729,11 +5751,11 @@ model ApprovalDecision {
   decidedBy           Identity @relation("ApprovalDecider", fields: [decidedByIdentityId], references: [id], onDelete: Restrict)
 
   decision ApprovalDecisionType
-  reason   String? // required for REJECTED — enforced in ApprovalService, not the DB
+  reason   String? // required for REJECTED â€” enforced in ApprovalService, not the DB
 
   createdAt DateTime @default(now())
 
-  // Spec #11 — a person decides on a given request at most once; the
+  // Spec #11 â€” a person decides on a given request at most once; the
   // self-approval rule (decidedByIdentityId != requestedByIdentityId) is
   // enforced in ApprovalService since it spans two tables.
   @@unique([approvalRequestId, decidedByIdentityId])
@@ -5741,7 +5763,7 @@ model ApprovalDecision {
 }
 
 /**
- * Spec #10 — configurable amount-based approval thresholds, resolved
+ * Spec #10 â€” configurable amount-based approval thresholds, resolved
  * most-specific-first as usual across this codebase (a companyId-scoped
  * rule beats the platform-wide default). minAmount/maxAmount define the
  * band this rule covers; null maxAmount means "and above".
@@ -5765,11 +5787,11 @@ model ApprovalThresholdRule {
 }
 
 /**
- * Spec #39 — feature flags. A flag with no override row is off by
+ * Spec #39 â€” feature flags. A flag with no override row is off by
  * default (isEnabledByDefault decides), matching "never invented/assumed
  * on" discipline used elsewhere in this codebase. Per-tenant overrides
  * are additive, never used to bypass a permission check (spec #39's own
- * warning) — every gated call site still runs its normal RBAC guard.
+ * warning) â€” every gated call site still runs its normal RBAC guard.
  */
 model FeatureFlag {
   id                 String  @id @default(cuid())
@@ -5801,10 +5823,10 @@ model FeatureFlagOverride {
 }
 
 /**
- * Spec #20 — centralized, database-backed settings for cross-cutting
+ * Spec #20 â€” centralized, database-backed settings for cross-cutting
  * configuration that doesn't already have a home (finance-specific
  * config lives in FinanceSettings, provider credentials in
- * IntegrationCredential — this is deliberately NOT a duplicate of
+ * IntegrationCredential â€” this is deliberately NOT a duplicate of
  * either). companyId null = platform-wide default; a company-scoped row
  * overrides it, same most-specific-wins pattern used throughout.
  */
@@ -5829,7 +5851,7 @@ model SystemSetting {
 }
 
 /**
- * Spec #38 — configuration versioning. One row per change, written
+ * Spec #38 â€” configuration versioning. One row per change, written
  * alongside every SystemSetting update, never edited afterward.
  */
 model SystemSettingHistory {
@@ -5849,10 +5871,10 @@ model SystemSettingHistory {
 }
 
 /**
- * Spec #21 — reference currency data for display/lookup. A booking's own
+ * Spec #21 â€” reference currency data for display/lookup. A booking's own
  * transaction currency (e.g. FlightBooking.currency) is always stored as
  * its own string field and is never overwritten when a rate here
- * changes — this table never touches historical transaction values.
+ * changes â€” this table never touches historical transaction values.
  */
 model Currency {
   code               String  @id // ISO 4217, e.g. "NGN"
@@ -5868,9 +5890,9 @@ model Currency {
 }
 
 /**
- * Spec #22 — configurable tax rules. CRUD/lookup only in this phase; not
+ * Spec #22 â€” configurable tax rules. CRUD/lookup only in this phase; not
  * wired into every module's pricing engine yet (each module's existing
- * markup/fee engine — FlightPricingRule, FlightServiceFee, etc. — keeps
+ * markup/fee engine â€” FlightPricingRule, FlightServiceFee, etc. â€” keeps
  * working exactly as before). A future phase can have those engines
  * resolve a TaxRule the same way they resolve a FlightServiceFee today.
  */
@@ -5880,7 +5902,7 @@ model TaxRule {
   ratePercent       Float?
   fixedAmount       Int?
   isInclusive       Boolean   @default(false)
-  applicableService String? // e.g. "FLIGHT", "HOTEL" — free text, mirrors FlightServiceFeeType's own looseness
+  applicableService String? // e.g. "FLIGHT", "HOTEL" â€” free text, mirrors FlightServiceFeeType's own looseness
   country           String?
   effectiveFrom     DateTime  @default(now())
   effectiveTo       DateTime?
@@ -5894,7 +5916,7 @@ model TaxRule {
 }
 
 // ---------------------------------------------------------------------------
-// Phase 19 — Revenue management
+// Phase 19 â€” Revenue management
 //
 // Additive only. Nothing here changes how an existing booking is priced: the
 // engine (src/modules/revenue/engine) is pure, these tables hold its inputs
@@ -5992,7 +6014,7 @@ model PricingPolicy {
 /**
  * A stored price calculation. Used both for ad-hoc "calculate and keep" calls
  * and, when sourceType/sourceId are set, as the immutable commercial snapshot of
- * a confirmed booking — historical bookings never change because a rule was
+ * a confirmed booking â€” historical bookings never change because a rule was
  * edited later, since the numbers and the rule versions are frozen here.
  */
 model PricingTrace {
@@ -6001,7 +6023,7 @@ model PricingTrace {
   company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
 
   product    String
-  // Optional link to what was priced (FlightBooking, HotelBooking, ...) — free text like WalletTransaction.invoiceId.
+  // Optional link to what was priced (FlightBooking, HotelBooking, ...) â€” free text like WalletTransaction.invoiceId.
   sourceType String?
   sourceId   String?
 
@@ -6097,7 +6119,7 @@ model PromotionUsage {
 }
 
 // ---------------------------------------------------------------------------
-// Phase 21 — workflow automation engine.
+// Phase 21 â€” workflow automation engine.
 //
 // Every table that holds tenant data carries `companyId` from the start (the
 // Phase 20 audit found several older tables that never did). A workflow is a
@@ -6194,7 +6216,7 @@ model WorkflowVersion {
   workflow   WorkflowDefinition @relation(fields: [workflowId], references: [id], onDelete: Cascade)
   version    Int
 
-  // The graph (nodes + edges) as data — never code. Validated before it can be activated.
+  // The graph (nodes + edges) as data â€” never code. Validated before it can be activated.
   graph        Json
   triggerEvent String?
   retryPolicy  Json?
@@ -6266,7 +6288,7 @@ model WorkflowExecution {
   currentNodeId String?
   // The trigger payload plus every step's output so far (what conditions and templates read).
   context       Json
-  // What a WAITING execution is waiting for (approval id, event type, deadline…).
+  // What a WAITING execution is waiting for (approval id, event type, deadlineâ€¦).
   waitingFor    Json?
   // When the scheduler should next look at this execution (delays, wait timeouts, retries).
   nextRunAt     DateTime?
@@ -6348,7 +6370,7 @@ model WorkflowDeadLetter {
   @@map("workflow_dead_letters")
 }
 
-// Fixed-window counters for automation rate limits (messages/minute, executions…),
+// Fixed-window counters for automation rate limits (messages/minute, executionsâ€¦),
 // one row per (tenant, limit) key, updated atomically.
 model WorkflowRateCounter {
   key         String   @id
@@ -6542,10 +6564,10 @@ model BreakGlassGrant {
 }
 
 // ===========================================================================
-// Phase 23 — controlled AI agentic operations layer.
+// Phase 23 â€” controlled AI agentic operations layer.
 //
 // Agents are PLATFORM definitions (code-defined catalogue seeded as v1); a tenant controls them through
-// AiControl (disable, autonomy cap, force approval), AiBudget, knowledge and policies — it cannot rewrite an
+// AiControl (disable, autonomy cap, force approval), AiBudget, knowledge and policies â€” it cannot rewrite an
 // agent's prompt or tool list. Every run, step, approval, memory and message is tenant-scoped.
 // Existing entities are reused: ApprovalRequest (human approval), WorkflowEvent bus, AuditLog,
 // SecurityIncident, AiUsageLog (the Phase 13 analytics assistant) are NOT duplicated.
@@ -6681,7 +6703,7 @@ model AiAgent {
   name        String
   description String
   purpose     String
-  /// CUSTOMER | STAFF | OPERATIONS | EXECUTIVE | SYSTEM — who may talk to it.
+  /// CUSTOMER | STAFF | OPERATIONS | EXECUTIVE | SYSTEM â€” who may talk to it.
   audience    String
   status      AiAgentStatus @default(ACTIVE)
 
@@ -7099,4 +7121,675 @@ model AiBriefing {
 
   @@unique([companyId, businessDate])
   @@map("ai_briefings")
+}
+
+// =====================================================================================================================
+// Phase 26 - Staff identification cards and the Communication Centre
+// =====================================================================================================================
+
+// ---------------------------------------------------------------- staff identification cards
+
+enum StaffIdCardStatus {
+  PENDING
+  ACTIVE
+  EXPIRED
+  SUSPENDED
+  REVOKED
+  REPLACED
+}
+
+/// One physical/digital identity card. `verificationToken` is the unguessable value in the QR URL (128 random bits);
+/// it identifies the card and nothing else, so a copied QR code can verify a card but can never authenticate anyone.
+model StaffIdCard {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  staffId   String
+  staff     Staff   @relation(fields: [staffId], references: [id], onDelete: Restrict)
+
+  /// Printed, human-readable number (e.g. ALN-C-000042). Unique across the platform.
+  cardNumber        String            @unique
+  verificationToken String            @unique
+  status            StaffIdCardStatus @default(PENDING)
+
+  issuedAt    DateTime?
+  expiresAt   DateTime?
+  activatedAt DateTime?
+  suspendedAt DateTime?
+  revokedAt   DateTime?
+  replacedAt  DateTime?
+  statusReason String?
+
+  /// Set on the OLD card when it is replaced; the new card points back through `replaces`.
+  replacedByCardId String?      @unique
+  replacedBy       StaffIdCard? @relation("CardReplacement", fields: [replacedByCardId], references: [id], onDelete: SetNull)
+  replaces         StaffIdCard? @relation("CardReplacement")
+
+  printedCount        Int       @default(0)
+  lastPrintedAt       DateTime?
+  expiryNoticeSentAt  DateTime?
+  createdByIdentityId String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  events StaffIdCardEvent[]
+  scans  StaffIdCardScan[]
+
+  @@index([companyId, status])
+  @@index([staffId])
+  @@index([expiresAt])
+  @@map("staff_id_cards")
+}
+
+/// Append-only lifecycle history: who did what to a card, when, and why.
+model StaffIdCardEvent {
+  id     String      @id @default(cuid())
+  cardId String
+  card   StaffIdCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  /// ISSUED | ACTIVATED | RENEWED | SUSPENDED | REINSTATED | REVOKED | REPLACED | EXPIRED | PRINTED | STAFF_DEACTIVATED
+  action             String
+  fromStatus         StaffIdCardStatus?
+  toStatus           StaffIdCardStatus?
+  reason             String?
+  actorIdentityId    String?
+  metadata           Json?
+  createdAt          DateTime           @default(now())
+
+  @@index([cardId, createdAt])
+  @@map("staff_id_card_events")
+}
+
+/// Every verification attempt, including unrecognised codes (those have no card). Holds a salted fingerprint of the
+/// client address, never the address itself.
+model StaffIdCardScan {
+  id     String       @id @default(cuid())
+  cardId String?
+  card   StaffIdCard? @relation(fields: [cardId], references: [id], onDelete: SetNull)
+
+  /// The company of the card, or of the signed-in scanner for an unrecognised code.
+  companyId String?
+  /// VALID | EXPIRED | SUSPENDED | REVOKED | REPLACED | INVALID
+  result    String
+  /// QR | PUBLIC_LINK | MANUAL_STAFF_ID | MANUAL_REFERENCE
+  method    String
+  scannedByIdentityId String?
+  ipFingerprint       String?
+  userAgent           String?
+  /// First characters of what was presented (for spotting scraping), never the whole value.
+  queryHint           String?
+  createdAt           DateTime @default(now())
+
+  @@index([cardId, createdAt])
+  @@index([companyId, createdAt])
+  @@index([result, createdAt])
+  @@map("staff_id_card_scans")
+}
+
+/// Per-company card design and wording. Nothing here is invented: every credential line is typed in by the company.
+model StaffCardSettings {
+  id        String  @id @default(cuid())
+  companyId String  @unique
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  displayName       String   @default("Alnajoum Travel Agency")
+  tagline           String?
+  primaryColor      String   @default("#0f172a")
+  accentColor       String   @default("#f59e0b")
+  logoFilename      String?
+  signatureFilename String?
+  signatoryName     String?
+  signatoryTitle    String?
+  contactPhone      String?
+  contactEmail      String?
+  contactAddress    String?
+  website           String?
+  /// Whatever official registration line the company chooses to print (left empty unless the company supplies it).
+  officialRegistrationLine String?
+  emergencyContact  String?
+  lostCardNotice    String   @default("If this card is lost or stolen, report it to your branch manager or the office immediately so it can be deactivated.")
+  validityMonths    Int      @default(24)
+  expiryWarningDays Int      @default(30)
+  updatedByIdentityId String?
+  updatedAt         DateTime @updatedAt
+
+  @@map("staff_card_settings")
+}
+
+// ---------------------------------------------------------------- communication centre: contacts and consent
+
+enum CommChannel {
+  WHATSAPP
+  EMAIL
+}
+
+enum CommContactKind {
+  CUSTOMER
+  STAFF
+  LEAD
+  SUBSCRIBER
+  OTHER
+}
+
+enum CommContactStatus {
+  ACTIVE
+  MERGED
+  ERASED
+}
+
+enum CommIdentifierType {
+  PHONE
+  EMAIL
+}
+
+enum CommSubscriptionStatus {
+  NONE
+  PENDING_CONFIRMATION
+  SUBSCRIBED
+  UNSUBSCRIBED
+}
+
+enum CommConsentAction {
+  REQUESTED
+  GRANTED
+  CONFIRMED
+  WITHDRAWN
+  DENIED
+}
+
+enum CommSuppressionReason {
+  UNSUBSCRIBED
+  BOUNCED
+  COMPLAINT
+  INVALID_ADDRESS
+  ADMIN
+}
+
+/// A person or organisation the company may communicate with. Having a contact record is NOT consent to market to it.
+model CommContact {
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  branchId  String?
+
+  fullName          String
+  /// Convenience copies of the primary identifiers (the authoritative, unique ones are in CommContactChannel).
+  primaryPhone      String?
+  primaryEmail      String?
+  preferredLanguage String   @default("en")
+  country           String?
+  source            String
+  kind              CommContactKind   @default(OTHER)
+  status            CommContactStatus @default(ACTIVE)
+
+  customerId String?   @unique
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  leadId     String?
+  lead       Lead?     @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  staffId    String?   @unique
+  staff      Staff?    @relation(fields: [staffId], references: [id], onDelete: SetNull)
+
+  tags      String[] @default([])
+  /// Service interests used by segments: FLIGHT, HOTEL, VISA, HAJJ, UMRAH, CORPORATE.
+  interests String[] @default([])
+
+  /// Opaque, unguessable value used in unsubscribe and preference links.
+  preferenceToken String @unique
+
+  mergedIntoId String?
+  mergedInto   CommContact?  @relation("ContactMerge", fields: [mergedIntoId], references: [id], onDelete: SetNull)
+  mergedFrom   CommContact[] @relation("ContactMerge")
+
+  lastCommunicatedAt  DateTime?
+  createdByIdentityId String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  channels      CommContactChannel[]
+  subscriptions CommSubscription[]
+  consents      CommConsentRecord[]
+  recipients    CommCampaignRecipient[]
+  segmentLinks  CommSegmentMember[]
+
+  @@index([companyId, status])
+  @@index([companyId, kind])
+  @@index([companyId, preferredLanguage])
+  @@index([leadId])
+  @@map("comm_contacts")
+}
+
+/// A phone number or email address of a contact. Unique per company so the same person cannot be created twice.
+model CommContactChannel {
+  id        String             @id @default(cuid())
+  contactId String
+  contact   CommContact        @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  companyId String
+  type      CommIdentifierType
+  /// E.164 for phones; lower-case trimmed address for emails.
+  value     String
+  isPrimary Boolean            @default(false)
+  /// Set when a hard bounce or an undeliverable-number result shows the address cannot be used.
+  invalid   Boolean            @default(false)
+  createdAt DateTime           @default(now())
+
+  @@unique([companyId, type, value])
+  @@index([contactId])
+  @@map("comm_contact_channels")
+}
+
+/// The CURRENT marketing consent state of a contact on one channel. The evidence is in CommConsentRecord.
+model CommSubscription {
+  id             String                 @id @default(cuid())
+  contactId      String
+  contact        CommContact            @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  companyId      String
+  channel        CommChannel
+  status         CommSubscriptionStatus @default(NONE)
+  topics         String[]               @default([])
+  subscribedAt   DateTime?
+  unsubscribedAt DateTime?
+  lastRecordId   String?
+  updatedAt      DateTime               @updatedAt
+
+  @@unique([contactId, channel])
+  @@index([companyId, channel, status])
+  @@map("comm_subscriptions")
+}
+
+/// Append-only consent history: every request, grant, confirmation and withdrawal, with the wording shown and evidence.
+model CommConsentRecord {
+  id        String            @id @default(cuid())
+  companyId String
+  contactId String
+  contact   CommContact       @relation(fields: [contactId], references: [id], onDelete: Restrict)
+  channel   CommChannel
+  action    CommConsentAction
+  topics    String[]          @default([])
+  /// WEBSITE_FORM | WHATSAPP_REPLY | EMAIL_LINK | PREFERENCE_PAGE | ADMIN | IMPORT_ATTESTED | CONFIRMATION_LINK | AI_PROPOSAL ...
+  source    String
+  textVersion String?
+  /// Snapshot of the wording the person saw or agreed to.
+  text        String?
+  /// Non-identifying evidence: page, form id, salted client fingerprint, provider message id.
+  evidence    Json?
+  actorIdentityId String?
+  /// For a double opt-in: SHA-256 of the confirmation token and when it stops working.
+  confirmTokenHash String?
+  confirmExpiresAt DateTime?
+  createdAt        DateTime @default(now())
+
+  @@index([contactId, createdAt])
+  @@index([confirmTokenHash])
+  @@index([companyId, createdAt])
+  @@map("comm_consent_records")
+}
+
+/// A durable "do not send" list. Keyed by a keyed hash of the address so it survives deletion of the contact and
+/// re-importing the same address cannot resubscribe it. Only a new, valid consent action lifts an entry.
+model CommSuppression {
+  id        String                @id @default(cuid())
+  companyId String
+  company   Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  channel   CommChannel
+  valueHash String
+  /// Masked, for the operator's list (e.g. +234*****678, a***@example.com).
+  valueHint String
+  reason    CommSuppressionReason
+  source    String
+  contactId String?
+  createdByIdentityId String?
+  createdAt           DateTime  @default(now())
+  liftedAt            DateTime?
+  liftedReason        String?
+
+  @@unique([companyId, channel, valueHash])
+  @@index([companyId, channel, liftedAt])
+  @@map("comm_suppressions")
+}
+
+enum CommSegmentKind {
+  DYNAMIC
+  STATIC
+}
+
+model CommSegment {
+  id          String          @id @default(cuid())
+  companyId   String
+  company     Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  kind        CommSegmentKind @default(DYNAMIC)
+  /// Structured filter for a dynamic segment (consent, kinds, tags, languages, interests, travel conditions).
+  definition  Json
+  createdByIdentityId String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  members   CommSegmentMember[]
+  campaigns CommCampaign[]
+
+  @@unique([companyId, name])
+  @@map("comm_segments")
+}
+
+model CommSegmentMember {
+  segmentId String
+  segment   CommSegment @relation(fields: [segmentId], references: [id], onDelete: Cascade)
+  contactId String
+  contact   CommContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  addedAt   DateTime    @default(now())
+
+  @@id([segmentId, contactId])
+  @@map("comm_segment_members")
+}
+
+// ---------------------------------------------------------------- communication centre: templates and campaigns
+
+enum CommTemplateCategory {
+  MARKETING
+  UTILITY
+  TRANSACTIONAL
+}
+
+enum CommTemplateApproval {
+  NOT_REQUIRED
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+  PAUSED
+}
+
+model CommTemplate {
+  id        String      @id @default(cuid())
+  companyId String
+  company   Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  key       String
+  name      String
+  channel   CommChannel
+  category  CommTemplateCategory @default(MARKETING)
+  language  String      @default("en")
+  subject   String?
+  bodyHtml  String?
+  bodyText  String
+  /// Names of the variables the template may use (checked against the allowed list for its category).
+  variables String[]    @default([])
+  /// WhatsApp only: the provider-side template name/id and its review state.
+  whatsappTemplateName String?
+  providerTemplateId   String?
+  approval             CommTemplateApproval @default(NOT_REQUIRED)
+  lastSyncedAt         DateTime?
+  isActive  Boolean     @default(true)
+  createdByIdentityId  String?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  campaigns CommCampaign[]
+
+  @@unique([companyId, key, language])
+  @@index([companyId, channel])
+  @@map("comm_templates")
+}
+
+enum CommCampaignStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  SCHEDULED
+  SENDING
+  PAUSED
+  COMPLETED
+  CANCELLED
+  FAILED
+}
+
+enum CommRecipientStatus {
+  QUEUED
+  SENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  SKIPPED
+  UNCERTAIN
+  CANCELLED
+}
+
+model CommCampaign {
+  id          String             @id @default(cuid())
+  companyId   String
+  company     Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  branchId    String?
+  name        String
+  description String?
+  channel     CommChannel
+  /// The marketing topic the campaign is about (flight_deals, umrah, hajj, visa, hotel, general); only contacts
+  /// subscribed to it are eligible.
+  topic       String             @default("general")
+  status      CommCampaignStatus @default(DRAFT)
+
+  segmentId  String?
+  segment    CommSegment?  @relation(fields: [segmentId], references: [id], onDelete: SetNull)
+  templateId String?
+  template   CommTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+
+  subject   String?
+  bodyHtml  String?
+  bodyText  String?
+  /// Campaign-level values for template variables (offer text, package name ...).
+  variables Json?
+
+  scheduledAt DateTime?
+  timezone    String    @default("Africa/Lagos")
+
+  /// Counts recorded when the audience was frozen (at approval/send), so the report shows what was decided on.
+  totalSelected      Int   @default(0)
+  eligibleCount      Int   @default(0)
+  excludedCount      Int   @default(0)
+  exclusionBreakdown Json?
+  audienceFrozenAt   DateTime?
+
+  createdByIdentityId  String?
+  approvedByIdentityId String?
+  approvedAt           DateTime?
+  approvalNote         String?
+  rejectedReason       String?
+  startedAt            DateTime?
+  completedAt          DateTime?
+  pausedAt             DateTime?
+  cancelledAt          DateTime?
+  cancelReason         String?
+  /// True when a mock/test provider carried this campaign: nothing real was sent.
+  simulated            Boolean   @default(false)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  recipients CommCampaignRecipient[]
+
+  @@index([companyId, status])
+  @@index([status, scheduledAt])
+  @@map("comm_campaigns")
+}
+
+model CommCampaignRecipient {
+  id         String              @id @default(cuid())
+  campaignId String
+  campaign   CommCampaign        @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  companyId  String
+  contactId  String
+  contact    CommContact         @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  status     CommRecipientStatus @default(QUEUED)
+  skipReason String?
+
+  attempts        Int       @default(0)
+  nextAttemptAt   DateTime?
+  leaseUntil      DateTime?
+  providerMessageId String?
+  simulated       Boolean   @default(false)
+  lastError       String?
+
+  queuedAt     DateTime  @default(now())
+  sentAt       DateTime?
+  deliveredAt  DateTime?
+  readAt       DateTime?
+  failedAt     DateTime?
+  clickedAt    DateTime?
+  bouncedAt    DateTime?
+  complainedAt DateTime?
+  unsubscribedAt DateTime?
+
+  @@unique([campaignId, contactId])
+  @@index([status, nextAttemptAt])
+  @@index([providerMessageId])
+  @@index([campaignId, status])
+  @@map("comm_campaign_recipients")
+}
+
+enum CommDeliveryEventType {
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  BOUNCED
+  COMPLAINT
+  CLICKED
+  UNSUBSCRIBED
+}
+
+/// Delivery and engagement facts reported by a provider (or, clearly flagged, by the simulator).
+model CommDeliveryEvent {
+  id                String                @id @default(cuid())
+  companyId         String?
+  campaignId        String?
+  recipientId       String?
+  channel           CommChannel
+  type              CommDeliveryEventType
+  providerMessageId String?
+  providerEventId   String?
+  simulated         Boolean               @default(false)
+  occurredAt        DateTime
+  /// Short, non-personal description (e.g. the provider's failure reason).
+  detail            String?
+  createdAt         DateTime              @default(now())
+
+  @@unique([channel, providerEventId])
+  @@index([campaignId, type])
+  @@index([providerMessageId])
+  @@map("comm_delivery_events")
+}
+
+/// Webhook deliveries from email providers (WhatsApp ones use WhatsAppWebhookEvent).
+model CommWebhookEvent {
+  id          String    @id @default(cuid())
+  provider    String
+  eventId     String
+  payloadHash String
+  status      String    @default("PENDING")
+  error       String?
+  receivedAt  DateTime  @default(now())
+  processedAt DateTime?
+
+  @@unique([provider, eventId])
+  @@map("comm_webhook_events")
+}
+
+// ---------------------------------------------------------------- communication centre: settings, policies, logs
+
+model CommSettings {
+  id        String  @id @default(cuid())
+  companyId String  @unique
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  senderName      String  @default("Alnajoum Travel Agency")
+  fromEmail       String?
+  replyTo         String?
+  businessTimezone String @default("Africa/Lagos")
+
+  whatsappMessagesPerMinute Int @default(30)
+  emailMessagesPerMinute    Int @default(60)
+  dailySendCap              Int @default(5000)
+
+  /// When true, bulk campaigns are only delivered to the listed test recipients.
+  testMode       Boolean  @default(false)
+  testRecipients String[] @default([])
+  /// Stops every bulk send for the company immediately.
+  killSwitch     Boolean  @default(false)
+
+  doubleOptInEmail Boolean @default(true)
+  approvalRequired Boolean @default(true)
+  /// Largest audience each role may send to without a higher role (e.g. {"COMPANY_ADMIN":10000,"STAFF":200}).
+  maxCampaignSizeByRole Json
+
+  privacyNoticeUrl    String?
+  consentTextVersion  String @default("1")
+  consentTextWhatsApp String @default("I agree to receive marketing messages from Alnajoum Travel Agency on WhatsApp. I can reply STOP at any time to unsubscribe.")
+  consentTextEmail    String @default("I agree to receive marketing emails from Alnajoum Travel Agency. I can unsubscribe at any time using the link in every email.")
+  /// Topics offered on the subscription page: [{key,label}].
+  topics              Json
+
+  /// Whether contact-level data (names, masked identifiers) may be shown to an AI assistant at all.
+  aiMayUseContactData Boolean @default(false)
+
+  updatedByIdentityId String?
+  updatedAt           DateTime @updatedAt
+
+  @@map("comm_settings")
+}
+
+/// Which ERP events produce which messages on which channel, and with which template.
+model CommNotificationPolicy {
+  id          String      @id @default(cuid())
+  companyId   String
+  company     Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  eventType   String
+  channel     CommChannel
+  enabled     Boolean     @default(false)
+  templateKey String
+  updatedByIdentityId String?
+  updatedAt   DateTime    @updatedAt
+
+  @@unique([companyId, eventType, channel])
+  @@map("comm_notification_policies")
+}
+
+/// Transactional (service) messages sent because of something that happened to a booking, payment or application.
+/// The unique key makes event processing idempotent: the same event never produces the same message twice.
+model CommTransactionalMessage {
+  id             String      @id @default(cuid())
+  companyId      String
+  idempotencyKey String      @unique
+  eventType      String
+  channel        CommChannel
+  customerId     String?
+  contactId      String?
+  templateKey    String
+  /// SENT | SKIPPED | FAILED
+  status         String
+  skipReason     String?
+  providerMessageId String?
+  simulated      Boolean     @default(false)
+  error          String?
+  createdAt      DateTime    @default(now())
+
+  @@index([companyId, createdAt])
+  @@index([customerId])
+  @@map("comm_transactional_messages")
+}
+
+/// What an inbound WhatsApp message was understood to be, and what was done about it.
+model CommInboundLog {
+  id         String      @id @default(cuid())
+  companyId  String?
+  channel    CommChannel @default(WHATSAPP)
+  providerMessageId String
+  contactId  String?
+  /// OPT_OUT | OPT_OUT_UNCLEAR | OPT_IN | CONFIRM | FAQ | PACKAGE | FLIGHT | VISA | HAJJ_UMRAH | BOOKING_STATUS | HUMAN | OTHER
+  intent     String
+  confidence String
+  actionTaken String
+  createdAt  DateTime    @default(now())
+
+  @@unique([channel, providerMessageId])
+  @@index([companyId, createdAt])
+  @@map("comm_inbound_logs")
 }

@@ -151,12 +151,21 @@ export class FieldCipher {
    * in the list for as long as indexed rows exist. It supports equality lookups only (no partial match).
    */
   blindIndex(value: string, context: string): string {
+    const normalised = value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    return this.keyedHash(normalised, context);
+  }
+
+  /**
+   * HMAC-SHA-256 of the value exactly as given (no normalisation), under a key derived from the first listed key and
+   * the context. For callers that have already normalised the value themselves and must not lose characters: an email
+   * address, an E.164 number, a client address. Same stability across key rotation as `blindIndex`.
+   */
+  keyedHash(value: string, context: string): string {
     const first = [...this.keys.values()][0];
     const key = Buffer.from(
       hkdfSync('sha256', first, 'alnajoum-blind-index', context, 32),
     );
-    const normalised = value.toUpperCase().replace(/[^A-Z0-9]/g, '');
-    return createHmac('sha256', key).update(normalised).digest('hex');
+    return createHmac('sha256', key).update(value).digest('hex');
   }
 
   /** True when the value is plaintext or encrypted under a key that is not the current one. */

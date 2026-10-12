@@ -51,6 +51,7 @@ import { StepUpGuard } from './common/security/step-up';
 import { TenantResourceGuard } from './common/tenancy/tenant-resource.guard';
 import { SecurityModule } from './modules/security/security.module';
 import { WorkflowEventsModule } from './modules/workflows/events/workflow-events.module';
+import { StaffCardsModule } from './modules/staff-cards/staff-cards.module';
 import { WorkflowsModule } from './modules/workflows/workflows.module';
 import { RevenueModule } from './modules/revenue/revenue.module';
 
@@ -115,6 +116,7 @@ import { RevenueModule } from './modules/revenue/revenue.module';
     SecurityModule,
     WorkflowEventsModule,
     WorkflowsModule,
+    StaffCardsModule,
   ],
   controllers: [AppController],
   providers: [

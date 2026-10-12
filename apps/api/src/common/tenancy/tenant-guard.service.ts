@@ -159,6 +159,31 @@ export const TENANT_SCOPES = {
       ],
     }),
   },
+  // Phase 26 - identification cards and the communication centre all carry their own companyId.
+  staffIdCard: {
+    model: 'staffIdCard',
+    scope: (c: string) => ({ companyId: c }),
+  },
+  commContact: {
+    model: 'commContact',
+    scope: (c: string) => ({ companyId: c }),
+  },
+  commSegment: {
+    model: 'commSegment',
+    scope: (c: string) => ({ companyId: c }),
+  },
+  commTemplate: {
+    model: 'commTemplate',
+    scope: (c: string) => ({ companyId: c }),
+  },
+  commCampaign: {
+    model: 'commCampaign',
+    scope: (c: string) => ({ companyId: c }),
+  },
+  commSuppression: {
+    model: 'commSuppression',
+    scope: (c: string) => ({ companyId: c }),
+  },
   invoice: {
     model: 'invoice',
     scope: (c: string) => ({

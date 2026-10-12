@@ -3,7 +3,9 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { IdentityType } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { randomBytes } from 'crypto';
@@ -23,6 +25,8 @@ export class UsersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
+    // Optional so staff management never depends on the card module being present.
+    @Optional() private readonly events?: EventEmitter2,
   ) {}
 
   /**
@@ -210,5 +214,7 @@ export class UsersService {
       where: { identityId: staff.identityId, revokedAt: null },
       data: { revokedAt: new Date() },
     });
+    // Phase 26: the identification cards of someone who has left stop working at once (their history is kept).
+    this.events?.emit('staff.deactivated', { staffId: staff.id });
   }
 }

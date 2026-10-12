@@ -314,6 +314,35 @@ export const PERMISSIONS = {
     FEEDBACK: 'ai:feedback', // mark answers correct / incorrect / unsafe
     ADMIN: 'ai:admin', // agents, versions, controls, budgets, knowledge, executions, safety, governance
   },
+  // Phase 26 - staff identification cards. Scanning (verifying a card) is open to every staff role; managing the
+  // lifecycle is an administrator's job and is separate from changing how cards look.
+  STAFF_CARD: {
+    READ: 'staff_card:read', // see cards, history and the dashboard
+    MANAGE: 'staff_card:manage', // issue, activate, renew, suspend, reinstate, revoke, replace, print
+    SCAN: 'staff_card:scan', // the scanner, manual lookups and the verification history
+    SETTINGS: 'staff_card:settings', // card design, wording, logo and signature
+  },
+  // Phase 26 - the Communication Centre. Having a contact never implies permission to market to it; consent is
+  // recorded and enforced by the backend whatever these permissions say.
+  COMM: {
+    CONTACT_READ: 'comm:contact:read',
+    CONTACT_MANAGE: 'comm:contact:manage', // create, edit, tag, assign interests
+    CONTACT_IMPORT: 'comm:contact:import',
+    CONTACT_EXPORT: 'comm:contact:export', // bulk export of personal data
+    CONTACT_MERGE: 'comm:contact:merge',
+    CONSENT_MANAGE: 'comm:consent:manage', // record consent / withdrawal on behalf of a person
+    SEGMENT_MANAGE: 'comm:segment:manage',
+    TEMPLATE_MANAGE: 'comm:template:manage',
+    CAMPAIGN_READ: 'comm:campaign:read',
+    CAMPAIGN_CREATE: 'comm:campaign:create',
+    CAMPAIGN_APPROVE: 'comm:campaign:approve', // never the campaign's own author
+    CAMPAIGN_SEND: 'comm:campaign:send', // start, schedule, pause, resume, cancel
+    SUPPRESSION_MANAGE: 'comm:suppression:manage',
+    SETTINGS_MANAGE: 'comm:settings:manage',
+    REPORT_VIEW: 'comm:report:view',
+    AUTOMATION_MANAGE: 'comm:automation:manage', // notification policies and communication workflows
+    AI_ASSIST: 'comm:ai:assist',
+  },
   WHATSAPP: {
     READ: 'whatsapp:read',
     SEND: 'whatsapp:send',
