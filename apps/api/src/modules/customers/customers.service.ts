@@ -1,3 +1,4 @@
+import { ListPage } from '../../common/pagination/list-page';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
@@ -22,8 +23,10 @@ export class CustomersService {
   findAll(
     filters: { assignedStaffId?: string; assignedBranchId?: string } = {},
     tenantCompanyId?: string,
+    page?: ListPage,
   ) {
     return this.prisma.customer.findMany({
+      ...(page && { take: page.take, skip: page.skip }),
       where: {
         ...filters,
         ...(tenantCompanyId !== undefined && { companyId: tenantCompanyId }),
@@ -33,7 +36,19 @@ export class CustomersService {
         assignedStaff: { select: { firstName: true, lastName: true } },
         assignedBranch: { select: { name: true } },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    });
+  }
+
+  countAll(
+    filters: { assignedStaffId?: string; assignedBranchId?: string } = {},
+    tenantCompanyId?: string,
+  ) {
+    return this.prisma.customer.count({
+      where: {
+        ...filters,
+        ...(tenantCompanyId !== undefined && { companyId: tenantCompanyId }),
+      },
     });
   }
 

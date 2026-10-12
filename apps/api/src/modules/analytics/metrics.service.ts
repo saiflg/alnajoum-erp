@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InvoiceStatus, Prisma, SupplierPayableStatus } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AnalyticsScope } from './analytics-scope.service';
@@ -91,6 +91,8 @@ const half = (n: number, d: number): number => Math.round((n / d) * 100) / 100;
 
 @Injectable()
 export class MetricsService {
+  private readonly logger = new Logger(MetricsService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   // ---------------------------------------------------------------- scoping
@@ -590,7 +592,71 @@ export class MetricsService {
 
   // ------------------------------------------------------------------ overview
 
-  async overview(params: {
+  /**
+   * The overview is computed from the transactional tables (nothing is pre-aggregated), which is a dozen
+   * queries per call. Identical requests (same scope, window, comparison and finance visibility - i.e. the same
+   * people looking at the same dashboard) are therefore answered from one computation for a few seconds, and
+   * concurrent identical requests share a single in-flight computation instead of each opening their own queries
+   * (without this, ten executives opening the page together queue behind the database connection pool).
+   * The key contains the whole scope, so one tenant can never be served another's figures; `generatedAt` is
+   * the time of the computation, so a reader always sees how old the numbers are.
+   */
+  private readonly overviewCache = new Map<
+    string,
+    { at: number; result: Promise<OverviewResponse> }
+  >();
+  /** Seconds a computed overview is reused. Zero disables reuse (and in-flight sharing). */
+  overviewCacheTtlMs = 20_000;
+  private static readonly OVERVIEW_CACHE_MAX = 200;
+
+  overview(params: {
+    scope: AnalyticsScope;
+    range: DateRange;
+    comparison: ComparisonKind | null;
+    canViewFinance: boolean;
+    now: Date;
+  }): Promise<OverviewResponse> {
+    if (this.overviewCacheTtlMs <= 0) return this.computeOverview(params);
+    const key = JSON.stringify({
+      scope: params.scope,
+      start: params.range.start.toISOString(),
+      end: params.range.end.toISOString(),
+      comparison: params.comparison,
+      finance: params.canViewFinance,
+    });
+    const nowMs = Date.now();
+    const hit = this.overviewCache.get(key);
+    if (hit && nowMs - hit.at < this.overviewCacheTtlMs) return hit.result;
+
+    for (const [k, v] of this.overviewCache) {
+      if (nowMs - v.at >= this.overviewCacheTtlMs) this.overviewCache.delete(k);
+    }
+    if (this.overviewCache.size >= MetricsService.OVERVIEW_CACHE_MAX) {
+      const oldest: string | undefined = [...this.overviewCache.keys()][0];
+      if (oldest !== undefined) this.overviewCache.delete(oldest);
+    }
+    const started = Date.now();
+    const result = this.computeOverview(params);
+    void result.then(
+      () => {
+        const took = Date.now() - started;
+        if (took > 2000)
+          this.logger.warn(
+            `Executive overview took ${took} ms to compute (scope: ${params.scope.description}). Slow computations queue every identical request behind them.`,
+          );
+      },
+      () => undefined,
+    );
+    this.overviewCache.set(key, { at: nowMs, result });
+    // A failure is never kept: the next request computes afresh.
+    result.catch(() => {
+      if (this.overviewCache.get(key)?.result === result)
+        this.overviewCache.delete(key);
+    });
+    return result;
+  }
+
+  private async computeOverview(params: {
     scope: AnalyticsScope;
     range: DateRange;
     comparison: ComparisonKind | null;
@@ -695,7 +761,7 @@ export class MetricsService {
         generatedAt: now.toISOString(),
         freshness: 'LIVE',
         freshnessNote:
-          'Computed directly from transactional records at the time of the request; nothing is cached or pre-aggregated, so no figure is older than generatedAt.',
+          'Computed directly from transactional records; nothing is pre-aggregated. An identical request is answered from the same computation for up to 20 seconds, so no figure is older than generatedAt (and generatedAt is at most 20 seconds old).',
         definitionsVersion: METRIC_DEFINITIONS_VERSION,
         currency: base,
         scope: {

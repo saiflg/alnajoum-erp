@@ -18,6 +18,7 @@ import {
   VisaApplication,
 } from '@prisma/client';
 import { randomBytes } from 'crypto';
+import { ListPage } from '../../common/pagination/list-page';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 
 type PrismaTransactionClient = Prisma.TransactionClient;
@@ -268,21 +269,40 @@ export class InvoicesService {
     };
   }
 
-  listAll(
+  private listWhere(
     filters: { customerId?: string; status?: InvoiceStatus },
     tenantCompanyId?: string,
   ) {
+    return {
+      ...filters,
+      ...(tenantCompanyId !== undefined && this.tenantWhere(tenantCompanyId)),
+    };
+  }
+
+  /** `page` bounds the result (see common/pagination); callers that pass none get every row, as before. */
+  listAll(
+    filters: { customerId?: string; status?: InvoiceStatus },
+    tenantCompanyId?: string,
+    page?: ListPage,
+  ) {
     return this.prisma.invoice.findMany({
-      where: {
-        ...filters,
-        ...(tenantCompanyId !== undefined && this.tenantWhere(tenantCompanyId)),
-      },
+      where: this.listWhere(filters, tenantCompanyId),
       include: {
         lineItems: true,
         payments: true,
         customer: { select: { firstName: true, lastName: true } },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      ...(page && { take: page.take, skip: page.skip }),
+    });
+  }
+
+  countAll(
+    filters: { customerId?: string; status?: InvoiceStatus },
+    tenantCompanyId?: string,
+  ) {
+    return this.prisma.invoice.count({
+      where: this.listWhere(filters, tenantCompanyId),
     });
   }
 

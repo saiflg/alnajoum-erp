@@ -1,3 +1,4 @@
+import { ListPage } from '../../common/pagination/list-page';
 import {
   ForbiddenException,
   Injectable,
@@ -160,6 +161,7 @@ export class SupportTicketsService {
       categoryId?: string;
     },
     tenantCompanyId?: string,
+    page?: ListPage,
   ) {
     return this.prisma.supportTicket.findMany({
       where: {
@@ -174,7 +176,28 @@ export class SupportTicketsService {
         assignedStaff: { select: { firstName: true, lastName: true } },
         branch: { select: { name: true } },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      ...(page && { take: page.take, skip: page.skip }),
+    });
+  }
+
+  countAll(
+    filters: {
+      status?: TicketStatus;
+      priority?: TicketPriority;
+      assignedStaffId?: string;
+      branchId?: string;
+      categoryId?: string;
+    },
+    tenantCompanyId?: string,
+  ) {
+    return this.prisma.supportTicket.count({
+      where: {
+        ...filters,
+        ...(tenantCompanyId !== undefined && {
+          customer: { companyId: tenantCompanyId },
+        }),
+      },
     });
   }
 

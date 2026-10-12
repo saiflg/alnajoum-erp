@@ -6,7 +6,13 @@ import {
   Param,
   Post,
   Query,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
+import {
+  parseListPage,
+  withPageHeaders,
+} from '../../common/pagination/list-page';
 import {
   TicketMessageAuthorType,
   TicketPriority,
@@ -32,17 +38,23 @@ export class SupportTicketsAdminController {
   ) {}
 
   @Get()
-  listAll(
+  async listAll(
     @CurrentUser() user: AuthContext,
+    @Res({ passthrough: true }) res: Response,
     @Query('status') status?: TicketStatus,
     @Query('priority') priority?: TicketPriority,
     @Query('assignedStaffId') assignedStaffId?: string,
     @Query('branchId') branchId?: string,
     @Query('categoryId') categoryId?: string,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
   ) {
-    return this.ticketsService.listAll(
-      { status, priority, assignedStaffId, branchId, categoryId },
-      resolveTenantFilter(user),
+    const tenant = resolveTenantFilter(user);
+    const page = parseListPage(limit, offset);
+    const filters = { status, priority, assignedStaffId, branchId, categoryId };
+    const rows = await this.ticketsService.listAll(filters, tenant, page);
+    return withPageHeaders(res, rows, page, () =>
+      this.ticketsService.countAll(filters, tenant),
     );
   }
 

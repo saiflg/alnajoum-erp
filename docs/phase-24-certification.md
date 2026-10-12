@@ -21,7 +21,7 @@ Windows 11, 4 GB RAM (about 300 MB free during heavy steps), Docker Desktop VM o
 | Static | Lint, API (`eslint src test`) | **PASS** — 0 errors (was 184 in older files; 172 auto-fixed, 12 fixed by hand), 23 warnings (typed-`any` from supertest in spec files) |
 | Static | Lint, web | **PASS** — 0 errors, 5 warnings (`react-hooks/exhaustive-deps`, one relative-redirect hint) |
 | Static | `prisma validate` | **PASS** |
-| Unit | API, all modules | **PASS** — 180 / 180 suites, **2,126 / 2,126** tests |
+| Unit | API, all modules | **PASS** — 184 / 184 suites, **2,177 / 2,177** tests (2,126 at the time of the verdict; +51 for the follow-up work in section 9) |
 | Unit | Web | **KNOWN-LIMITATION** — the web app has no unit tests; it is covered by lint, typecheck, build and the browser walk-through below |
 | Integration / E2E | `test/*.e2e-spec.ts` (auth + RBAC, customers, family, flights, payments, gateway, notifications, contact, app) | **PASS** — 9 / 9 suites, **122 / 122** tests (they could not start at all before this phase, see section 4) |
 | Migrations | All 51 applied from an empty database | **PASS** — 37–63 s; `migrate status` up to date; `migrate diff` against the schema is empty (no drift) |
@@ -112,13 +112,13 @@ There were no 5xx responses in any scenario. Reading the table honestly: the exe
 * **No real provider was ever called.** Paystack, OPay, Meta WhatsApp, Duffel, SMTP and every AI model were mocks. Signature verification, amount confirmation, webhook retries and error shapes are unit-tested against documented formats, not against the live services. The mock AI provider is a rule-based planner, not a language model.
 * No external penetration test or security audit. The three audits behind the baseline were internal code reviews.
 * Branch isolation inside a company is not enforced (S-37) — a product decision.
-* Passport numbers and other customer identifiers are protected by access control, not field-encrypted; no malware scanning or storage quotas on uploads.
-* The CSP still allows inline scripts / styles; DNS-rebinding SSRF is not defended; registration still answers 409 for an existing email; no email / phone verification.
+* Customer identifiers other than passport numbers (phone, address, date of birth) are protected by access control, not field-encrypted; passport numbers are encrypted at rest but can only be searched by exact value (section 9). No malware scanning or storage quotas on uploads.
+* `style-src` still allows inline styles (scripts no longer do, section 9); DNS-rebinding SSRF is not defended; registration still answers 409 for an existing email; no email / phone verification.
 * WhatsApp events are all attributed to the platform's first company.
 * Backups are not scheduled and no off-machine copy is configured; a full server rebuild and a restore over the live database were not rehearsed.
 * No SIEM or alert delivery; no live-data monitoring beyond the in-app console.
-* List endpoints without a row cap (S-40); live-aggregated analytics (section 5).
-* There is no Finance queue for wallet credits created from surplus payments (they are ordinary wallet transactions named `SURPLUS-<reference>`), and the admin landing page still shows placeholder text from Phase 1.
+* About 200 smaller list queries (mostly reference data) still have no row cap, and the web pages do not page the four capped lists yet (section 9); executive figures are live-aggregated, so a cold computation still takes about a second.
+* Surplus wallet credits and payment-amount mismatches now create a Finance task and an audit event (section 9); there is still no push notification or paging, and the admin landing page placeholder text was replaced.
 * The single "high" dependency advisory, and the dev-only tooling advisories, remain; advisories appear continuously and `pnpm audit --prod` must be re-run on every update.
 
 ## 7. Conditions that stand between this verdict and "certified for staging / production preparation" and production
@@ -127,16 +127,31 @@ There were no 5xx responses in any scenario. Reading the table honestly: the exe
 
 * **C1.** Replace every mock with a vendor *sandbox* (Paystack / OPay test keys, Meta test number, Duffel test token, SMTP, and a real model if the AI layer is to be enabled) and re-run the AI, money and security suites against them, including webhook signature and amount-mismatch paths.
 * **C2.** Generate real secrets (`JWT_*`, `DATA_ENCRYPTION_KEYS`, bootstrap admin password), put the keys in custody **outside** the server, and set `PUBLIC_ORIGIN` / `TRUST_PROXY_HOPS`.
-* **C3.** Run the load script and a larger data volume on a production-like host; add pagination to the unbounded list endpoints and a short-lived cache (or a connection-pool increase) for the executive overview.
+* **C3.** Run the load script and a larger data volume on a production-like host (the follow-up in section 9 removed the two scaling problems measured here on a laptop, but not the need to measure on real hardware); page the capped lists in the web UI.
 * **C4.** Schedule `deploy/backup.sh`, configure an off-machine copy, and rehearse a full rebuild and a restore over a staging database.
 * **C5.** Bring up the real `docker-compose.prod.yml` stack (Caddy, TLS, real domain) and run the live suites against it.
 
 **Needed before production**
 
 * **C6.** An independent penetration test and fixes for its findings.
-* **C7.** A decision on branch isolation (S-37), field-level encryption of passport numbers, and removal of inline scripts from the CSP.
+* **C7.** A decision on branch isolation (S-37). (Passport-number encryption and removal of inline scripts from the CSP were done afterwards, section 9.)
 * **C8.** Alerting / on-call: security events and payment mismatches must reach a person.
 * **C9.** A legal and compliance review by a qualified assessor (data protection, payments, travel regulation). Nothing here is a compliance claim.
+
+## 9. Follow-up work after the verdict (2026-10-12)
+
+The verdict above is unchanged: the open conditions are the ones that matter for going live. These items were closed afterwards, each with evidence.
+
+| Item | What changed | Evidence |
+|---|---|---|
+| Executive overview under load | Identical requests (same scope, window, comparison, finance visibility) are answered from one computation for up to 20 s; concurrent ones share it. The key contains the whole scope, so tenants cannot see each other's figures; failures are not cached; a computation slower than 2 s is logged. | 20 simultaneous users: **757 requests, 50 req/s, p95 0.89 s** (before: 99 requests, 7 req/s, p95 12.9 s). 20 simultaneous cold requests share one ~1 s computation. 5 new unit tests. |
+| Unbounded lists | Invoices, customers, flight bookings and support tickets return at most 500 rows by default (1000 max), newest first, with `limit` / `offset` and `X-Result-Limit`, `X-Result-Offset`, `X-Result-Truncated`, `X-Total-Count` headers. The response is still a plain array. | Invoice list p95 1.41 s → 1.13 s at 20 users; unit tests for the paging rules. |
+| Finance queue | A surplus credit, or a provider confirming a payment for a different amount / currency (invoice checkout or wallet deposit), creates one task for the company's Finance officer (or administrator, urgent for a mismatch) and an audit event. Once per payment even though reconciliation re-checks pending payments. | 8 unit tests plus assertions in the payments specs; live: the late-checkout check now also proves the task is queued in the customer's company, audited, and not duplicated by confirming twice (**21 / 21**). |
+| Passport numbers encrypted at rest | AES-256-GCM in the database client for all eight passport columns, nested data included; startup migration sealed the 42 existing values; the customer row carries a keyed lookup fingerprint (exact match only) used by dashboard search and never returned. | 14 / 14 live checks (database holds ciphertext only; profile, family members and booking passengers read back in plain form; exact / spaced / lowercase search finds the customer; a fragment finds nothing; another company finds nothing; a new value is sealed and immediately searchable); 24 unit tests (encryption rules, key rotation, startup migration); the full unit suite, e2e (122 / 122), AI (106 / 106 + 9 / 9) and security suites pass with it active; secret-leak sweep clean. |
+| Nonce-based CSP | Scripts need a per-request nonce (`'strict-dynamic'`); `'unsafe-inline'` is gone from `script-src`. Every page is rendered per request. | Production build: 21 / 21 header and markup checks (all scripts nonced, nonce differs per request); real browser login and pages work with no CSP violations; an injected inline event handler is blocked and reported by the browser. |
+| Admin landing page | Placeholder text from Phase 1 replaced with links to the main workspaces. | Typecheck and lint clean. |
+
+Two operational notes. The images must be rebuilt to carry these changes (they were built before them), and in development the encryption key is derived from `JWT_REFRESH_SECRET`, so changing that secret makes passport numbers show as unreadable until it is restored (production uses `DATA_ENCRYPTION_KEYS`; keep the first listed key, see security.md section 3.3).
 
 ## 8. Statement
 

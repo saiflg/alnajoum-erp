@@ -112,8 +112,14 @@ check('a fully paid invoice refuses a new checkout', late.status === 409, `${lat
   check('the whole amount was credited to the customer wallet', walletAfter - walletBefore === total, `+${walletAfter - walletBefore} (expected +${total})`);
   check('the credit has its own ledger entry for the same amount', num(`select count(*) from journal_entries where reference='SURPLUS-${lateRef}' and amount=${total} and status='POSTED'`) === 1);
   check('the intent is marked SUCCEEDED exactly once', sql(`select status from payment_intents where reference='${lateRef}'`) === 'SUCCEEDED');
+  // The surplus lands in Finance's queue: one open task for a Finance officer / administrator of the customer's company.
+  const queued = sql(`select count(*) || '|' || coalesce(max(s."companyId"),'') from tasks t join staff s on s.id=t."assignedStaffId" where t.title='Review surplus payment ${lateRef}' and t.status in ('PENDING','IN_PROGRESS','OVERDUE') and t."relatedType"='PAYMENT'`).split('|');
+  const custCompany = sql(`select "companyId" from customers where id='${customerId}'`);
+  check('a Finance task is queued for the surplus, assigned within the customer company', queued[0] === '1' && queued[1] === custCompany, queued.join(' / '));
+  check('...and the surplus is on the audit trail', num(`select count(*) from audit_logs where action='finance.surplus_credit_created' and metadata->>'reference'='${lateRef}'`) === 1);
   const again = await raw('POST', `/invoices/me/${lateInvoice}/checkout/verify`, { token: customer, body: { reference: lateRef } });
   check('confirming the same checkout again changes nothing (no second credit)', num(`select count(*) from wallet_transactions where reference='SURPLUS-${lateRef}'`) === 1, `${again.status}`);
+check('...and raises no second task', num(`select count(*) from tasks where title='Review surplus payment ${lateRef}'`) === 1);
 }
 
 const failed = results.filter((r) => !r).length;

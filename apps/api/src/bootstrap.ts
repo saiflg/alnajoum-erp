@@ -27,6 +27,13 @@ export function configureApp(app: INestApplication): INestApplication {
   app.enableCors({
     origin: process.env.CORS_ORIGIN?.split(',') ?? 'http://localhost:3000',
     credentials: true,
+    // So browser code can read the paging headers on capped list endpoints (common/pagination).
+    exposedHeaders: [
+      'X-Result-Limit',
+      'X-Result-Offset',
+      'X-Result-Truncated',
+      'X-Total-Count',
+    ],
   });
 
   app.setGlobalPrefix('api/v1');

@@ -42,6 +42,6 @@ Three independent read-only audits (authentication/authorisation, tenant isolati
 
 ## 4. Known limitations (unchanged by this report)
 
-Branch isolation inside one company (S-37); passport numbers are protected by access control, not field-encrypted; no malware scanning or per-customer storage quota; CSP still allows inline scripts; WhatsApp events are attributed to the first company; backups are not scheduled and no off-machine target is configured; the uploads restore and a restore over the live database were not rehearsed; DNS-rebinding SSRF is not defended; registration still answers 409 for an existing email; no email/phone verification; no external penetration test.
+Branch isolation inside one company (S-37); (update, Phase 24: passport numbers are now encrypted at rest and the CSP no longer allows inline scripts); no malware scanning or per-customer storage quota; WhatsApp events are attributed to the first company; backups are not scheduled and no off-machine target is configured; the uploads restore and a restore over the live database were not rehearsed; DNS-rebinding SSRF is not defended; registration still answers 409 for an existing email; no email/phone verification; no external penetration test.
 
 **LOCALHOST / TEST ONLY.**

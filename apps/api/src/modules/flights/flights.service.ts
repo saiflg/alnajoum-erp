@@ -1,3 +1,4 @@
+import { ListPage } from '../../common/pagination/list-page';
 import {
   BadRequestException,
   ConflictException,
@@ -717,6 +718,7 @@ export class FlightsService {
   listAll(
     filters: { customerId?: string; status?: FlightBookingStatus },
     tenantCompanyId?: string,
+    page?: ListPage,
   ) {
     return this.prisma.flightBooking.findMany({
       where: {
@@ -729,7 +731,22 @@ export class FlightsService {
         passengers: true,
         customer: { select: { firstName: true, lastName: true } },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      ...(page && { take: page.take, skip: page.skip }),
+    });
+  }
+
+  countAll(
+    filters: { customerId?: string; status?: FlightBookingStatus },
+    tenantCompanyId?: string,
+  ) {
+    return this.prisma.flightBooking.count({
+      where: {
+        ...filters,
+        ...(tenantCompanyId !== undefined && {
+          customer: { companyId: tenantCompanyId },
+        }),
+      },
     });
   }
 

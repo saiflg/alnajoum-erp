@@ -134,6 +134,9 @@ model Customer {
   country String?
 
   passportNumber     String?
+  /// Keyed fingerprint of the passport number (see common/security/field-cipher.ts blindIndex): lets staff find a
+  /// customer by an exact passport number while the number itself is stored encrypted. Never returned by the API.
+  passportNumberIndex String?
   passportExpiryDate DateTime?
 
   emergencyContactName  String?
@@ -191,6 +194,7 @@ model Customer {
   @@index([assignedStaffId])
   @@index([assignedBranchId])
   @@index([companyId])
+  @@index([passportNumberIndex])
   @@map("customers")
 }
 

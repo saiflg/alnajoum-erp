@@ -6,6 +6,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -26,6 +27,7 @@ import {
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { ACCOUNT_CODES } from '../finance/constants/account-codes.constant';
 import { FinancePostingService } from '../finance/finance-posting.service';
+import { FinanceAlertsService } from './finance-alerts.service';
 import { LedgerService } from '../finance/ledger.service';
 import { IncentivesService } from '../incentives/incentives.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -85,6 +87,8 @@ export class PaymentsService {
     @Inject(PAYMENT_PROVIDER)
     private readonly paymentProvider: PaymentProviderPort,
     private readonly ledgerService: LedgerService,
+    // Optional so the payment flow never depends on the alerting being present.
+    @Optional() private readonly financeAlerts?: FinanceAlertsService,
   ) {}
 
   async recordPayment(
@@ -425,6 +429,14 @@ export class PaymentsService {
             `(expected ${intent.amount} ${intent.currency}, got ${result.amount} ${result.currency}); ` +
             'not crediting — needs manual review.',
         );
+        await this.financeAlerts?.amountMismatch({
+          customerId: intent.customerId,
+          relatedId: intent.id,
+          reference: intent.reference,
+          expected: { amount: intent.amount, currency: intent.currency },
+          received: { amount: result.amount, currency: result.currency },
+          source: 'invoice checkout',
+        });
         return {
           ok: false,
           reason: 'The confirmed amount did not match the expected amount.',
@@ -535,6 +547,19 @@ export class PaymentsService {
           `${recorded.standing.outstanding} outstanding): ${recorded.applied} applied, ` +
           `${recorded.surplus} ${intent.currency} credited to the customer's wallet.`,
       );
+      await this.financeAlerts?.surplusCredited({
+        companyId: null,
+        customerId: intent.customerId,
+        intentId: intent.id,
+        reference: intent.reference,
+        invoiceId: intent.invoiceId,
+        amount: recorded.surplus,
+        currency: intent.currency,
+        invoiceState:
+          recorded.standing.status === InvoiceStatus.VOID
+            ? 'voided'
+            : 'settled',
+      });
     }
 
     if (recorded.payment) {

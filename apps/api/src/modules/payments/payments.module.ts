@@ -1,3 +1,4 @@
+import { AuditModule } from '../audit/audit.module';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { CustomersModule } from '../customers/customers.module';
@@ -17,10 +18,12 @@ import { OpayPaymentProviderService } from './providers/opay-payment-provider.se
 import { PAYMENT_PROVIDER } from './providers/payment-provider.port';
 import { PaymentProviderRouter } from './providers/payment-provider.router';
 import { PaystackPaymentProviderService } from './providers/paystack-payment-provider.service';
+import { FinanceAlertsService } from './finance-alerts.service';
 import { ReceiptsService } from './receipts.service';
 
 @Module({
   imports: [
+    AuditModule,
     ConfigModule,
     CustomersModule,
     UsersModule,
@@ -42,12 +45,18 @@ import { ReceiptsService } from './receipts.service';
     PaymentsService,
     PaymentIntentReconciliationService,
     ReceiptsService,
+    FinanceAlertsService,
     MockPaymentProviderService,
     PaystackPaymentProviderService,
     OpayPaymentProviderService,
     PaymentProviderRouter,
     { provide: PAYMENT_PROVIDER, useExisting: PaymentProviderRouter },
   ],
-  exports: [InvoicesService, PaymentsService, PaymentProviderRouter],
+  exports: [
+    InvoicesService,
+    PaymentsService,
+    PaymentProviderRouter,
+    FinanceAlertsService,
+  ],
 })
 export class PaymentsModule {}

@@ -8,6 +8,10 @@ import {
   Res,
   StreamableFile,
 } from '@nestjs/common';
+import {
+  parseListPage,
+  withPageHeaders,
+} from '../../common/pagination/list-page';
 import { InvoiceStatus } from '@prisma/client';
 import type { Response } from 'express';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -33,14 +37,23 @@ export class InvoicesAdminController {
 
   @Get()
   @RequirePermissions(PERMISSIONS.INVOICE.READ)
-  list(
+  async list(
     @CurrentUser() user: AuthContext,
+    @Res({ passthrough: true }) res: Response,
     @Query('customerId') customerId?: string,
     @Query('status') status?: InvoiceStatus,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
   ) {
-    return this.invoicesService.listAll(
+    const tenant = resolveTenantFilter(user);
+    const page = parseListPage(limit, offset);
+    const rows = await this.invoicesService.listAll(
       { customerId, status },
-      resolveTenantFilter(user),
+      tenant,
+      page,
+    );
+    return withPageHeaders(res, rows, page, () =>
+      this.invoicesService.countAll({ customerId, status }, tenant),
     );
   }
 

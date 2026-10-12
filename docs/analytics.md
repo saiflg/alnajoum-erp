@@ -53,7 +53,7 @@ Full text, caveats and sources are served by `GET /analytics/metrics` and shown 
 - **Mixed currency is flagged, not summed.** Money totals use the company base currency; bookings in other currencies are excluded and counted in a visible warning. There is no FX history to convert them.
 - **Unavailable means unavailable.** Metrics the data cannot support are listed with the reason and what would fix them (`UNAVAILABLE_METRICS`), and a metric that can't be shown for a selection (e.g. cash for one branch) returns `status: UNAVAILABLE` with a reason, not zero.
 - **No forecasts.** Nothing is projected. The forecast entry says "Insufficient historical data" and exists so nobody mistakes the absence for an omission.
-- **Freshness.** Every response is `freshness: LIVE` with `generatedAt`; nothing is cached or pre-aggregated, so no figure is older than its timestamp.
+- **Freshness.** Every response is `freshness: LIVE` with `generatedAt`; nothing is pre-aggregated, and an identical request is answered from one computation for at most 20 seconds, so no figure is older than its timestamp (which is at most 20 seconds old).
 
 ## Tenant and branch isolation
 

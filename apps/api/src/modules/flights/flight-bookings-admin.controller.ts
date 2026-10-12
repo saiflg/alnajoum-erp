@@ -1,4 +1,9 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, Res } from '@nestjs/common';
+import type { Response } from 'express';
+import {
+  parseListPage,
+  withPageHeaders,
+} from '../../common/pagination/list-page';
 import { FlightBookingStatus } from '@prisma/client';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
@@ -69,14 +74,23 @@ export class FlightBookingsAdminController {
 
   @Get()
   @RequirePermissions(PERMISSIONS.FLIGHT.READ)
-  list(
+  async list(
     @CurrentUser() user: AuthContext,
+    @Res({ passthrough: true }) res: Response,
     @Query('customerId') customerId?: string,
     @Query('status') status?: FlightBookingStatus,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
   ) {
-    return this.flightsService.listAll(
+    const tenant = resolveTenantFilter(user);
+    const page = parseListPage(limit, offset);
+    const rows = await this.flightsService.listAll(
       { customerId, status },
-      resolveTenantFilter(user),
+      tenant,
+      page,
+    );
+    return withPageHeaders(res, rows, page, () =>
+      this.flightsService.countAll({ customerId, status }, tenant),
     );
   }
 

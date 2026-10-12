@@ -1,6 +1,7 @@
 import {
   createCipheriv,
   createDecipheriv,
+  createHmac,
   hkdfSync,
   randomBytes,
 } from 'crypto';
@@ -140,6 +141,22 @@ export class FieldCipher {
     return FieldCipher.isEncrypted(value)
       ? this.decrypt(value, context)
       : value;
+  }
+
+  /**
+   * A keyed, one-way fingerprint of an identifier (a passport number) so rows can be FOUND by exact value while the
+   * value itself is stored encrypted. Normalised (letters and digits only, upper case) so "ab 123-456" and
+   * "AB123456" match. It is an HMAC-SHA-256 under a key derived from the FIRST key listed in DATA_ENCRYPTION_KEYS,
+   * not the active one, so the fingerprints stay valid when the active key is rotated: keep the first listed key
+   * in the list for as long as indexed rows exist. It supports equality lookups only (no partial match).
+   */
+  blindIndex(value: string, context: string): string {
+    const first = [...this.keys.values()][0];
+    const key = Buffer.from(
+      hkdfSync('sha256', first, 'alnajoum-blind-index', context, 32),
+    );
+    const normalised = value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    return createHmac('sha256', key).update(normalised).digest('hex');
   }
 
   /** True when the value is plaintext or encrypted under a key that is not the current one. */

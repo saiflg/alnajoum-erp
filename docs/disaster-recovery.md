@@ -12,7 +12,7 @@ A backup is only worth what a *restore* of it is worth. This page says what is b
 | Other secrets (JWT, provider keys) | `.env.prod`; provider keys inside the database (encrypted) | Provider keys travel with the database backup; JWT secrets are in `.env.prod` | Provider keys: yes (they are database rows). JWT secrets: regenerate if lost (everyone signs in again) |
 | Application code | Git | Git | n/a |
 
-> **The most important sentence on this page:** an encrypted column (integration credentials, authenticator secrets, staff payout account numbers) restored without `DATA_ENCRYPTION_KEYS` is unreadable. Keep the keys with the same care as the database backups, but not in the same place.
+> **The most important sentence on this page:** an encrypted column (integration credentials, authenticator secrets, staff payout account numbers, passport numbers) restored without `DATA_ENCRYPTION_KEYS` is unreadable. Keep the keys with the same care as the database backups, but not in the same place.
 
 ## 2. Objectives
 

@@ -16,6 +16,7 @@ import {
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { FinancePostingService } from '../finance/finance-posting.service';
 import { LedgerService } from '../finance/ledger.service';
+import { FinanceAlertsService } from './finance-alerts.service';
 import { IncentivesService } from '../incentives/incentives.service';
 import { IntegrationsService } from '../integrations/integrations.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -39,6 +40,7 @@ describe('PaymentsService', () => {
   let eventEmitter: { emit: jest.Mock };
   let paymentProviderRouter: { resolveByName: jest.Mock };
   let ledgerService: { post: jest.Mock };
+  let financeAlerts: { surplusCredited: jest.Mock; amountMismatch: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
@@ -89,6 +91,10 @@ describe('PaymentsService', () => {
       resolveByName: jest.fn().mockReturnValue(paymentProvider),
     };
     ledgerService = { post: jest.fn().mockResolvedValue({ id: 'je-1' }) };
+    financeAlerts = {
+      surplusCredited: jest.fn().mockResolvedValue(undefined),
+      amountMismatch: jest.fn().mockResolvedValue(undefined),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -107,6 +113,7 @@ describe('PaymentsService', () => {
           useValue: { postRevenueForPayment: jest.fn() },
         },
         { provide: LedgerService, useValue: ledgerService },
+        { provide: FinanceAlertsService, useValue: financeAlerts },
       ],
     }).compile();
 
@@ -593,6 +600,15 @@ describe('PaymentsService', () => {
       expect(prisma.paymentIntent.update).not.toHaveBeenCalled();
       expect(prisma.paymentIntent.updateMany).not.toHaveBeenCalled();
       expect(prisma.payment.create).not.toHaveBeenCalled();
+      // a person is told, rather than the mismatch living only in a log line
+      expect(financeAlerts.amountMismatch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          customerId: 'customer-1',
+          reference: 'CHK-ABC123',
+          source: 'invoice checkout',
+          received: { amount: 0, currency: '' },
+        }),
+      );
     });
 
     it('does not credit a payment confirmed in the wrong currency', async () => {
@@ -694,6 +710,15 @@ describe('PaymentsService', () => {
       expect(warn).toHaveBeenCalledWith(
         expect.stringContaining('credited to the customer'),
       );
+      expect(financeAlerts.surplusCredited).toHaveBeenCalledWith(
+        expect.objectContaining({
+          customerId: 'customer-1',
+          reference: 'CHK-ABC123',
+          invoiceId: 'invoice-1',
+          amount: 30_000,
+          invoiceState: 'settled',
+        }),
+      );
       warn.mockRestore();
     });
 
@@ -777,6 +802,7 @@ describe('PaymentsService', () => {
       });
       expect(prisma.walletTransaction.create).not.toHaveBeenCalled();
       expect(ledgerService.post).not.toHaveBeenCalled();
+      expect(financeAlerts.surplusCredited).not.toHaveBeenCalled();
     });
 
     it('writes the intent claim and the payment in one transaction under the invoice lock', async () => {

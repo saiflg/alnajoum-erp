@@ -6,7 +6,13 @@ import {
   Param,
   Patch,
   Query,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
+import {
+  parseListPage,
+  withPageHeaders,
+} from '../../common/pagination/list-page';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import type { AuthContext } from '../../common/interfaces/auth-context.interface';
@@ -26,14 +32,20 @@ export class CustomersController {
 
   @Get()
   @RequirePermissions(PERMISSIONS.CUSTOMER.READ)
-  findAll(
+  async findAll(
     @CurrentUser() user: AuthContext,
+    @Res({ passthrough: true }) res: Response,
     @Query('assignedStaffId') assignedStaffId?: string,
     @Query('assignedBranchId') assignedBranchId?: string,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
   ) {
-    return this.customersService.findAll(
-      { assignedStaffId, assignedBranchId },
-      resolveTenantFilter(user),
+    const tenant = resolveTenantFilter(user);
+    const page = parseListPage(limit, offset);
+    const filters = { assignedStaffId, assignedBranchId };
+    const rows = await this.customersService.findAll(filters, tenant, page);
+    return withPageHeaders(res, rows, page, () =>
+      this.customersService.countAll(filters, tenant),
     );
   }
 

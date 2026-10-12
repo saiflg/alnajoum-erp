@@ -15,12 +15,12 @@ The findings that drove this phase, and their current status, are in [security-b
 | Step-up | Money movement, role changes, payouts, integrations, finance settings, backups, privacy erasure and access-review completion need a fresh proof of identity (password, or authenticator code) valid for 5 minutes | `common/security/step-up.ts` |
 | Segregation of duties | You cannot approve your own expense, incentive, manual payment, bank verification, payout, access review or break-glass request | per service |
 | Money safety | Advisory locks, atomic status claims, idempotency keys, claim-before-send payouts | `common/db/payment-guards.ts` |
-| Secrets | AES-256-GCM `FieldCipher` with versioned keys, context-bound ciphertext. Encrypted: integration credentials, authenticator secrets, staff payout account numbers | `common/security/field-cipher.ts` |
+| Secrets | AES-256-GCM `FieldCipher` with versioned keys, context-bound ciphertext. Encrypted: integration credentials, authenticator secrets, staff payout account numbers, **passport numbers** (customers, family members, flight / Hajj / Umrah / corporate travellers, visa applicants) | `common/security/field-cipher.ts`, `infrastructure/prisma/identity-number-encryption.ts` |
 | Config safety | The API refuses to start in production with mock payment/WhatsApp providers, weak or placeholder secrets, missing encryption key, non-HTTPS origin | `common/security/runtime-environment.ts` |
 | Uploads | Magic-byte verification, safe filenames and `Content-Disposition`, staff downloads audited | `common/documents/*` |
 | Input | Global `ValidationPipe` (whitelist, forbid unknown); every request body is a class (no inline types) | all controllers |
 | Rate limits | Credentials 10/min, public search 20/min, badge lookup 20/min, contact form 5/min, global 100/min; real client IP behind the proxy via `TRUST_PROXY_HOPS` | `common/security/throttle-limits.ts` |
-| Web | CSP and security headers, safe redirects, no tokens in JavaScript-readable storage, mock checkout disabled in production | `apps/web/next.config.ts` |
+| Web | Nonce-based CSP (scripts need the per-request nonce; no `'unsafe-inline'` scripts, inline event handlers blocked) and security headers, safe redirects, no tokens in JavaScript-readable storage, mock checkout disabled in production | `apps/web/next.config.ts` |
 | Operations | Container hardening (non-root, read-only, healthchecks), verified encrypted backups, restore check | `docker-compose.prod.yml`, `deploy/*` |
 | Monitoring | Security events on the audit log, incident register, access reviews, break-glass, privacy requests, retention, live control register | `modules/security/*`, UI at **Admin → Security & Compliance** |
 
@@ -54,7 +54,7 @@ The findings that drove this phase, and their current status, are in [security-b
 7. **Close** – write what happened, root cause and the change made; move the incident to RESOLVED, then CLOSED.
 
 ### 3.3 Key and secret rotation
-* **Data-encryption key** – (a) generate a new key; (b) set `DATA_ENCRYPTION_KEYS="old:<k1>,new:<k2>"` and `DATA_ENCRYPTION_KEY_ID=new`; (c) restart the API. At startup, integration credentials, authenticator secrets and staff payout account numbers still under the old key are re-encrypted under the new one (logged). (d) Verify nothing references the old id: `SELECT count(*) FROM identities WHERE "twoFactorSecret" LIKE 'enc:v1:old:%'` (and the same for `staff."bankAccountNumber"` and `integration_credentials.config::text`). (e) Only then remove `old`. Old backups still need the old key to be readable: keep it with that backup's retention.
+* **Data-encryption key** – (a) generate a new key; (b) set `DATA_ENCRYPTION_KEYS="old:<k1>,new:<k2>"` and `DATA_ENCRYPTION_KEY_ID=new`; (c) restart the API. At startup, integration credentials, authenticator secrets, staff payout account numbers and passport numbers still under the old key are re-encrypted under the new one (logged). **Keep the FIRST key in the list for as long as customers exist:** the passport search fingerprint is derived from it, and removing it silently breaks search-by-passport (the numbers themselves stay readable). (d) Verify nothing references the old id: `SELECT count(*) FROM identities WHERE "twoFactorSecret" LIKE 'enc:v1:old:%'` (and the same for `staff."bankAccountNumber"` and `integration_credentials.config::text`). (e) Only then remove `old`. Old backups still need the old key to be readable: keep it with that backup's retention.
 * **JWT secrets** – changing them signs everyone out (acceptable, and the right response to a suspected leak). Change both, restart.
 * **Provider keys (Paystack, WhatsApp, SMTP, AI)** – rotate at the provider first, then update under Admin → Integrations (Super Admin, step-up). The old value is overwritten and was never shown again.
 * **Database password** – change in Postgres, update `DATABASE_URL`/`POSTGRES_PASSWORD`, restart.
@@ -76,10 +76,10 @@ Use Admin → Security → Privacy requests. Verify the requester's identity *ou
 * **Network-level SSRF** – outbound integration URLs are checked for private/loopback literals, but DNS-based rebinding is not defended.
 * **Email/phone verification** is not implemented; registration reveals whether an email exists (it is rate-limited).
 * **WhatsApp** inbound messages are attributed to a single company (single-tenant assumption).
-* **Passport numbers and other customer identifiers** are protected by access control and tenant isolation but are **not** field-encrypted.
+* **Passport numbers are encrypted at rest** (AES-256-GCM, transparently, in the database client), but other customer identifiers (phone, address, date of birth, national ID numbers) are protected by access control and tenant isolation only. Because a ciphertext cannot be pattern-matched, staff can find a customer by an **exact** passport number (any case or spacing) but not by a fragment. In development the key is derived from `JWT_REFRESH_SECRET`: changing that secret makes passport numbers show as "[unreadable …]" until the old value is restored.
 * **No malware scanning** of uploads (type is verified by content, but files are not scanned).
 * **No SIEM / alert delivery** – security events are on the dashboard and audit log; nothing pages anyone.
-* **Container and deployment hardening** is written but has not been built or run in this environment.
+* **Container hardening** was built and run locally (non-root, read-only root, no capabilities, memory caps), but the full production compose stack with TLS was not run, and the images must be rebuilt to include the Phase 24 changes.
 
 ## 5. Breach notification
 

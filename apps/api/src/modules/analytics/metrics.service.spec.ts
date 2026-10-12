@@ -538,3 +538,75 @@ describe('MetricsService.byBranch', () => {
     });
   });
 });
+
+describe('MetricsService.overview — short-lived cache', () => {
+  const call = (
+    service: MetricsService,
+    over: Partial<Parameters<MetricsService['overview']>[0]> = {},
+  ) =>
+    service.overview({
+      scope: tenantA,
+      range: RANGE,
+      comparison: null,
+      canViewFinance: true,
+      now: NOW,
+      ...over,
+    });
+
+  it('answers identical simultaneous requests from ONE computation', async () => {
+    const { prisma } = makePrisma();
+    const service = svc(prisma);
+    const [a, b, c] = await Promise.all([
+      call(service),
+      call(service),
+      call(service),
+    ]);
+    expect(b).toBe(a);
+    expect(c).toBe(a);
+    const once = prisma.customer.aggregate.mock.calls.length;
+    await call(service); // still inside the window
+    expect(prisma.customer.aggregate.mock.calls.length).toBe(once);
+  });
+
+  it('never serves one tenant the figures computed for another', async () => {
+    const tenantB: AnalyticsScope = { ...tenantA, companyId: 'co-B' };
+    const { prisma } = makePrisma();
+    const service = svc(prisma);
+    await call(service, { scope: tenantA });
+    const before = prisma.customer.aggregate.mock.calls.length;
+    await call(service, { scope: tenantB });
+    expect(prisma.customer.aggregate.mock.calls.length).toBeGreaterThan(before);
+    const tenants = prisma.customer.aggregate.mock.calls.map((c) =>
+      JSON.stringify(c[0]),
+    );
+    expect(tenants.some((t) => t.includes(tenantB.companyId as string))).toBe(
+      true,
+    );
+  });
+
+  it('keeps finance and non-finance views apart', async () => {
+    const { prisma } = makePrisma();
+    const service = svc(prisma);
+    const finance = await call(service, { canViewFinance: true });
+    const plain = await call(service, { canViewFinance: false });
+    expect(plain).not.toBe(finance);
+    expect(plain.metrics.map((m) => m.key)).not.toContain('cash_collected');
+  });
+
+  it('does not keep a failure: the next request computes afresh', async () => {
+    const { prisma } = makePrisma();
+    const service = svc(prisma);
+    prisma.customer.aggregate.mockRejectedValueOnce(new Error('db down'));
+    await expect(call(service)).rejects.toThrow('db down');
+    await expect(call(service)).resolves.toBeDefined();
+  });
+
+  it('can be switched off', async () => {
+    const { prisma } = makePrisma();
+    const service = svc(prisma);
+    service.overviewCacheTtlMs = 0;
+    const a = await call(service);
+    const b = await call(service);
+    expect(b).not.toBe(a);
+  });
+});

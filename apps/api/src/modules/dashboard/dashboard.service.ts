@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { passportSearchIndex } from '../../infrastructure/prisma/identity-number-encryption';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 
 /**
@@ -127,7 +128,11 @@ export class DashboardService {
           OR: [
             { firstName: { contains: q, mode: 'insensitive' } },
             { lastName: { contains: q, mode: 'insensitive' } },
-            { passportNumber: { contains: q, mode: 'insensitive' } },
+            // Passport numbers are stored encrypted, so they can no longer be matched by a partial string. An exact
+            // number (5+ characters) is found through the customer's keyed fingerprint instead.
+            ...(q.replace(/[^A-Za-z0-9]/g, '').length >= 5
+              ? [{ passportNumberIndex: passportSearchIndex(q) }]
+              : []),
           ],
         },
         select: { id: true, firstName: true, lastName: true },

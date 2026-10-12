@@ -6,6 +6,7 @@ import {
   Injectable,
   NotFoundException,
   Logger,
+  Optional,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { OnEvent } from '@nestjs/event-emitter';
@@ -28,6 +29,7 @@ import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { ACCOUNT_CODES } from '../finance/constants/account-codes.constant';
 import { FinancePostingService } from '../finance/finance-posting.service';
 import { LedgerService } from '../finance/ledger.service';
+import { FinanceAlertsService } from '../payments/finance-alerts.service';
 import { IncentivesService } from '../incentives/incentives.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { InvoicesService } from '../payments/invoices.service';
@@ -79,6 +81,7 @@ export class WalletService {
     private readonly ledgerService: LedgerService,
     @Inject(PAYMENT_PROVIDER)
     private readonly paymentProvider: PaymentProviderPort,
+    @Optional() private readonly financeAlerts?: FinanceAlertsService,
   ) {}
 
   async getOrCreateWallet(customerId: string): Promise<Wallet> {
@@ -265,7 +268,20 @@ export class WalletService {
       const currencyOk =
         !result.currency ||
         result.currency.toUpperCase() === transaction.currency.toUpperCase();
-      if (result.amount !== transaction.amount || !currencyOk) return;
+      if (result.amount !== transaction.amount || !currencyOk) {
+        await this.financeAlerts?.amountMismatch({
+          customerId: transaction.wallet.customerId,
+          relatedId: transaction.id,
+          reference: transaction.reference,
+          expected: {
+            amount: transaction.amount,
+            currency: transaction.currency,
+          },
+          received: { amount: result.amount, currency: result.currency },
+          source: 'wallet deposit',
+        });
+        return;
+      }
     }
     const succeeded = result.success;
 

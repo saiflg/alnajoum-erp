@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { connection } from "next/server";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AuthProvider } from "@/lib/auth-context";
 import { StepUpProvider } from "@/components/StepUpProvider";
@@ -19,11 +20,14 @@ export const metadata: Metadata = {
   description: "Alnajoum Travel Agency Limited — Your Journey, Our Priority.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Every page is rendered per request, because each response carries its own Content-Security-Policy nonce
+  // (src/proxy.ts); a page prerendered at build time could not have one and its scripts would be blocked.
+  await connection();
   return (
     <html
       lang="en"
