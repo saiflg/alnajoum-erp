@@ -35,6 +35,7 @@ import { TemplatesService } from './templates.service';
     NotificationsService,
     NotificationPreferencesService,
     TemplatesService,
+    NOTIFICATION_PROVIDER,
   ],
 })
 export class NotificationsModule implements OnModuleInit {
