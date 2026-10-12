@@ -25,14 +25,14 @@ export class StaffCardSettingsService {
     if (existing) return existing;
     const company = await this.prisma.company.findUnique({
       where: { id: companyId },
-      select: { name: true, tradingName: true, email: true },
+      select: { name: true, email: true },
     });
     if (!company) throw new NotFoundException('Company not found');
     return this.prisma.staffCardSettings.upsert({
       where: { companyId },
       create: {
         companyId,
-        displayName: company.tradingName ?? company.name,
+        displayName: company.name,
         contactEmail: company.email,
       },
       update: {},

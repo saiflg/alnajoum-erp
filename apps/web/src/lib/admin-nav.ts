@@ -6,7 +6,10 @@ const ADMIN_LINKS: NavLink[] = [
   { href: '/admin/executive', label: 'Executive Analytics', icon: 'dashboard' },
   { href: '/admin/companies', label: 'Companies', icon: 'company' },
   { href: '/admin/branches', label: 'Branches', icon: 'branch' },
-  { href: '/admin/staff', label: 'Staff', icon: 'staff' },
+  { href: '/admin/staff', label: 'Staff Profiles', icon: 'staff' },
+  { href: '/admin/staff-cards', label: 'Identification Cards', icon: 'staff' },
+  { href: '/admin/staff-cards/scanner', label: 'Card Scanner', icon: 'shield' },
+  { href: '/admin/staff-cards/history', label: 'Card Verification History', icon: 'audit' },
   { href: '/admin/customers', label: 'Customers', icon: 'customer' },
   { href: '/admin/crm-dashboard', label: 'CRM Dashboard', icon: 'dashboard' },
   { href: '/admin/leads', label: 'Leads', icon: 'customer' },
@@ -95,7 +98,8 @@ const FINANCE_LINKS: NavLink[] = [
 ];
 
 export const ADMIN_NAV: NavLink[] = assignGroups(ADMIN_LINKS, {
-  'People & CRM': ['/admin/companies', '/admin/branches', '/admin/staff', '/admin/customers', '/admin/crm-dashboard', '/admin/leads', '/admin/tasks', '/admin/support-tickets'],
+  'Staff Management': ['/admin/staff', '/admin/staff-cards', '/admin/staff-cards/scanner', '/admin/staff-cards/history'],
+  'People & CRM': ['/admin/companies', '/admin/branches', '/admin/customers', '/admin/crm-dashboard', '/admin/leads', '/admin/tasks', '/admin/support-tickets'],
   'Flights': ['/admin/flights', '/admin/flight-pricing-rules', '/admin/flight-suppliers', '/admin/flight-provider-routing', '/admin/flight-service-fees', '/admin/flight-reports'],
   'Suppliers & Corporate': ['/admin/suppliers', '/admin/corporate-travel'],
   'Hotels & Rentals': ['/admin/hotels', '/admin/hotel-catalog', '/admin/hotel-reports', '/admin/travel-packages', '/admin/vehicle-rentals'],

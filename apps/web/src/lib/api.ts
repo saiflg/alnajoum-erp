@@ -150,3 +150,30 @@ export async function apiDownload(path: string, filename: string): Promise<void>
   a.remove();
   URL.revokeObjectURL(url);
 }
+
+/**
+ * Fetches a protected PDF (GET, or POST with a JSON body) and opens it in a new tab for viewing or printing; falls back
+ * to a download if the browser blocks the tab.
+ */
+export async function apiOpenPdf(path: string, options: { method?: 'GET' | 'POST'; body?: unknown; filename?: string } = {}): Promise<void> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: options.method ?? 'GET',
+    credentials: 'include',
+    headers: { ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...stepUpHeaders() },
+    body: options.body ? JSON.stringify(options.body) : undefined,
+  });
+  if (!res.ok) {
+    const payload = await res.json().catch(() => null);
+    throw new ApiError(payload?.message ?? res.statusText, res.status, payload?.code);
+  }
+  const url = URL.createObjectURL(await res.blob());
+  if (!window.open(url, '_blank')) {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = options.filename ?? 'document.pdf';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}

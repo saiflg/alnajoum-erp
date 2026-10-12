@@ -29,7 +29,8 @@ export function buildCsp(nonce: string): string {
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isDev ? " 'unsafe-eval'" : ""}`,
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob:",
+    // The API origin serves the staff photograph on the public verification page.
+    `img-src 'self' data: blob: ${apiOrigin}`.trim(),
     "font-src 'self' data:",
     `connect-src 'self' ${apiOrigin}${isDev ? " ws: wss:" : ""}`.trim(),
     "frame-ancestors 'none'",

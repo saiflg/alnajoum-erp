@@ -240,6 +240,8 @@ export class StaffCardsService {
             fromStatus: 'PENDING',
             toStatus: 'ACTIVE',
             actorIdentityId: actor.identityId,
+            // Recorded in the same instant as the issue; a millisecond later so the history reads in order.
+            createdAt: new Date(now.getTime() + 1),
           },
         });
       return created;

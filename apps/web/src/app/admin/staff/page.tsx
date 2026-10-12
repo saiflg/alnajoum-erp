@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { AppShell } from '@/components/AppShell';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { ADMIN_NAV } from '@/lib/admin-nav';
-import { apiFileUrl, apiRequest } from '@/lib/api';
+import { apiRequest } from '@/lib/api';
 import { StaffMember } from '@/lib/types';
 
 export default function StaffPage() {
@@ -65,9 +65,7 @@ export default function StaffPage() {
                   </td>
                   <td className="px-4 py-2 text-right">
                     <a
-                      href={apiFileUrl(`/staff/${member.id}/id-card`)}
-                      target="_blank"
-                      rel="noreferrer"
+                      href={`/admin/staff-cards?search=${encodeURIComponent(member.employeeCode)}`}
                       className="text-xs font-medium text-amber-700 hover:underline"
                     >
                       ID Card

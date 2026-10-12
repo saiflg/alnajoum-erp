@@ -136,11 +136,12 @@ export default function StaffAccountPage() {
         <div className="mt-6 max-w-md rounded-lg border border-slate-200 bg-white p-6">
           <h3 className="text-sm font-semibold text-slate-900">My ID Card</h3>
           <p className="mt-1 text-xs text-slate-500">
-            A printable staff badge with a QR code anyone can scan to confirm
-            you&apos;re a current Alnajoum Travel Agency employee.
+            Your staff identification card (front and back) with a QR code that
+            anyone can scan to confirm, against our live records, that the card
+            is genuine and still valid. Cards are issued by an administrator.
           </p>
           <a
-            href={apiFileUrl('/staff/me/id-card')}
+            href={apiFileUrl('/staff-cards/mine')}
             target="_blank"
             rel="noreferrer"
             className="mt-4 inline-block rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800"

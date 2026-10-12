@@ -45,6 +45,11 @@ export interface Verification {
     branch: string | null;
     hasPhoto: boolean;
   } | null;
+  /**
+   * Only for a signed-in scanner and only for a VALID card with a photograph: where to fetch the photograph (the
+   * scanner looked the card up by staff id or card number, so it has no link of its own to build from).
+   */
+  photoPath?: string;
 }
 
 const MESSAGES: Record<VerificationResult, string> = {
@@ -176,12 +181,13 @@ export class StaffCardVerificationService {
       ? toVerificationResult(eff)
       : 'INVALID';
     await this.record(card, result, ctx, presented);
-    return this.build(result, card);
+    return this.build(result, card, ctx);
   }
 
   private build(
     result: VerificationResult,
     card: CardRow | null,
+    ctx?: ScanContext,
   ): Verification {
     const base: Verification = {
       result,
@@ -208,6 +214,8 @@ export class StaffCardVerificationService {
       branch: card.staff.branch?.name ?? null,
       hasPhoto: !!card.staff.photoFilename,
     };
+    if (ctx?.scannedByIdentityId && card.staff.photoFilename)
+      base.photoPath = `/public/staff-cards/${card.verificationToken}/photo`;
     return base;
   }
 
