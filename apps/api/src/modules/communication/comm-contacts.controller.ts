@@ -51,6 +51,12 @@ export class CommContactsController {
 
   // ---------------------------------------------------------------------------------------------- contacts
 
+  @Get('overview')
+  @RequirePermissions(PERMISSIONS.COMM.CONTACT_READ)
+  overview(@CurrentUser() user: AuthContext) {
+    return this.contacts.overview(companyOf(user));
+  }
+
   @Get('contacts')
   @RequirePermissions(PERMISSIONS.COMM.CONTACT_READ)
   list(@CurrentUser() user: AuthContext, @Query() q: ListContactsQueryDto) {

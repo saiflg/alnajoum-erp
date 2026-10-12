@@ -8,6 +8,8 @@ import { CommContactsController } from './comm-contacts.controller';
 import { CommContactsService } from './comm-contacts.service';
 import { CommPublicController } from './comm-public.controller';
 import { CommPublicService } from './comm-public.service';
+import { CommSegmentsController } from './comm-segments.controller';
+import { CommSegmentsService } from './comm-segments.service';
 import { CommSettingsService } from './comm-settings.service';
 
 /**
@@ -19,18 +21,24 @@ import { CommSettingsService } from './comm-settings.service';
  */
 @Module({
   imports: [ConfigModule, AuditModule, NotificationsModule, WhatsAppModule],
-  controllers: [CommContactsController, CommPublicController],
+  controllers: [
+    CommContactsController,
+    CommSegmentsController,
+    CommPublicController,
+  ],
   providers: [
     CommSettingsService,
     CommConsentService,
     CommContactsService,
     CommPublicService,
+    CommSegmentsService,
   ],
   exports: [
     CommSettingsService,
     CommConsentService,
     CommContactsService,
     CommPublicService,
+    CommSegmentsService,
   ],
 })
 export class CommunicationModule {}

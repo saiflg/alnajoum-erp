@@ -94,6 +94,58 @@ export class CommContactsService {
     private readonly consent: CommConsentService,
   ) {}
 
+  /** Real counts for the overview page: nothing estimated, nothing cached. */
+  async overview(companyId: string) {
+    const [contacts, bySub, suppressions, recent, bySource] = await Promise.all([
+      this.prisma.commContact.count({ where: { companyId, status: 'ACTIVE' } }),
+      this.prisma.commSubscription.groupBy({
+        by: ['channel', 'status'],
+        where: { companyId, contact: { status: 'ACTIVE' } },
+        _count: { _all: true },
+      }),
+      this.prisma.commSuppression.groupBy({
+        by: ['channel', 'reason'],
+        where: { companyId, liftedAt: null },
+        _count: { _all: true },
+      }),
+      this.prisma.commConsentRecord.findMany({
+        where: { companyId },
+        orderBy: { createdAt: 'desc' },
+        take: 8,
+        select: {
+          id: true,
+          channel: true,
+          action: true,
+          source: true,
+          createdAt: true,
+          contact: { select: { id: true, fullName: true } },
+        },
+      }),
+      this.prisma.commContact.groupBy({
+        by: ['kind'],
+        where: { companyId, status: 'ACTIVE' },
+        _count: { _all: true },
+      }),
+    ]);
+    const sub = (channel: CommChannel, status: CommSubscriptionStatus) =>
+      bySub.find((r) => r.channel === channel && r.status === status)?._count._all ?? 0;
+    const channelBlock = (channel: CommChannel) => ({
+      subscribed: sub(channel, 'SUBSCRIBED'),
+      pending: sub(channel, 'PENDING_CONFIRMATION'),
+      unsubscribed: sub(channel, 'UNSUBSCRIBED'),
+      suppressed: suppressions
+        .filter((r) => r.channel === channel)
+        .reduce((n, r) => n + r._count._all, 0),
+    });
+    return {
+      contacts,
+      byKind: Object.fromEntries(bySource.map((r) => [r.kind, r._count._all])),
+      whatsapp: channelBlock('WHATSAPP'),
+      email: channelBlock('EMAIL'),
+      recentConsent: recent,
+    };
+  }
+
   // ---------------------------------------------------------------------------------------------- reads
 
   async list(companyId: string | undefined, q: ListContactsQueryDto) {

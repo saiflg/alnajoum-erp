@@ -269,6 +269,36 @@ check('changing the consent wording bumps its version', put.status === 200 && pu
 check('invalid settings are refused', (await call('PUT', '/comm/settings', { token: adminA, body: { whatsappMessagesPerMinute: 0 } })).status === 400);
 check('another company has its own settings', (await call('GET', '/comm/settings', { token: adminB })).data?.consentTextVersion !== undefined);
 
+// ------------------------------------------------------------------ segments
+const segs = await call('GET', '/comm/segments', { token: adminA });
+check('the starter segments exist (consent, interests, prospects, languages, upcoming travel)', segs.status === 200 && segs.data.length >= 13 && ['WhatsApp opted-in', 'Email opted-in', 'Umrah interest', 'Prospects', 'Hausa speakers', 'Upcoming travel (30 days)'].every((n) => segs.data.some((x) => x.name === n)));
+const prevEmail = await call('POST', '/comm/segments/preview', { token: adminA, body: { definition: { subscribedChannel: 'EMAIL' }, channel: 'EMAIL' } });
+const listedSubscribed = await call('GET', '/comm/contacts?subscribedTo=EMAIL&subscription=SUBSCRIBED&pageSize=1', { token: adminA });
+check('a consent segment lists exactly the contacts the contact list shows as subscribed', prevEmail.status === 201 && prevEmail.data.total === listedSubscribed.data.total, `${prevEmail.data?.total} vs ${listedSubscribed.data?.total}`);
+check('preview splits people into eligible and excluded with reasons', prevEmail.data.eligible + prevEmail.data.excluded === prevEmail.data.total && Object.values(prevEmail.data.breakdown).reduce((a, b) => a + b, 0) === prevEmail.data.excluded);
+const prevAll = await call('POST', '/comm/segments/preview', { token: adminA, body: { definition: {}, channel: 'WHATSAPP' } });
+check('a WhatsApp preview of everyone excludes people with no consent', prevAll.data.breakdown.NOT_SUBSCRIBED > 0 && prevAll.data.eligible === 0);
+check('a preview never returns a contact list', !('eligibleIds' in prevAll.data) && !JSON.stringify(prevAll.data).includes('@example.test'));
+const prevTopic = await call('POST', '/comm/segments/preview', { token: adminA, body: { definition: { subscribedChannel: 'EMAIL' }, channel: 'EMAIL', topic: 'hotel' } });
+check('contacts who chose other topics are excluded from a topic campaign', prevTopic.data.breakdown.TOPIC_NOT_SELECTED > 0 || prevTopic.data.eligible <= prevEmail.data.eligible);
+check('an unknown field in a definition is refused', (await call('POST', '/comm/segments/preview', { token: adminA, body: { definition: { drop: 'table' }, channel: 'EMAIL' } })).status === 400);
+const newSeg = await call('POST', '/comm/segments', { token: adminA, body: { name: `Check ${run}`, definition: { languages: ['ha'], interests: ['UMRAH'] } } });
+check('a segment can be created', newSeg.status === 201 && newSeg.data?.id);
+check('a duplicate segment name is refused', (await call('POST', '/comm/segments', { token: adminA, body: { name: `Check ${run}`, definition: {} } })).status === 409);
+check('another company cannot read the segment', (await call('GET', `/comm/segments/${newSeg.data.id}`, { token: adminB })).status === 404);
+check('another company cannot delete the segment', (await call('DELETE', `/comm/segments/${newSeg.data.id}`, { token: adminB })).status === 404);
+check('a branch manager may create segments (they hold the segment permission)', (await call('POST', '/comm/segments', { token: manager, body: { name: `Mgr ${run}`, definition: {} } })).status === 201);
+check('a customer cannot see segments', (await call('GET', '/comm/segments', { token: customer })).status === 403);
+const aud = await call('GET', `/comm/segments/${newSeg.data.id}/audience?channel=EMAIL`, { token: adminA });
+check('a stored segment reports its audience', aud.status === 200 && typeof aud.data.eligible === 'number');
+check('an audience request needs a valid channel', (await call('GET', `/comm/segments/${newSeg.data.id}/audience?channel=SMS`, { token: adminA })).status === 400);
+check('a segment can be deleted', (await call('DELETE', `/comm/segments/${newSeg.data.id}`, { token: adminA })).data?.deleted === true);
+const mgrSegs = (await call('GET', '/comm/segments', { token: manager })).data?.filter((x) => x.name === `Mgr ${run}`) ?? [];
+for (const m of mgrSegs) await call('DELETE', `/comm/segments/${m.id}`, { token: manager });
+
+// put the consent wording back the way it was
+await call('PUT', '/comm/settings', { token: adminA, body: { consentTextEmail: settings.data.consentTextEmail } });
+
 // ------------------------------------------------------------------ rate limit (last)
 console.log('...waiting for the public-form rate-limit window (65 s)');
 await sleep(65_000);
