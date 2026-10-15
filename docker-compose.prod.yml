@@ -95,6 +95,11 @@ services:
       # (see deploy/Caddyfile), so the checkout callback URL is just
       # PUBLIC_ORIGIN itself, not a separate value to configure.
       PUBLIC_WEB_ORIGIN: ${PUBLIC_ORIGIN}
+      # Phase 26 Communication Centre. Single-origin: the API is reached at the same address as the site, which is
+      # what the one-click unsubscribe link in emails points at.
+      PUBLIC_API_ORIGIN: ${PUBLIC_ORIGIN}
+      COMM_PUBLIC_COMPANY_ID: ${COMM_PUBLIC_COMPANY_ID:-}
+      COMM_EMAIL_WEBHOOK_SECRET: ${COMM_EMAIL_WEBHOOK_SECRET:-}
     volumes:
       - uploads_data:/repo/apps/api/uploads
       - backups_data:/repo/apps/api/backups
