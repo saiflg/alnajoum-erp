@@ -19,7 +19,12 @@ describe('MockNotificationProviderService', () => {
       textBody: 'Hello',
     });
 
-    expect(result).toEqual({ success: true });
+    // Phase 26: the mock says plainly that it is a simulation and hands back an id reports can show.
+    expect(result).toEqual({
+      success: true,
+      simulated: true,
+      providerMessageId: expect.stringMatching(/^mock-email-/) as string,
+    });
   });
 
   it('always reports success for SMS without actually sending anything', async () => {

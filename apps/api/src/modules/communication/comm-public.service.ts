@@ -24,6 +24,7 @@ import {
   normalisePhone,
 } from './comm-identifiers';
 import { CommSettingsService } from './comm-settings.service';
+import { CommTemplatesService } from './comm-templates.service';
 import { PublicPreferencesDto, PublicSubscribeDto } from './dto/comm.dto';
 
 export interface PublicRequestInfo {
@@ -52,6 +53,7 @@ export class CommPublicService {
     private readonly settings: CommSettingsService,
     private readonly consent: CommConsentService,
     private readonly contacts: CommContactsService,
+    private readonly templates: CommTemplatesService,
     @Inject(NOTIFICATION_PROVIDER)
     private readonly email: NotificationProviderPort,
     private readonly whatsapp: WhatsAppProviderRouter,
@@ -292,11 +294,12 @@ export class CommPublicService {
     // WhatsApp: a business-initiated message needs an approved template.
     if (!contact.primaryPhone)
       return { sent: false, reason: 'No phone number' };
+    await this.templates.ensureDefaults(companyId);
     const tpl = await this.prisma.commTemplate.findFirst({
       where: {
         companyId,
         channel: 'WHATSAPP',
-        key: 'optin_confirm',
+        key: 'wa_optin_confirm',
         isActive: true,
       },
       orderBy: { language: 'asc' },
@@ -307,7 +310,7 @@ export class CommPublicService {
         where: {
           companyId,
           channel: 'WHATSAPP',
-          key: 'optin_confirm',
+          key: 'wa_optin_confirm',
           language,
           isActive: true,
         },

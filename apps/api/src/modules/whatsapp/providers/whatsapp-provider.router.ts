@@ -44,6 +44,18 @@ export class WhatsAppProviderRouter implements WhatsAppProviderPort {
     return providerName === 'meta' ? this.metaProvider : this.mockProvider;
   }
 
+  async listTemplates() {
+    const p = await this.resolve();
+    return p.listTemplates ? p.listTemplates() : [];
+  }
+
+  async checkHealth() {
+    const p = await this.resolve();
+    return p.checkHealth
+      ? p.checkHealth()
+      : { live: false, ok: true, detail: 'This provider has no health check.' };
+  }
+
   async activeProviderName(): Promise<'mock' | 'meta'> {
     const active = await this.integrationsService.getActiveProvider('WHATSAPP');
     const providerName =

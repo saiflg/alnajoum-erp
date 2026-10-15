@@ -96,7 +96,30 @@ export interface NormalizedInboundEvent {
   failureReason?: string;
 }
 
+/** A message template as the provider reports it. */
+export interface ProviderTemplate {
+  name: string;
+  language: string;
+  /** The provider's review state, upper-cased (APPROVED, PENDING, REJECTED, PAUSED ...). */
+  status: string;
+  category?: string;
+  providerTemplateId?: string;
+}
+
+export interface ProviderHealth {
+  /** False when no credentials are present (or this is the built-in simulator): nothing real can be sent. */
+  live: boolean;
+  /** Short, non-secret facts: the verified name, the number's quality rating ... */
+  detail: string;
+  ok: boolean;
+}
+
 export interface WhatsAppProviderPort {
+  /** Templates the provider knows about, for synchronising approval status. Optional: not every provider has them. */
+  listTemplates?(): Promise<ProviderTemplate[]>;
+  /** A cheap read-only call that shows whether the credentials work. Never sends a message. */
+  checkHealth?(): Promise<ProviderHealth>;
+
   sendTextMessage(input: SendTextMessageInput): Promise<SendMessageResult>;
   sendTemplateMessage(
     input: SendTemplateMessageInput,

@@ -1,4 +1,5 @@
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Prisma } from '@prisma/client';
 import { createHash } from 'crypto';
 import {
@@ -65,7 +66,51 @@ export class WhatsAppWebhookService {
     @Optional()
     @Inject(AI_WHATSAPP_BRIDGE)
     private readonly aiBridge?: AiWhatsAppBridge,
+    // Phase 26: the Communication Centre listens to these events (delivery receipts for campaign messages, and
+    // marketing opt-outs in any supported language) without this module depending on it.
+    @Optional() private readonly events?: EventEmitter2,
   ) {}
+
+  /** Tells the Communication Centre about a delivery receipt. Never lets a listener's failure affect the webhook. */
+  private async announceStatus(event: NormalizedInboundEvent): Promise<void> {
+    if (!this.events || !event.providerMessageId) return;
+    try {
+      await this.events.emitAsync('whatsapp.status', {
+        providerMessageId: event.providerMessageId,
+        status: event.status ?? 'SENT',
+        timestamp: event.timestamp,
+        failureReason: event.failureReason,
+      });
+    } catch (error) {
+      this.logger.error(
+        `Status listener failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  /** Lets the Communication Centre deal with a marketing opt-out first. True when it has answered the message. */
+  private async announceInbound(
+    companyId: string,
+    phoneNumber: string,
+    text: string,
+    providerMessageId: string,
+  ): Promise<boolean> {
+    if (!this.events) return false;
+    try {
+      const results = (await this.events.emitAsync('whatsapp.inbound', {
+        companyId,
+        phoneNumber,
+        text,
+        providerMessageId,
+      })) as ({ handled?: boolean } | undefined)[];
+      return results.some((r) => r?.handled === true);
+    } catch (error) {
+      this.logger.error(
+        `Inbound listener failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return false;
+    }
+  }
 
   /** Spec #13 — the idempotency gate itself: a unique (provider, eventId)
    * insert. Returns false (caller should skip processing) when this
@@ -136,6 +181,7 @@ export class WhatsAppWebhookService {
   private async processStatusUpdate(
     event: NormalizedInboundEvent,
   ): Promise<void> {
+    await this.announceStatus(event);
     const message = await this.prisma.whatsAppMessage.findUnique({
       where: { providerMessageId: event.providerMessageId },
     });
@@ -181,6 +227,17 @@ export class WhatsAppWebhookService {
     }
 
     const text = event.text ?? event.interactiveReplyId ?? '';
+
+    // Marketing opt-outs (STOP, and its Hausa and Arabic forms) and unclear replies come first.
+    if (
+      await this.announceInbound(
+        companyId,
+        phoneNumber,
+        text,
+        event.providerMessageId,
+      )
+    )
+      return;
 
     // Consent commands take priority over everything else, including an
     // in-progress OTP flow — spec #9's STOP/START must always work.

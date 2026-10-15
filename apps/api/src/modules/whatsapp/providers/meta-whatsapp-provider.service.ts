@@ -8,6 +8,8 @@ import { createHmac, timingSafeEqual } from 'crypto';
 import { IntegrationsService } from '../../integrations/integrations.service';
 import {
   NormalizedInboundEvent,
+  ProviderHealth,
+  ProviderTemplate,
   SendInteractiveButtonsInput,
   SendInteractiveListInput,
   SendMediaMessageInput,
@@ -115,6 +117,92 @@ export class MetaWhatsAppProviderService implements WhatsAppProviderPort {
       return { success: false, error: message };
     }
     return { success: true, providerMessageId: responseBody.messages[0].id };
+  }
+
+  /**
+   * Message templates and their review state, from Meta's documented
+   * GET /{business-account-id}/message_templates. Needs the Business Account ID as well as the access token.
+   * Not exercised against a live account in this environment (see the class comment).
+   */
+  async listTemplates(): Promise<ProviderTemplate[]> {
+    const { accessToken, apiVersion } = await this.getConfig();
+    const db = await this.integrationsService.getCredentialConfig(
+      'WHATSAPP',
+      'meta',
+    );
+    const wabaId =
+      db?.businessAccountId ||
+      this.configService.get<string>('WHATSAPP_BUSINESS_ACCOUNT_ID');
+    if (!wabaId)
+      throw new ServiceUnavailableException(
+        'Add the WhatsApp Business Account ID at /admin/integrations to synchronise templates.',
+      );
+    const out: ProviderTemplate[] = [];
+    let url: string | undefined =
+      `https://graph.facebook.com/${apiVersion}/${wabaId}/message_templates?fields=name,language,status,category&limit=100`;
+    for (let page = 0; url && page < 20; page++) {
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const body = (await res.json()) as {
+        data?: {
+          id?: string;
+          name: string;
+          language: string;
+          status: string;
+          category?: string;
+        }[];
+        paging?: { next?: string };
+        error?: { message?: string };
+      };
+      if (!res.ok)
+        throw new ServiceUnavailableException(
+          body.error?.message ?? 'Could not read the template list from Meta.',
+        );
+      for (const t of body.data ?? [])
+        out.push({
+          name: t.name,
+          language: t.language.split('_')[0],
+          status: t.status.toUpperCase(),
+          category: t.category,
+          providerTemplateId: t.id,
+        });
+      url = body.paging?.next;
+    }
+    return out;
+  }
+
+  /** Reads the phone number's verified name and quality rating: proves the token and number id work. */
+  async checkHealth(): Promise<ProviderHealth> {
+    try {
+      const { accessToken, phoneNumberId, apiVersion } = await this.getConfig();
+      const res = await fetch(
+        `https://graph.facebook.com/${apiVersion}/${phoneNumberId}?fields=verified_name,quality_rating,display_phone_number`,
+        { headers: { Authorization: `Bearer ${accessToken}` } },
+      );
+      const body = (await res.json()) as {
+        verified_name?: string;
+        quality_rating?: string;
+        error?: { message?: string };
+      };
+      if (!res.ok)
+        return {
+          live: true,
+          ok: false,
+          detail: body.error?.message ?? res.statusText,
+        };
+      return {
+        live: true,
+        ok: true,
+        detail: `Connected as ${body.verified_name ?? 'unnamed business'}; quality ${body.quality_rating ?? 'unknown'}.`,
+      };
+    } catch (e) {
+      return {
+        live: true,
+        ok: false,
+        detail: e instanceof Error ? e.message : String(e),
+      };
+    }
   }
 
   sendTextMessage(input: SendTextMessageInput): Promise<SendMessageResult> {

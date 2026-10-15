@@ -4,6 +4,8 @@ import { isProductionEnv } from '../../../common/security/runtime-environment';
 import {
   InteractiveButton,
   NormalizedInboundEvent,
+  ProviderHealth,
+  ProviderTemplate,
   SendInteractiveButtonsInput,
   SendInteractiveListInput,
   SendMediaMessageInput,
@@ -55,6 +57,20 @@ export class MockWhatsAppProviderService implements WhatsAppProviderPort {
 
   sendTextMessage(input: SendTextMessageInput): Promise<SendMessageResult> {
     return this.ok('text', input.to, input.body);
+  }
+
+  /** The simulator has no template catalogue: approval state lives only in the local template records. */
+  listTemplates(): Promise<ProviderTemplate[]> {
+    return Promise.resolve([]);
+  }
+
+  checkHealth(): Promise<ProviderHealth> {
+    return Promise.resolve({
+      live: false,
+      ok: true,
+      detail:
+        'Built-in simulator: messages are logged, never delivered. No WhatsApp credentials are configured or used.',
+    });
   }
 
   sendTemplateMessage(

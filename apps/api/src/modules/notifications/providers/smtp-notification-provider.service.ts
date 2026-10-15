@@ -10,6 +10,12 @@ import {
   SendTextResult,
 } from './notification-provider.port';
 
+/** "Name <a@b.c>" -> "a@b.c"; an address on its own is returned unchanged. */
+function addressOf(from: string): string {
+  const m = /<([^>]+)>/.exec(from);
+  return (m ? m[1] : from).trim();
+}
+
 /**
  * Real SMTP-based sender via nodemailer. Unlike DuffelFlightProviderService,
  * this is a genuine working implementation rather than a stub — SMTP is an
@@ -85,13 +91,22 @@ export class SmtpNotificationProviderService implements NotificationProviderPort
     });
 
     try {
-      await transporter.sendMail({
-        from: fromAddress,
+      const info = await transporter.sendMail({
+        from: input.fromName
+          ? { name: input.fromName, address: addressOf(fromAddress) }
+          : fromAddress,
         to: input.to,
         subject: input.subject,
         text: input.textBody,
+        ...(input.html ? { html: input.html } : {}),
+        ...(input.replyTo ? { replyTo: input.replyTo } : {}),
+        ...(input.headers ? { headers: input.headers } : {}),
       });
-      return { success: true };
+      return {
+        success: true,
+        providerMessageId:
+          typeof info?.messageId === 'string' ? info.messageId : undefined,
+      };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.error(`Failed to send email to ${input.to}: ${message}`);

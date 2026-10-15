@@ -156,3 +156,127 @@ export const OPT_OUT_ACK: Record<'en' | 'ha' | 'ar', string> = {
   ha: 'An cire ka daga saƙonnin talla na WhatsApp. Za ka ci gaba da karɓar saƙonni game da tafiyarka. Ka amsa START don sake shiga.',
   ar: 'تم إلغاء اشتراكك في الرسائل الترويجية على واتساب. ستصلك رسائل حجوزاتك. أرسل START للاشتراك من جديد.',
 };
+
+// ------------------------------------------------------------------------------------------------ enquiries
+
+export type EnquiryIntent =
+  | 'PACKAGE'
+  | 'FLIGHT'
+  | 'VISA'
+  | 'HAJJ_UMRAH'
+  | 'BOOKING_STATUS'
+  | 'HUMAN'
+  | 'FAQ'
+  | 'OTHER';
+
+const ENQUIRY_WORDS: [EnquiryIntent, string[]][] = [
+  [
+    'HUMAN',
+    [
+      'agent',
+      'human',
+      'person',
+      'staff',
+      'someone',
+      'call me',
+      'speak to',
+      'talk to',
+      'mutum',
+      'wakili',
+      'kira ni',
+      'موظف',
+      'شخص',
+      'اتصل',
+    ],
+  ],
+  [
+    'BOOKING_STATUS',
+    [
+      'my booking',
+      'booking status',
+      'reservation',
+      'my ticket',
+      'status of',
+      'hajina',
+      'matsayin',
+      'حجزي',
+      'حالة الحجز',
+    ],
+  ],
+  ['HAJJ_UMRAH', ['hajj', 'umrah', 'umra', 'hajji', 'حج', 'عمرة', 'عمره']],
+  ['VISA', ['visa', 'biza', 'تأشيرة', 'تاشيرة', 'فيزا']],
+  [
+    'FLIGHT',
+    [
+      'flight',
+      'flights',
+      'ticket',
+      'airline',
+      'jirgi',
+      'tikiti',
+      'رحلة',
+      'رحله',
+      'تذكرة',
+      'تذكره',
+    ],
+  ],
+  [
+    'PACKAGE',
+    [
+      'package',
+      'price',
+      'how much',
+      'cost',
+      'kudin',
+      'farashi',
+      'nawa ne',
+      'باقة',
+      'سعر',
+      'كم',
+    ],
+  ],
+  [
+    'FAQ',
+    [
+      'office',
+      'address',
+      'opening',
+      'hours',
+      'where are you',
+      'ofis',
+      'adireshi',
+      'عنوان',
+      'ساعات',
+    ],
+  ],
+];
+
+/**
+ * A coarse reading of what an enquiry is about, used to route and to report - never to answer. The system does not
+ * quote prices, availability, visa outcomes or booking or payment status from a guess; those come from the live
+ * records (for a verified customer) or from a person.
+ */
+export function classifyEnquiry(text: string): {
+  intent: EnquiryIntent;
+  confidence: 'HIGH' | 'LOW';
+} {
+  const t = clean(text);
+  if (!t) return { intent: 'OTHER', confidence: 'LOW' };
+  const hits = ENQUIRY_WORDS.filter(([, words]) =>
+    words.some((w) => t.includes(clean(w))),
+  );
+  if (hits.length === 0) return { intent: 'OTHER', confidence: 'LOW' };
+  return { intent: hits[0][0], confidence: hits.length === 1 ? 'HIGH' : 'LOW' };
+}
+
+/** Which of the three supported languages a short message is probably in. */
+export function guessLanguage(text: string): 'en' | 'ha' | 'ar' {
+  if (/[؀-ۿ]/.test(text)) return 'ar';
+  if (
+    /\b(daina|dakata|sannu|na gode|kudin|farashi|jirgi|tikiti|biza|mutum|bana|ba na)\b/i.test(
+      text,
+    )
+  )
+    return 'ha';
+  return 'en';
+}

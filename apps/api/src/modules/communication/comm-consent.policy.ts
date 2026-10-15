@@ -89,10 +89,11 @@ export function marketingEligibility(i: EligibilityInput): Eligibility {
   if (i.contactStatus !== 'ACTIVE')
     return { eligible: false, reason: 'CONTACT_NOT_ACTIVE' };
   if (!i.hasAddress) return { eligible: false, reason: 'NO_ADDRESS' };
-  if (i.suppressed) return { eligible: false, reason: 'SUPPRESSED' };
-  if (i.addressInvalid) return { eligible: false, reason: 'ADDRESS_INVALID' };
+  // The person's own choice is named first: it is the more useful thing to read in a report.
   if (i.subscription === 'UNSUBSCRIBED')
     return { eligible: false, reason: 'UNSUBSCRIBED' };
+  if (i.suppressed) return { eligible: false, reason: 'SUPPRESSED' };
+  if (i.addressInvalid) return { eligible: false, reason: 'ADDRESS_INVALID' };
   if (i.subscription === 'PENDING_CONFIRMATION')
     return { eligible: false, reason: 'PENDING_CONFIRMATION' };
   if (i.subscription !== 'SUBSCRIBED')

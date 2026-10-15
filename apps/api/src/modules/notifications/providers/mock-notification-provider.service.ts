@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import {
   NotificationProviderPort,
   SendEmailInput,
@@ -28,7 +29,11 @@ export class MockNotificationProviderService implements NotificationProviderPort
     this.logger.log(
       `[mock email] to=${input.to} subject="${input.subject}"\n${this.show(input.textBody)}`,
     );
-    return Promise.resolve({ success: true });
+    return Promise.resolve({
+      success: true,
+      simulated: true,
+      providerMessageId: `mock-email-${randomUUID()}`,
+    });
   }
 
   sendSms(input: SendTextInput): Promise<SendTextResult> {

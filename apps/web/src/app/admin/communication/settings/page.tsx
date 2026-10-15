@@ -2,12 +2,51 @@
 
 import { useState } from 'react';
 import { CommPage } from '@/components/comm/CommPage';
-import { Field, Msg, PageTitle, Row, btn, card, input, useAction } from '@/components/comm/ui';
+import { Badge, Field, Msg, PageTitle, Row, btn, btnGhost, card, input, useAction } from '@/components/comm/ui';
 import { apiRequest } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { useApi } from '@/lib/use-api';
 
 type Form = Record<string, unknown>;
+
+/** Where messages really go: the simulator or a live provider, and a button to try each channel. */
+function Providers({ editable, testRecipients }: { editable: boolean; testRecipients: string[] }) {
+  const { user } = useAuth();
+  const { data: health, error } = useApi<Row>('/comm/integrations/health');
+  const [to, setTo] = useState(user?.email ?? '');
+  const [phone, setPhone] = useState(testRecipients.find((x) => !x.includes('@')) ?? '');
+  const { act, error: actionError, notice, busy } = useAction(() => undefined);
+  const test = (path: string, body: Row) => act(async () => {
+    const r = await apiRequest<Row>(path, { method: 'POST', body });
+    if (!r.sent) throw new Error(r.error ?? 'Not sent.');
+    return r;
+  }, 'Test sent. If the channel is the simulator it was written to the server log and not delivered.');
+  return (
+    <section className={`${card} space-y-3 xl:col-span-2`}>
+      <h2 className="text-sm font-semibold">Channels</h2>
+      <Msg error={error ?? actionError} notice={notice} />
+      <div className="grid gap-4 md:grid-cols-2">
+        {health && (['email', 'whatsapp'] as const).map((k) => {
+          const h = health[k];
+          return (
+            <div key={k} className="rounded-md border border-slate-200 p-3 text-sm">
+              <div className="flex items-center justify-between"><b>{k === 'email' ? 'Email' : 'WhatsApp'}</b><Badge value={h.mode === 'SIMULATOR' ? 'SIMULATED' : h.ok ? 'OK' : 'FAILED'} /></div>
+              <p className="mt-1 text-xs text-slate-600">{h.detail}</p>
+              <p className="mt-1 text-[11px] text-slate-400">Provider: {h.provider}. Credentials are kept on the server and are never shown here.</p>
+              {editable && k === 'email' && (
+                <div className="mt-3 flex items-end gap-2"><Field label="Send a test email to"><input className={input} value={to} onChange={(e) => setTo(e.target.value)} /></Field><button className={btnGhost} disabled={busy || !to} onClick={() => test('/comm/integrations/test-email', { to })}>Send test</button></div>
+              )}
+              {editable && k === 'whatsapp' && (
+                <div className="mt-3 flex items-end gap-2"><Field label="Test number (must be in the test recipients)"><input className={input} value={phone} onChange={(e) => setPhone(e.target.value)} /></Field><button className={btnGhost} disabled={busy || !phone} onClick={() => test('/comm/integrations/test-whatsapp', { to: phone })}>Send test</button></div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <p className="text-xs text-slate-500">To connect a real provider, add its credentials under <a className="underline" href="/admin/integrations">Integrations</a> and switch it on there. Nothing is sent for real until you do. For email, also publish SPF, DKIM and DMARC records for your sending domain (see the Communication guide in the docs) — this system cannot check that they are in place.</p>
+    </section>
+  );
+}
 
 function Settings() {
   const { user } = useAuth();
@@ -48,6 +87,8 @@ function Settings() {
       <Msg error={error} notice={notice} />
       {s.killSwitch && <p role="alert" className="mb-4 rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-800">The kill switch is ON: no bulk campaign or automated promotion is being sent.</p>}
       <div className="grid gap-6 xl:grid-cols-2">
+        <Providers editable={editable} testRecipients={Array.isArray(s.testRecipients) ? (s.testRecipients as string[]) : []} />
+
         <section className={`${card} space-y-3`}>
           <h2 className="text-sm font-semibold">Sender</h2>
           {text('senderName', 'Sender name')}

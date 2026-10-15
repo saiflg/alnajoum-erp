@@ -11,7 +11,11 @@ import {
   marketingEligibility,
   transactionalEligibility,
 } from './comm-consent.policy';
-import { classifyConsentReply } from './comm-inbound-intent';
+import {
+  classifyConsentReply,
+  classifyEnquiry,
+  guessLanguage,
+} from './comm-inbound-intent';
 
 describe('identifiers', () => {
   it('normalises phones to one E.164 form whatever way they were typed', () => {
@@ -229,4 +233,28 @@ describe('inbound consent replies (English, Hausa, Arabic)', () => {
     expect(classifyConsentReply('CONFIRM')).toBe('CONFIRM'));
   it('handles empty input', () =>
     expect(classifyConsentReply('   ')).toBe('OTHER'));
+});
+
+describe('enquiry routing', () => {
+  it.each([
+    ['How much is the Umrah package?', 'HAJJ_UMRAH'],
+    ['I need a visa for Dubai', 'VISA'],
+    ['Do you have flights to Jeddah', 'FLIGHT'],
+    ['what is the status of my booking', 'BOOKING_STATUS'],
+    ['I want to talk to someone', 'HUMAN'],
+    ['kudin biza', 'VISA'],
+    ['أريد تأشيرة', 'VISA'],
+    ['كم سعر العمرة', 'HAJJ_UMRAH'],
+    ['hello there', 'OTHER'],
+  ])('reads %j as %s', (text, intent) =>
+    expect(classifyEnquiry(text).intent).toBe(intent),
+  );
+  it('is not confident when several topics appear', () => {
+    expect(classifyEnquiry('visa and flight').confidence).toBe('LOW');
+  });
+  it('guesses the language from script and a few common words', () => {
+    expect(guessLanguage('مرحبا')).toBe('ar');
+    expect(guessLanguage('sannu, kudin biza')).toBe('ha');
+    expect(guessLanguage('hello')).toBe('en');
+  });
 });

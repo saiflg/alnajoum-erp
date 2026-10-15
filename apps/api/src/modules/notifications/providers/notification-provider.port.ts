@@ -5,11 +5,21 @@ export interface SendEmailInput {
   to: string;
   subject: string;
   textBody: string;
+  /** Phase 26: an HTML alternative, extra headers (List-Unsubscribe ...), a reply-to and a sender override. */
+  html?: string;
+  headers?: Record<string, string>;
+  replyTo?: string;
+  /** Display name for the From header; the address itself stays the provider's configured one. */
+  fromName?: string;
 }
 
 export interface SendEmailResult {
   success: boolean;
   error?: string;
+  /** The provider's own id for the message, when it gives one (used to match bounces and complaints later). */
+  providerMessageId?: string;
+  /** True when nothing really left the machine (the built-in mock). Reports must say so. */
+  simulated?: boolean;
 }
 
 export interface SendTextInput {
