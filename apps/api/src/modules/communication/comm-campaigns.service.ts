@@ -1026,7 +1026,9 @@ export class CommCampaignsService {
         byStatus.map((g) => [g.status, g._count._all]),
       ),
       // What people wrote to us in the last 30 days, by what it was understood to be (no message text is kept here).
-      inbound: Object.fromEntries(inbound.map((g) => [g.intent, g._count._all])),
+      inbound: Object.fromEntries(
+        inbound.map((g) => [g.intent, g._count._all]),
+      ),
       needsReview: uncertain,
       live: byStatus
         .filter((g) => LIVE_STATUSES.includes(g.status))

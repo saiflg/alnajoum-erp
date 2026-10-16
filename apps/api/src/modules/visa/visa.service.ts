@@ -388,6 +388,18 @@ export class VisaService {
       );
     }
 
+    // Completion recognises the supplier cost and credits the agent's incentive, so it must not be possible for an
+    // application the customer has not paid for. An application with no invoice (recorded offline) is not blocked.
+    if (
+      status === VisaApplicationStatus.COMPLETED &&
+      application.invoice &&
+      application.invoice.status !== InvoiceStatus.PAID
+    ) {
+      throw new ConflictException(
+        'This application has not been paid in full. Record the payment before marking it completed.',
+      );
+    }
+
     await this.prisma.visaApplication.update({
       where: { id },
       data: { status, staffNote },

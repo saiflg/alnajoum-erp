@@ -148,7 +148,10 @@ export function buildUriNdef(url: string): Buffer {
   const local = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?\//i.test(url);
   if (!https && !local)
     throw new Error('Only https:// addresses are written to cards.');
-  const rest = Buffer.from(url.slice(https ? 'https://'.length : 'http://'.length), 'utf8');
+  const rest = Buffer.from(
+    url.slice(https ? 'https://'.length : 'http://'.length),
+    'utf8',
+  );
   const payload = Buffer.concat([Buffer.from([https ? 0x04 : 0x03]), rest]);
   if (payload.length > 255)
     throw new Error('The address is too long for a short NDEF record.');

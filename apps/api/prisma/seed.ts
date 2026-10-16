@@ -60,6 +60,65 @@ async function seedRoles() {
   console.log(`Seeded ${DEFAULT_ROLE_DEFINITIONS.length} system roles`);
 }
 
+/**
+ * Feature flags fail closed: a module guarded by @RequireFeature answers 403 until its flag row exists and is on.
+ * Without these rows a fresh install has Visa, Hajj, Umrah, Hotels, Group and Corporate travel switched off. Created
+ * only when missing (update: {}), so an administrator's later choice is never overwritten. Automatic payouts stay OFF:
+ * moving money without a person pressing the button must be a deliberate decision.
+ */
+const FEATURE_FLAGS: Array<{ key: string; description: string; on: boolean }> =
+  [
+    {
+      key: 'ENABLE_VISA',
+      description: 'Visa services, applications and incentives',
+      on: true,
+    },
+    {
+      key: 'ENABLE_HAJJ',
+      description: 'Hajj packages and registrations',
+      on: true,
+    },
+    {
+      key: 'ENABLE_UMRAH',
+      description: 'Umrah packages and registrations',
+      on: true,
+    },
+    { key: 'ENABLE_HOTELS', description: 'Hotel booking', on: true },
+    {
+      key: 'ENABLE_GROUP_BOOKINGS',
+      description: 'Flight group bookings',
+      on: true,
+    },
+    {
+      key: 'ENABLE_CORPORATE_TRAVEL',
+      description: 'Corporate travel accounts',
+      on: true,
+    },
+    {
+      key: 'ENABLE_AUTOMATIC_PAYOUT',
+      description:
+        'Pay approved staff incentives automatically (off by default)',
+      on: false,
+    },
+  ];
+
+async function seedFeatureFlags() {
+  for (const f of FEATURE_FLAGS) {
+    await prisma.featureFlag.upsert({
+      where: { key: f.key },
+      create: {
+        key: f.key,
+        description: f.description,
+        isEnabledByDefault: f.on,
+      },
+      update: {},
+    });
+  }
+  console.log(
+    `Ensured ${FEATURE_FLAGS.length} feature flags exist (existing values untouched)`,
+  );
+}
+
 async function seedBootstrapCompany() {
   // Throws (so the seed fails loudly) when production has no real credentials configured.
   const credentials = resolveBootstrapCredentials();
@@ -147,6 +206,7 @@ async function seedBootstrapCompany() {
 async function main() {
   await seedPermissions();
   await seedRoles();
+  await seedFeatureFlags();
   await seedBootstrapCompany();
 }
 

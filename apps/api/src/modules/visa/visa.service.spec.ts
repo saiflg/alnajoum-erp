@@ -417,6 +417,44 @@ describe('VisaService', () => {
       ).toHaveBeenCalled();
     });
 
+    it('refuses to complete an application whose invoice is not paid in full, and credits no incentive', async () => {
+      prisma.visaApplication.findUnique.mockResolvedValue({
+        ...applicationRow,
+        invoice: { status: InvoiceStatus.PARTIALLY_PAID },
+        customer: {
+          identity: { id: 'identity-1', email: 'amina@example.com' },
+        },
+      });
+
+      await expect(
+        service.updateStatus('app-1', VisaApplicationStatus.COMPLETED),
+      ).rejects.toThrow(ConflictException);
+      expect(prisma.visaApplication.update).not.toHaveBeenCalled();
+      expect(
+        visaIncentivesService.createForCompletedApplication,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('completes an application whose invoice is paid', async () => {
+      prisma.visaApplication.findUnique.mockResolvedValue({
+        ...applicationRow,
+        invoice: { status: InvoiceStatus.PAID },
+        customer: {
+          identity: { id: 'identity-1', email: 'amina@example.com' },
+        },
+      });
+      prisma.visaApplication.findUniqueOrThrow.mockResolvedValue({
+        ...applicationRow,
+        status: VisaApplicationStatus.COMPLETED,
+      });
+
+      await service.updateStatus('app-1', VisaApplicationStatus.COMPLETED);
+
+      expect(
+        visaIncentivesService.createForCompletedApplication,
+      ).toHaveBeenCalled();
+    });
+
     it('rejects updating an application already in a terminal state', async () => {
       prisma.visaApplication.findUnique.mockResolvedValue({
         ...applicationRow,

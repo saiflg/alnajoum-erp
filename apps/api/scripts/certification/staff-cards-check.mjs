@@ -186,7 +186,7 @@ check("another company cannot upload a photograph for this company's staff", (aw
 // dashboard + list
 const dash = (await call('GET', '/staff-cards/dashboard', { token: adminA })).data;
 check('the dashboard has real counts', ['total', 'active', 'expiringSoon', 'expired', 'suspended', 'revoked', 'replaced'].every((k) => typeof dash[k] === 'number') && dash.total >= 2 && dash.replaced >= 1, JSON.stringify({ t: dash.total, a: dash.active, r: dash.replaced }));
-const list = (await call('GET', `/staff-cards?search=${encodeURIComponent('Tester')}&pageSize=5`, { token: adminA })).data;
+const list = (await call('GET', `/staff-cards?search=${encodeURIComponent('Card')}&pageSize=5`, { token: adminA })).data;
 check('search and pagination work', list.total >= 2 && list.items.length <= 5 && list.items.every((i) => i.staff.fullName === 'Card Tester'), `${list.total} found`);
 const byStatus = (await call('GET', '/staff-cards?status=REPLACED', { token: adminA })).data;
 check('filter by status works', byStatus.items.length >= 1 && byStatus.items.every((i) => i.effectiveStatus === 'REPLACED'));

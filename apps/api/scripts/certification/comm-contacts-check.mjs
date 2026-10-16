@@ -277,7 +277,8 @@ const listedSubscribed = await call('GET', '/comm/contacts?subscribedTo=EMAIL&su
 check('a consent segment lists exactly the contacts the contact list shows as subscribed', prevEmail.status === 201 && prevEmail.data.total === listedSubscribed.data.total, `${prevEmail.data?.total} vs ${listedSubscribed.data?.total}`);
 check('preview splits people into eligible and excluded with reasons', prevEmail.data.eligible + prevEmail.data.excluded === prevEmail.data.total && Object.values(prevEmail.data.breakdown).reduce((a, b) => a + b, 0) === prevEmail.data.excluded);
 const prevAll = await call('POST', '/comm/segments/preview', { token: adminA, body: { definition: {}, channel: 'WHATSAPP' } });
-check('a WhatsApp preview of everyone excludes people with no consent', prevAll.data.breakdown.NOT_SUBSCRIBED > 0 && prevAll.data.eligible === 0);
+const waListed = await call('GET', '/comm/contacts?subscribedTo=WHATSAPP&subscription=SUBSCRIBED&pageSize=1', { token: adminA });
+check('a WhatsApp preview of everyone excludes people with no consent: only subscribed people are eligible', prevAll.data.breakdown.NOT_SUBSCRIBED > 0 && prevAll.data.eligible <= waListed.data.total && prevAll.data.eligible < prevAll.data.total, `${prevAll.data.eligible}/${prevAll.data.total}`);
 check('a preview never returns a contact list', !('eligibleIds' in prevAll.data) && !JSON.stringify(prevAll.data).includes('@example.test'));
 const prevTopic = await call('POST', '/comm/segments/preview', { token: adminA, body: { definition: { subscribedChannel: 'EMAIL' }, channel: 'EMAIL', topic: 'hotel' } });
 check('contacts who chose other topics are excluded from a topic campaign', prevTopic.data.breakdown.TOPIC_NOT_SELECTED > 0 || prevTopic.data.eligible <= prevEmail.data.eligible);

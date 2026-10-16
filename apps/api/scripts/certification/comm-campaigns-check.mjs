@@ -6,7 +6,8 @@
  *
  *   node scripts/certification/comm-campaigns-check.mjs
  *
- * Needs the API running with COMM_PUBLIC_COMPANY_ID set and COMM_EMAIL_WEBHOOK_SECRET=dev-secret-local-only, and the
+ * Needs the API running with COMMUNICATION_SCHEDULERS_DISABLED=true (otherwise the API's own 15-second queue timer
+ * races this script's manual passes and the counts are not deterministic), COMM_PUBLIC_COMPANY_ID set and COMM_EMAIL_WEBHOOK_SECRET=dev-secret-local-only, and the
  * demo seed. Changes some company settings during the run and puts them back at the end.
  */
 import { createHmac } from 'node:crypto';

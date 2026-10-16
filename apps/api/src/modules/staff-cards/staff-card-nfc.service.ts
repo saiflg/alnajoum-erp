@@ -530,7 +530,10 @@ export class StaffCardNfcService {
           cardId,
           action: 'NFC_ENCODED',
           actorIdentityId: actor.identityId,
-          metadata: { serialRecorded: !!uidHash, simulated: input.simulated === true },
+          metadata: {
+            serialRecorded: !!uidHash,
+            simulated: input.simulated === true,
+          },
         },
       });
     });
