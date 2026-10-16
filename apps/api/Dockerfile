@@ -55,7 +55,7 @@ FROM deps AS build
 WORKDIR /repo
 COPY apps/api apps/api
 RUN pnpm --filter api prisma:generate
-RUN pnpm --filter api build
+RUN NODE_OPTIONS=--max-old-space-size=3072 pnpm --filter api build
 
 # --- Runtime: only the built app + its resolved node_modules, no build tools ---
 FROM base AS runtime

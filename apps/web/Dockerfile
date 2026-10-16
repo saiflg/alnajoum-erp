@@ -28,7 +28,7 @@ WORKDIR /repo
 ARG NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 COPY apps/web apps/web
-RUN pnpm --filter web build
+RUN NODE_OPTIONS=--max-old-space-size=3072 pnpm --filter web build
 
 # --- Runtime: Next.js "standalone" output — a minimal server.js plus only
 # the node_modules it actually traced as needed, not the whole workspace ---
