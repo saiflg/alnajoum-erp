@@ -36,10 +36,10 @@ if ! command -v docker >/dev/null 2>&1; then
 fi
 sudo usermod -aG docker "$USER"
 
-echo "==> Opening ports 80/443 in the OS firewall (Oracle's image blocks them by default)"
+echo "==> Opening ports 80/443 in the OS firewall (Oracle images block them by default; harmless elsewhere)"
 for port in 80 443; do
   if ! sudo iptables -C INPUT -m state --state NEW -p tcp --dport "$port" -j ACCEPT 2>/dev/null; then
-    sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport "$port" -j ACCEPT
+    sudo iptables -I INPUT 1 -m state --state NEW -p tcp --dport "$port" -j ACCEPT
   fi
 done
 sudo netfilter-persistent save
