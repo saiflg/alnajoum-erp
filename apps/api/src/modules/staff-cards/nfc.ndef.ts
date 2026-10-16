@@ -142,10 +142,14 @@ const URI_PREFIXES: [number, string][] = [
 
 /** One NDEF short record: a well-known URI record. Throws for a URL that cannot be written as one. */
 export function buildUriNdef(url: string): Buffer {
-  if (!/^https:\/\//i.test(url))
+  // https only - except an address on this very computer, which exists only while developing and is refused in
+  // production by the service that calls this.
+  const https = /^https:\/\//i.test(url);
+  const local = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?\//i.test(url);
+  if (!https && !local)
     throw new Error('Only https:// addresses are written to cards.');
-  const rest = Buffer.from(url.slice('https://'.length), 'utf8');
-  const payload = Buffer.concat([Buffer.from([0x04]), rest]);
+  const rest = Buffer.from(url.slice(https ? 'https://'.length : 'http://'.length), 'utf8');
+  const payload = Buffer.concat([Buffer.from([https ? 0x04 : 0x03]), rest]);
   if (payload.length > 255)
     throw new Error('The address is too long for a short NDEF record.');
   // 0xD1 = MB | ME | SR | TNF 0x01 (NFC Forum well-known type); type length 1; payload length; type "U".

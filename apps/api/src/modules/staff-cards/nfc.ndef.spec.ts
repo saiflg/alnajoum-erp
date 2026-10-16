@@ -53,6 +53,12 @@ describe('NDEF URI record', () => {
     const url = nfcUrl('https://erp.example.org', newNfcReference());
     expect(parseUriNdef(buildUriNdef(url))).toBe(url);
   });
+  it('allows plain http only for an address on this computer (development)', () => {
+    const ndef = buildUriNdef('http://localhost:3000/verify/nfc/x');
+    expect(ndef[4]).toBe(0x03);
+    expect(parseUriNdef(ndef)).toBe('http://localhost:3000/verify/nfc/x');
+    expect(() => buildUriNdef('http://localhost.evil.example/x')).toThrow();
+  });
   it('refuses to write anything but https, or a record that is too long', () => {
     expect(() => buildUriNdef('http://plain.example/x')).toThrow();
     expect(() => buildUriNdef('javascript:alert(1)')).toThrow();

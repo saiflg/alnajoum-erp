@@ -8,6 +8,7 @@ import { ConfigService } from '@nestjs/config';
 import { NfcReaderDevice } from '@prisma/client';
 import { createHash, randomBytes } from 'node:crypto';
 import { FieldCipher } from '../../common/security/field-cipher';
+import { isProductionEnv } from '../../common/security/runtime-environment';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { NfcProfileDto, NfcReaderDto, PrepareNfcDto } from './dto/nfc.dto';
@@ -352,7 +353,18 @@ export class StaffCardNfcService {
 
     const reference = newNfcReference();
     const url = nfcUrl(this.origin(), reference);
-    const plan = planEncoding(url, profile.chipType);
+    if (isProductionEnv() && !url.startsWith('https://'))
+      throw new BadRequestException(
+        'The site address (PUBLIC_WEB_ORIGIN) must start with https:// before cards are written. Set it first.',
+      );
+    let plan: ReturnType<typeof planEncoding>;
+    try {
+      plan = planEncoding(url, profile.chipType);
+    } catch (e) {
+      throw new BadRequestException(
+        `${(e as Error).message} The site address (PUBLIC_WEB_ORIGIN) is ${this.origin()}.`,
+      );
+    }
     if (plan.fits === false)
       throw new BadRequestException(
         `The address (${plan.bytes} bytes) does not fit this chip.`,
