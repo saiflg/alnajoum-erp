@@ -66,6 +66,7 @@ describe('StaffCardsService', () => {
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
         count: jest.fn().mockResolvedValue(0),
       },
+      staffIdCardNfc: { findUnique: jest.fn().mockResolvedValue(null) },
       staffIdCardEvent: {
         create: jest.fn().mockResolvedValue({}),
         findMany: jest.fn().mockResolvedValue([]),
@@ -362,6 +363,28 @@ describe('StaffCardsService', () => {
         {
           status: 'ACTIVE',
         },
+      );
+    });
+
+    it('does not activate a card whose NFC chip has not been confirmed', async () => {
+      arrange({ status: 'PENDING', activatedAt: null });
+      for (const status of ['PREPARED', 'ENCODED', 'FAILED']) {
+        prisma.staffIdCardNfc.findUnique.mockResolvedValueOnce({ status });
+        await expect(service.activate('card-1', admin, 'co-A')).rejects.toThrow(
+          /NFC chip.*not confirmed/i,
+        );
+      }
+      expect(prisma.staffIdCard.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('activates a card whose NFC chip was written and read back', async () => {
+      arrange({ status: 'PENDING', activatedAt: null });
+      prisma.staffIdCardNfc.findUnique.mockResolvedValueOnce({
+        status: 'VERIFIED',
+      });
+      await service.activate('card-1', admin, 'co-A');
+      expect(prisma.staffIdCard.updateMany.mock.calls[0][0].data.status).toBe(
+        'ACTIVE',
       );
     });
 

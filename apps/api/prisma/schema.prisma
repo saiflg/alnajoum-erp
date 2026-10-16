@@ -516,6 +516,8 @@ model Company {
   // Phase 26 - staff identification cards and the communication centre
   staffIdCards       StaffIdCard[]
   staffCardSettings  StaffCardSettings?
+  nfcCardProfiles    NfcCardProfile[]
+  nfcReaderDevices   NfcReaderDevice[]
   commContacts       CommContact[]
   commSegments       CommSegment[]
   commTemplates      CommTemplate[]
@@ -7174,6 +7176,7 @@ model StaffIdCard {
 
   events StaffIdCardEvent[]
   scans  StaffIdCardScan[]
+  nfc    StaffIdCardNfc?
 
   @@index([companyId, status])
   @@index([staffId])
@@ -7216,6 +7219,11 @@ model StaffIdCardScan {
   scannedByIdentityId String?
   ipFingerprint       String?
   userAgent           String?
+  /// Phase 26B: which reader produced an NFC scan, whether it was the labelled mock, and how strong the check was
+  /// (OPAQUE_REFERENCE, UID_ONLY).
+  readerId            String?
+  simulated           Boolean  @default(false)
+  assurance           String?
   /// First characters of what was presented (for spotting scraping), never the whole value.
   queryHint           String?
   createdAt           DateTime @default(now())
@@ -7792,4 +7800,123 @@ model CommInboundLog {
   @@unique([channel, providerMessageId])
   @@index([companyId, createdAt])
   @@map("comm_inbound_logs")
+}
+
+// ---------------------------------------------------------------- Phase 26B: NFC cards and readers
+
+enum NfcChipType {
+  NTAG213
+  NTAG215
+  NTAG216
+  NTAG424_DNA
+  MIFARE_DESFIRE_EV2
+  MIFARE_DESFIRE_EV3
+  MIFARE_CLASSIC_1K
+  OTHER
+}
+
+enum NfcEncodingStatus {
+  PREPARED
+  ENCODED
+  VERIFIED
+  FAILED
+}
+
+enum NfcReaderAdapter {
+  WEB_NFC
+  KEYBOARD_WEDGE
+  PCSC_BRIDGE
+  VENDOR_SDK
+  ANDROID_APP
+  MOCK
+}
+
+/// What a company has chosen to buy: the chip, the card stock and the reader. Recorded so that nobody assumes every
+/// NFC card offers the same protection. `assurance` is OPAQUE_REFERENCE: the chip carries a random reference that the
+/// server looks up. A copied chip carries a copied reference; cryptographic challenge-response (DESFire, NTAG 424 DNA)
+/// needs the manufacturer SDK and key custody and is NOT implemented here.
+model NfcCardProfile {
+  id        String      @id @default(cuid())
+  companyId String
+  company   Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name      String
+  chipType  NfcChipType
+  /// 13.56 MHz ISO/IEC 14443 unless the company records something else.
+  frequency String      @default("13.56 MHz ISO/IEC 14443")
+  /// The PVC card stock and its supplier, as ordered.
+  cardStock String?
+  readerModel String?
+  /// Notes from the compatibility check between card, chip, reader, phone OS, SDK and the verification service.
+  compatibilityNotes String?
+  isDefault Boolean     @default(false)
+  isActive  Boolean     @default(true)
+  createdByIdentityId String?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  credentials StaffIdCardNfc[]
+
+  @@unique([companyId, name])
+  @@map("nfc_card_profiles")
+}
+
+/// A physical reader (or a phone) the company uses. The status fields are written by the reader's own heartbeat.
+model NfcReaderDevice {
+  id        String           @id @default(cuid())
+  companyId String
+  company   Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name      String
+  model     String?
+  adapter   NfcReaderAdapter
+  location  String?
+  isActive  Boolean          @default(true)
+  /// Unguessable secret a local bridge presents; only its hash is stored.
+  tokenHash String?          @unique
+
+  lastSeenAt  DateTime?
+  /// CONNECTED | DISCONNECTED | ERROR
+  lastStatus  String?
+  lastError   String?
+  lastCardAt  DateTime?
+  /// The last verification outcome this reader produced (VALID, REVOKED ...).
+  lastResult  String?
+  createdByIdentityId String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@unique([companyId, name])
+  @@map("nfc_reader_devices")
+}
+
+/// The NFC half of a staff card. `reference` is a second, independent random value: it is NOT the QR token, so the two
+/// are checked separately and a leaked QR link says nothing about the chip. `uidHash` exists only if the issuer chose
+/// to record the chip's serial number, and is a keyed hash (the serial is never stored).
+model StaffIdCardNfc {
+  id        String         @id @default(cuid())
+  cardId    String         @unique
+  card      StaffIdCard    @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  companyId String
+  profileId String
+  profile   NfcCardProfile @relation(fields: [profileId], references: [id], onDelete: Restrict)
+
+  reference String         @unique
+  /// The NDEF URI written to the chip.
+  ndefUrl   String
+  uidHash   String?
+  uidHint   String?
+  batch     String?
+
+  status    NfcEncodingStatus @default(PREPARED)
+  encodedAt DateTime?
+  encodedByIdentityId String?
+  verifiedAt DateTime?
+  failureReason String?
+  createdByIdentityId String?
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@index([companyId, status])
+  @@index([companyId, uidHash])
+  @@index([batch])
+  @@map("staff_id_card_nfc")
 }

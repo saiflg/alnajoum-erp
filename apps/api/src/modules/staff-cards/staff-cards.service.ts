@@ -332,6 +332,17 @@ export class StaffCardsService {
   ) {
     const card = await this.load(id, tenant);
     this.guard(card, action, actor, opts.reason);
+    if (action === 'ACTIVATE') {
+      // A card that has an NFC chip is handed over only once the chip was written and read back correctly.
+      const chip = await this.prisma.staffIdCardNfc.findUnique({
+        where: { cardId: card.id },
+        select: { status: true },
+      });
+      if (chip && chip.status !== 'VERIFIED')
+        throw new BadRequestException(
+          `The NFC chip for this card is not confirmed yet (${chip.status.toLowerCase()}). Write the chip and confirm it before activating the card.`,
+        );
+    }
     const now = new Date();
     const eff = effectiveStatus(card, card.staff.isActive, now);
     const settings = await this.settings.get(card.companyId);

@@ -164,6 +164,19 @@ export const TENANT_SCOPES = {
     model: 'staffIdCard',
     scope: (c: string) => ({ companyId: c }),
   },
+  // Phase 26B - NFC chips, profiles and readers.
+  staffIdCardNfc: {
+    model: 'staffIdCardNfc',
+    scope: (c: string) => ({ companyId: c }),
+  },
+  nfcCardProfile: {
+    model: 'nfcCardProfile',
+    scope: (c: string) => ({ companyId: c }),
+  },
+  nfcReaderDevice: {
+    model: 'nfcReaderDevice',
+    scope: (c: string) => ({ companyId: c }),
+  },
   commContact: {
     model: 'commContact',
     scope: (c: string) => ({ companyId: c }),

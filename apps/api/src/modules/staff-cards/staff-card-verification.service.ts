@@ -3,6 +3,7 @@ import { Prisma, StaffIdCardStatus } from '@prisma/client';
 import { FieldCipher } from '../../common/security/field-cipher';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { STAFF_PHOTO_NAMESPACE, readCardImage } from './staff-card-images';
+import { normaliseUid, referenceFromPayload } from './nfc.ndef';
 import {
   effectiveStatus,
   isPlausibleToken,
@@ -13,7 +14,19 @@ import {
 } from './staff-card.policy';
 
 export type ScanMethod =
-  'QR' | 'PUBLIC_LINK' | 'MANUAL_STAFF_ID' | 'MANUAL_REFERENCE';
+  | 'QR'
+  | 'PUBLIC_LINK'
+  | 'MANUAL_STAFF_ID'
+  | 'MANUAL_REFERENCE'
+  // Phase 26B
+  | 'NFC'
+  | 'NFC_UID'
+  | 'PUBLIC_NFC_LINK'
+  | 'QR_AND_NFC';
+
+/** How much a successful check proves. A copied chip carries a copied reference or serial number. */
+export type Assurance =
+  'OPAQUE_REFERENCE' | 'UID_ONLY' | 'QR_TOKEN' | 'QR_AND_NFC';
 
 export interface ScanContext {
   method: ScanMethod;
@@ -23,6 +36,11 @@ export interface ScanContext {
   scannerCompanyId?: string;
   ip?: string;
   userAgent?: string;
+  /** NFC: the reader that produced the tap, and whether it was the labelled mock. */
+  readerId?: string;
+  simulated?: boolean;
+  /** Only cards of this company may be verified by this caller; anything else is answered as unrecognised. */
+  tenant?: string;
 }
 
 /**
@@ -45,6 +63,11 @@ export interface Verification {
     branch: string | null;
     hasPhoto: boolean;
   } | null;
+  /** Which way the card was checked, how strong that is, and whether a mock reader produced it. */
+  method?: ScanMethod;
+  assurance?: Assurance;
+  simulated?: boolean;
+  warnings?: string[];
   /**
    * Only for a signed-in scanner and only for a VALID card with a photograph: where to fetch the photograph (the
    * scanner looked the card up by staff id or card number, so it has no link of its own to build from).
@@ -102,13 +125,115 @@ export class StaffCardVerificationService {
     if (!isPlausibleToken(token)) {
       // Malformed input never reaches the database, and gets exactly the answer an unknown code gets.
       await this.record(null, 'INVALID', ctx, token);
-      return this.build('INVALID', null);
+      return this.build('INVALID', null, ctx);
     }
     const card = await this.prisma.staffIdCard.findUnique({
       where: { verificationToken: token },
       include: CARD_INCLUDE,
     });
     return this.finish(card, ctx, token);
+  }
+
+  // ----------------------------------------------------------------------------------------------- NFC (Phase 26B)
+
+  /** The credential row for an NFC reference, only once the chip was written and read back successfully. */
+  private async cardForReference(
+    reference: string,
+    tenant?: string,
+  ): Promise<CardRow | null> {
+    const cred = await this.prisma.staffIdCardNfc.findUnique({
+      where: { reference },
+      select: { status: true, card: { include: CARD_INCLUDE } },
+    });
+    // A chip that was never confirmed is not a card in use. A card of another company is "not recognised".
+    if (!cred || cred.status !== 'VERIFIED') return null;
+    if (tenant !== undefined && cred.card.companyId !== tenant) return null;
+    return cred.card;
+  }
+
+  /**
+   * A tap whose NDEF payload (the verification URL, or the bare reference) was read from the chip. The reference is
+   * a separate value from the QR token, and the answer always comes from the database: what the chip says about
+   * itself is never trusted. It proves the chip carries the right reference; it does NOT prove the chip is original.
+   */
+  async verifyNfc(payload: string, ctx: ScanContext): Promise<Verification> {
+    // The same warning, in the same shape, whether the payload was well formed or not: nothing to probe.
+    const warnings = [
+      'A copied chip carries a copied reference. Compare the person with the photograph on screen.',
+    ];
+    const reference = referenceFromPayload(payload);
+    if (!reference) {
+      await this.record(null, 'INVALID', ctx, payload, 'OPAQUE_REFERENCE');
+      return this.build('INVALID', null, ctx, 'OPAQUE_REFERENCE', warnings);
+    }
+    const card = await this.cardForReference(reference, ctx.tenant);
+    return this.finish(card, ctx, reference, 'OPAQUE_REFERENCE', warnings);
+  }
+
+  /**
+   * Last resort when only the chip's serial number could be read (some readers expose nothing else). A serial number
+   * is printed on the chip's data and is trivially cloned, so this is labelled UID_ONLY and never treated as strong.
+   * It only works for chips whose serial number was recorded at issue time, and only inside the caller's company.
+   */
+  async verifyUid(uidHex: string, ctx: ScanContext): Promise<Verification> {
+    const uid = normaliseUid(uidHex);
+    const warnings = [
+      'Only the chip serial number was read. Serial numbers can be copied: this is a weak check.',
+    ];
+    if (!uid || ctx.tenant === undefined) {
+      await this.record(null, 'INVALID', ctx, uidHex, 'UID_ONLY');
+      return this.build('INVALID', null, ctx, 'UID_ONLY', warnings);
+    }
+    const cred = await this.prisma.staffIdCardNfc.findFirst({
+      where: {
+        companyId: ctx.tenant,
+        status: 'VERIFIED',
+        uidHash: FieldCipher.default().keyedHash(uid, 'staff-card-nfc-uid'),
+      },
+      select: { card: { include: CARD_INCLUDE } },
+    });
+    return this.finish(cred?.card ?? null, ctx, uid, 'UID_ONLY', warnings);
+  }
+
+  /**
+   * QR and NFC checked together. Each is looked up on its own; they must lead to the same card. If they do not, the
+   * answer is "not recognised", whatever either alone would have said.
+   */
+  async verifyCombined(
+    qrValue: string,
+    nfcPayload: string,
+    ctx: ScanContext,
+  ): Promise<Verification> {
+    const token = this.parseScanned(qrValue);
+    const reference = referenceFromPayload(nfcPayload);
+    const byQr =
+      token && isPlausibleToken(token)
+        ? await this.prisma.staffIdCard.findUnique({
+            where: { verificationToken: token },
+            include: CARD_INCLUDE,
+          })
+        : null;
+    const byNfc = reference ? await this.cardForReference(reference) : null;
+    const scoped = (c: CardRow | null) =>
+      c && ctx.tenant !== undefined && c.companyId !== ctx.tenant ? null : c;
+    const a = scoped(byQr);
+    const b = scoped(byNfc);
+    if (!a || !b || a.id !== b.id) {
+      await this.record(
+        null,
+        'INVALID',
+        ctx,
+        token ?? nfcPayload,
+        'QR_AND_NFC',
+      );
+      const v = this.build('INVALID', null, ctx, 'QR_AND_NFC', [
+        !a || !b
+          ? 'One of the two codes was not recognised.'
+          : 'The QR code and the NFC chip belong to different cards.',
+      ]);
+      return v;
+    }
+    return this.finish(a, ctx, a.cardNumber, 'QR_AND_NFC');
   }
 
   // ----------------------------------------------------------------------------------------------- manual (signed in)
@@ -173,6 +298,8 @@ export class StaffCardVerificationService {
     card: CardRow | null,
     ctx: ScanContext,
     presented: string,
+    assurance?: Assurance,
+    warnings?: string[],
   ): Promise<Verification> {
     const eff: StaffIdCardStatus | null = card
       ? effectiveStatus(card, card.staff.isActive)
@@ -180,14 +307,16 @@ export class StaffCardVerificationService {
     const result: VerificationResult = eff
       ? toVerificationResult(eff)
       : 'INVALID';
-    await this.record(card, result, ctx, presented);
-    return this.build(result, card, ctx);
+    await this.record(card, result, ctx, presented, assurance);
+    return this.build(result, card, ctx, assurance, warnings);
   }
 
   private build(
     result: VerificationResult,
     card: CardRow | null,
     ctx?: ScanContext,
+    assurance?: Assurance,
+    warnings?: string[],
   ): Verification {
     const base: Verification = {
       result,
@@ -197,6 +326,10 @@ export class StaffCardVerificationService {
       company: null,
       card: null,
       staff: null,
+      method: ctx?.method,
+      assurance,
+      simulated: ctx?.simulated === true,
+      warnings: warnings && warnings.length ? warnings : undefined,
     };
     if (!card || result === 'INVALID') return base;
     const company = card.staff.company.tradingName ?? card.staff.company.name;
@@ -225,14 +358,32 @@ export class StaffCardVerificationService {
     result: VerificationResult,
     ctx: ScanContext,
     presented: string,
+    assurance?: Assurance,
   ): Promise<void> {
     try {
+      if (ctx.readerId)
+        // The reader's own status screen shows its last tap and what came of it.
+        await this.prisma.nfcReaderDevice
+          .updateMany({
+            where: { id: ctx.readerId },
+            data: {
+              lastCardAt: new Date(),
+              lastResult: result,
+              lastSeenAt: new Date(),
+              lastStatus: 'CONNECTED',
+              lastError: null,
+            },
+          })
+          .catch(() => undefined);
       await this.prisma.staffIdCardScan.create({
         data: {
           cardId: card?.id ?? null,
           companyId: card?.companyId ?? ctx.scannerCompanyId ?? null,
           result,
           method: ctx.method,
+          readerId: ctx.readerId,
+          simulated: ctx.simulated === true,
+          assurance,
           scannedByIdentityId: ctx.scannedByIdentityId,
           ipFingerprint: ctx.ip
             ? FieldCipher.default().keyedHash(ctx.ip, 'staff-card-scan-ip')

@@ -321,6 +321,7 @@ export const PERMISSIONS = {
     MANAGE: 'staff_card:manage', // issue, activate, renew, suspend, reinstate, revoke, replace, print
     SCAN: 'staff_card:scan', // the scanner, manual lookups and the verification history
     SETTINGS: 'staff_card:settings', // card design, wording, logo and signature
+    NFC: 'staff_card:nfc', // chip profiles, readers, preparing and confirming the NFC encoding of a card (Phase 26B)
   },
   // Phase 26 - the Communication Centre. Having a contact never implies permission to market to it; consent is
   // recorded and enforced by the backend whatever these permissions say.

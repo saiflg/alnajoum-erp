@@ -3,6 +3,11 @@ import { ConfigModule } from '@nestjs/config';
 import { AuditModule } from '../audit/audit.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { StaffCardExpiryScheduler } from './staff-card-expiry.scheduler';
+import {
+  StaffCardNfcController,
+  StaffCardNfcPublicController,
+} from './staff-card-nfc.controller';
+import { StaffCardNfcService } from './staff-card-nfc.service';
 import { StaffCardPublicController } from './staff-card-public.controller';
 import { StaffCardRenderService } from './staff-card-render.service';
 import { StaffCardSettingsService } from './staff-card-settings.service';
@@ -17,12 +22,18 @@ import { StaffCardsService } from './staff-cards.service';
  */
 @Module({
   imports: [ConfigModule, AuditModule, NotificationsModule],
-  controllers: [StaffCardsController, StaffCardPublicController],
+  controllers: [
+    StaffCardsController,
+    StaffCardPublicController,
+    StaffCardNfcController,
+    StaffCardNfcPublicController,
+  ],
   providers: [
     StaffCardsService,
     StaffCardSettingsService,
     StaffCardRenderService,
     StaffCardVerificationService,
+    StaffCardNfcService,
     StaffCardExpiryScheduler,
   ],
   exports: [StaffCardsService, StaffCardVerificationService],
