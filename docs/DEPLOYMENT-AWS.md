@@ -1,7 +1,25 @@
 # Deploying to AWS (alnajoumtravelagency.com)
 
-Status: **prepared, not yet run.** The AWS account it was prepared for (494166749014) belongs to an AWS Organization
-whose service control policy denies EC2 and Lightsail in every region tried. Nothing was created on AWS.
+Status: **DEPLOYED 2026-10-16** (VERIFIED: HTTPS answers on https://alnajoumtravelagency.com, API health `ok`, server commit equals
+local commit, new code present in the running container). One `t3.small` (2 GB, Ubuntu 24.04, 30 GB) in **eu-north-1
+(Stockholm)** with an Elastic IP, running the five containers from `docker-compose.prod.yml`. Created through the EC2 console;
+the server was then set up over SSH with `deploy/bootstrap-new-server.sh`.
+
+Lessons from the first real run (all fixed in the repository):
+
+* **Region.** Some AWS organisations deny every region except one (eu-north-1 here). If EC2 says "explicit deny", check the region first.
+* **Memory.** Building on 2 GB needs a 6 GB swap file and a raised Node heap (`NODE_OPTIONS=--max-old-space-size=3072`, now in the
+  Dockerfiles and the seed step). Build one image at a time (`COMPOSE_PARALLEL_LIMIT=1`). `t3.micro` (1 GB) is too small.
+* **Firewall step.** The bootstrap script's iptables rule was written for Oracle images and failed on plain Ubuntu; fixed.
+* **Fixed IP.** Allocate an Elastic IP before pointing DNS; a stop/start changes the public address otherwise.
+* **HTTPS.** Start with the IP over HTTP, point DNS (Cloudflare **DNS only**), then set `PUBLIC_ORIGIN=https://<domain>` and
+  `SITE_ADDRESS=<domain>` in `.env.prod` and rebuild the web image (the address is baked in at build time).
+
+Still to do on this server: real `PAYSTACK_SECRET_KEY`, SMTP settings (mail is `mock`, nothing is sent), WhatsApp credentials,
+back up `DATA_ENCRYPTION_KEYS` off the server, change the bootstrap administrator password and remove it from `.env.prod`,
+automatic backups of the database volume, and an AWS budget alert.
+
+## Original plan (kept for reference)
 
 ## Before you start: lift the organisation block
 

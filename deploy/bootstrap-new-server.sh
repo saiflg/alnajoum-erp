@@ -94,7 +94,7 @@ $COMPOSE up -d postgres
 
 echo "==> Applying migrations and seeding permissions/roles/bootstrap admin"
 $COMPOSE run --rm api npx prisma migrate deploy
-$COMPOSE run --rm api npx prisma db seed
+$COMPOSE run --rm -e NODE_OPTIONS=--max-old-space-size=3072 api npx prisma db seed
 
 echo "==> Starting everything"
 $COMPOSE up -d
