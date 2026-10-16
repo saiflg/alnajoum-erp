@@ -108,3 +108,12 @@ Provision → `deploy/bootstrap-new-server.sh` → copy `.env.prod` (from your k
 ## 8. Gaps (not hidden)
 
 No backup schedule is installed by default · no off-machine destination is configured by default · uploads restore, full rebuild and restore-over-live have not been rehearsed · no standby database or automatic failover (single Postgres) · RTO measured only for the database step on demo-sized data · container/compose hardening is written but not built here.
+
+## 7. Production schedule on the AWS server (set up 2026-10-16)
+
+* `/etc/cron.d/alnajoum-backup`: `deploy/backup-nightly.sh` at 02:15 UTC every day, `deploy/restore-check-latest.sh` on Sundays at 03:30 UTC. Output goes to `/var/log/alnajoum-backup.log`.
+* Each night: encrypted database dump, encrypted documents archive and an encrypted copy of `.env.prod` (which holds `DATA_ENCRYPTION_KEYS`) in `/var/backups/alnajoum`, 14 days kept. All files are AES-256 encrypted with the passphrase in `/root/.backup-pass` (root only).
+* **VERIFIED** on the server: a backup was made, its checksum matched, and `restore-check.sh` restored it into a scratch database (54 migrations, row counts equal). The first copy was downloaded to a second computer.
+* **Not done yet (open):** automatic off-server copy (the files still share the server's disk), AWS disk snapshots, and an alert when a night is missed. A copy of the passphrase must be kept outside the server; without it no backup can be opened.
+* Copy the latest backups to another machine: `scp -i <key.pem> "ubuntu@<server-ip>:/var/backups/alnajoum/*" <folder>`.
+* Check the last run: `sudo tail -20 /var/log/alnajoum-backup.log`.
