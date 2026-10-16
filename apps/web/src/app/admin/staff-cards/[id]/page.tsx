@@ -6,6 +6,7 @@ import { useRef, useState } from 'react';
 import { AppShell } from '@/components/AppShell';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { CardBack, CardFront, CardPreviewData, CardStatus } from '@/components/staff-cards/CardFace';
+import { NfcChipPanel } from '@/components/staff-cards/NfcChipPanel';
 import { Empty, Field, Modal, Msg, PageTitle, Row, Table, btn, btnDanger, btnGhost, card, fmtDate, input, td, useAction, when } from '@/components/comm/ui';
 import { apiOpenPdf, apiRequest, apiUpload } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
@@ -122,6 +123,8 @@ function Detail() {
             {!c.staff.isActive && <p className="mt-3 rounded bg-red-50 p-2 text-xs text-red-700">This staff member is deactivated, so the card no longer verifies.</p>}
             {c.replacedByCardId && <p className="mt-3 text-xs"><a className="text-amber-700 hover:underline" href={`/admin/staff-cards/${c.replacedByCardId}`}>See the replacement card →</a></p>}
           </div>
+
+          {can('staff_card:read') && <NfcChipPanel cardId={id} effective={eff} canManage={can('staff_card:nfc')} onChange={bump} />}
 
           {manage && (
             <div className={card}>

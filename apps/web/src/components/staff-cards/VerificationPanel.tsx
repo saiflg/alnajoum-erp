@@ -12,7 +12,28 @@ export interface Verification {
   card: { number: string; validUntil: string | null } | null;
   staff: { fullName: string; staffId: string; department: string | null; jobTitle: string | null; branch: string | null; hasPhoto: boolean } | null;
   photoPath?: string;
+  /** Phase 26B: how the card was checked and how much that proves. */
+  method?: string;
+  assurance?: string;
+  simulated?: boolean;
+  warnings?: string[];
 }
+
+const METHOD_TEXT: Record<string, string> = {
+  QR: 'QR code scanned',
+  PUBLIC_LINK: 'QR link opened',
+  MANUAL_STAFF_ID: 'Staff ID typed in',
+  MANUAL_REFERENCE: 'Card number typed in',
+  NFC: 'NFC card tapped',
+  NFC_UID: 'NFC card tapped (serial number only)',
+  PUBLIC_NFC_LINK: 'NFC card tapped (opened on a phone)',
+  QR_AND_NFC: 'QR code and NFC chip checked together',
+};
+const ASSURANCE_TEXT: Record<string, string> = {
+  OPAQUE_REFERENCE: 'Checked against the reference on the chip. A copied chip would carry a copied reference.',
+  UID_ONLY: 'Weak check: only the chip serial number was read, and serial numbers can be copied.',
+  QR_AND_NFC: 'QR code and NFC chip both lead to the same card.',
+};
 
 const TONE: Record<Verification['result'], { box: string; head: string; icon: string }> = {
   VALID: { box: 'border-emerald-300 bg-emerald-50', head: 'bg-emerald-600 text-white', icon: '✔' },
@@ -55,6 +76,16 @@ export function VerificationPanel({ v, photoUrl }: { v: Verification; photoUrl?:
           </div>
         ) : null}
         <p className={`${v.staff ? 'mt-4' : ''} text-sm text-slate-700`}>{v.message}</p>
+        {v.simulated && <p className="mt-3 rounded-md border border-sky-300 bg-sky-50 px-3 py-2 text-xs font-semibold text-sky-900">SIMULATED — this came from the test reader, not from a real card.</p>}
+        {v.method && (
+          <p className="mt-3 text-xs text-slate-600">
+            <b>Checked by:</b> {METHOD_TEXT[v.method] ?? v.method}
+            {v.assurance && ASSURANCE_TEXT[v.assurance] ? <> — {ASSURANCE_TEXT[v.assurance]}</> : null}
+          </p>
+        )}
+        {v.warnings && v.warnings.length > 0 && v.result === 'VALID' && (
+          <ul className="mt-2 list-disc pl-5 text-xs text-amber-800">{v.warnings.map((w) => <li key={w}>{w}</li>)}</ul>
+        )}
         <p className="mt-3 text-xs text-slate-500">
           {v.company ? `${v.company.name} · ` : ''}
           {v.card ? `Card ${v.card.number} · valid until ${fmtDate(v.card.validUntil)} · ` : ''}

@@ -156,6 +156,9 @@ check('a mock reader can be registered and is flagged as simulated', mock.status
 const c = await newCard('C'); const pc = await call('POST', `/nfc/cards/${c.cardId}/prepare`, { token: admin, body: {} });
 await call('POST', `/nfc/cards/${c.cardId}/confirm`, { token: admin, body: { success: true, readBack: pc.data.url } });
 await call('POST', `/staff-cards/${c.cardId}/activate`, { token: admin, body: {} });
+const cc = await newCard('S'); const pcs = await call('POST', `/nfc/cards/${cc.cardId}/prepare`, { token: admin, body: {} });
+const simConfirm = await call('POST', `/nfc/cards/${cc.cardId}/confirm`, { token: admin, body: { success: true, readBack: pcs.data.url, simulated: true } });
+check('a simulated confirmation (test button) is accepted outside production and is recorded as simulated', simConfirm.data?.status === 'VERIFIED' && sql(`select metadata->>'simulated' from staff_id_card_events where "cardId"='${cc.cardId}' and action='NFC_ENCODED'`) === 'true');
 const sim = await call('POST', '/nfc/verify', { token: admin, body: { payload: pc.data.url, readerId: mock.data.id, simulated: true } });
 check('a scan from the mock reader is marked simulated in the answer', sim.data?.result === 'VALID' && sim.data.simulated === true);
 check('and in the permanent scan record', sql(`select simulated from staff_id_card_scans where "readerId"='${mock.data.id}' order by "createdAt" desc limit 1`) === 't');

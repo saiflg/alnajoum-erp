@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -436,9 +437,15 @@ export class StaffCardNfcService {
       uid?: string;
       error?: string;
       recordUid?: boolean;
+      simulated?: boolean;
     },
     actor: NfcActor,
   ) {
+    // A confirmation made without a real read-back proves nothing about a real chip: never accepted in production.
+    if (input.simulated && isProductionEnv())
+      throw new ForbiddenException(
+        'Simulated confirmations are not accepted in production.',
+      );
     const card = await this.cardOf(companyId, cardId);
     const cred = card.nfc;
     if (!cred)
@@ -523,7 +530,7 @@ export class StaffCardNfcService {
           cardId,
           action: 'NFC_ENCODED',
           actorIdentityId: actor.identityId,
-          metadata: { serialRecorded: !!uidHash },
+          metadata: { serialRecorded: !!uidHash, simulated: input.simulated === true },
         },
       });
     });

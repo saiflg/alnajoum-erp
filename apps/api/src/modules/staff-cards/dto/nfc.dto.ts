@@ -78,6 +78,8 @@ export class ConfirmEncodingDto {
   @IsOptional() @IsString() @MaxLength(40) uid?: string;
   /** Keep a keyed fingerprint of the serial number (the number itself is never stored). */
   @IsOptional() @IsBoolean() recordUid?: boolean;
+  /** True only when the confirmation comes from the labelled test button, not from a real read-back. Refused in production. */
+  @IsOptional() @IsBoolean() simulated?: boolean;
   @IsOptional() @Transform(trim) @IsString() @MaxLength(300) error?: string;
 }
 

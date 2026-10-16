@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppShell } from '@/components/AppShell';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
+import { NfcTap } from '@/components/staff-cards/NfcTap';
 import { VerificationPanel, Verification } from '@/components/staff-cards/VerificationPanel';
 import { Badge, Field, Msg, PageTitle, Row, Table, btn, btnGhost, card, input, td, when } from '@/components/comm/ui';
 import { ApiError, apiFileUrl, apiRequest } from '@/lib/api';
@@ -17,7 +18,7 @@ interface Detector { detect(source: CanvasImageSource): Promise<{ rawValue: stri
 type DetectorCtor = new (options?: { formats: string[] }) => Detector;
 const detectorCtor = (): DetectorCtor | undefined => (window as unknown as { BarcodeDetector?: DetectorCtor }).BarcodeDetector;
 
-type Mode = 'camera' | 'manual' | 'usb';
+type Mode = 'camera' | 'nfc' | 'manual' | 'usb';
 type Method = 'QR' | 'MANUAL_STAFF_ID' | 'MANUAL_REFERENCE';
 
 function describeFailure(e: unknown): string {
@@ -61,11 +62,19 @@ function Scanner() {
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <div>
           <div className="mb-4 flex gap-2" role="tablist" aria-label="How to check a card">
-            {([['camera', 'Camera'], ['manual', 'Type it in'], ['usb', 'USB scanner']] as [Mode, string][]).map(([k, label]) => (
+            {([['camera', 'Scan QR'], ['nfc', 'Tap NFC card'], ['manual', 'Type it in'], ['usb', 'USB scanner']] as [Mode, string][]).map(([k, label]) => (
               <button key={k} role="tab" aria-selected={mode === k} onClick={() => setMode(k)} className={`rounded-md px-3 py-1.5 text-sm ${mode === k ? 'bg-slate-900 text-white' : 'border border-slate-300 text-slate-700 hover:bg-slate-50'}`}>{label}</button>
             ))}
           </div>
           {mode === 'camera' && <CameraScan onCode={(code) => verify('QR', code)} paused={busy || !!result} />}
+          {mode === 'nfc' && (
+            <NfcTap
+              paused={busy || !!result}
+              onBusy={setBusy}
+              onResult={(v) => { setFailure(null); setResult(v); setRefresh((n) => n + 1); }}
+              onFailure={(m) => { setResult(null); setFailure(m); setLast(null); }}
+            />
+          )}
           {mode === 'manual' && <ManualEntry onSubmit={verify} busy={busy} />}
           {mode === 'usb' && <UsbScan onCode={(code) => verify('QR', code)} busy={busy} />}
         </div>
