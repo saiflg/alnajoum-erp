@@ -411,11 +411,12 @@ export class StaffCardRenderService {
   /**
    * A print-ready PDF. `cards`: each card is its own CR80 page, front then back (what a PVC card printer wants).
    * `sheet`: A4 pages of ten with cut guides, fronts on one page and backs on the next, columns mirrored so a
-   * duplex print lines the two sides up.
+   * duplex print lines the two sides up. `both`: A4 pages with each card's front and back side by side on the same
+   * page (five cards a page), for looking at, filing or printing on one side.
    */
   async render(
     ids: string[],
-    layout: 'cards' | 'sheet',
+    layout: 'cards' | 'sheet' | 'both',
     tenant?: string,
   ): Promise<{
     stream: PDFKit.PDFDocument;
@@ -453,7 +454,12 @@ export class StaffCardRenderService {
             size: 'A4',
             margin: 0,
             autoFirstPage: false,
-            info: { Title: 'Staff identification cards (sheet)' },
+            info: {
+              Title:
+                layout === 'both'
+                  ? 'Staff identification cards (front and back)'
+                  : 'Staff identification cards (sheet)',
+            },
           });
 
     if (layout === 'cards') {
@@ -462,6 +468,45 @@ export class StaffCardRenderService {
         drawFront(doc, it.data, it.a);
         doc.addPage({ size: [CARD_W, CARD_H], margin: 0 });
         drawBack(doc, it.data, it.a);
+      }
+    } else if (layout === 'both') {
+      const gutter = 12;
+      const rowGap = 14;
+      const pageW = 595.28;
+      const pageH = 841.89;
+      const rows = 5;
+      const startX = (pageW - (2 * CARD_W + gutter)) / 2;
+      const startY = 48;
+      for (let i = 0; i < items.length; i += rows) {
+        doc.addPage({ size: 'A4', margin: 0 });
+        items.slice(i, i + rows).forEach((it, row) => {
+          const y = startY + row * (CARD_H + rowGap);
+          for (const side of ['front', 'back'] as const) {
+            const x = startX + (side === 'front' ? 0 : CARD_W + gutter);
+            doc.save();
+            doc.translate(x, y);
+            if (side === 'front') drawFront(doc, it.data, it.a);
+            else drawBack(doc, it.data, it.a);
+            doc.restore();
+            doc.save();
+            doc
+              .lineWidth(0.25)
+              .dash(2, { space: 2 })
+              .rect(x, y, CARD_W, CARD_H)
+              .stroke('#94a3b8');
+            doc.restore();
+          }
+        });
+        doc
+          .font('Helvetica')
+          .fontSize(6)
+          .fillColor('#94a3b8')
+          .text(
+            'Front (left) and back (right) of each card. Cut along the dashed lines.',
+            36,
+            pageH - 24,
+            { lineBreak: false },
+          );
       }
     } else {
       const cols = 2;

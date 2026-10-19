@@ -82,10 +82,13 @@ export class PrintCardsDto {
   @MaxLength(40, { each: true })
   cardIds!: string[];
 
-  /** `cards`: one CR80 card per page (PVC printers). `sheet`: A4 sheets of 10 with cut guides. */
+  /**
+   * `cards`: front and back as separate CR80 pages (PVC printers). `sheet`: A4 sheets of 10 with cut guides, fronts on
+   * one page and backs on the next. `both`: A4 pages with each card's front and back side by side on the same page.
+   */
   @IsOptional()
-  @IsIn(['cards', 'sheet'])
-  layout?: 'cards' | 'sheet';
+  @IsIn(['cards', 'sheet', 'both'])
+  layout?: 'cards' | 'sheet' | 'both';
 }
 
 export class ListCardsQueryDto {

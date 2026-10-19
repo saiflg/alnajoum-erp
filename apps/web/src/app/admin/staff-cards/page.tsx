@@ -153,6 +153,9 @@ function CardsPage() {
             <button className={btnGhost} disabled={!selected.length || busy} onClick={() => act(() => apiOpenPdf('/staff-cards/print', { method: 'POST', body: { cardIds: selected, layout: 'cards' }, filename: 'staff-cards.pdf' }).then(() => setRefresh((n) => n + 1)))}>
               Print selected ({selected.length}) — card size
             </button>
+            <button className={btnGhost} disabled={!selected.length || busy} onClick={() => act(() => apiOpenPdf('/staff-cards/print', { method: 'POST', body: { cardIds: selected, layout: 'both' }, filename: 'staff-cards-front-back.pdf' }).then(() => setRefresh((n) => n + 1)))}>
+              Front + back, one page
+            </button>
             <button className={btnGhost} disabled={!selected.length || busy} onClick={() => act(() => apiOpenPdf('/staff-cards/print', { method: 'POST', body: { cardIds: selected, layout: 'sheet' }, filename: 'staff-cards-sheet.pdf' }).then(() => setRefresh((n) => n + 1)))}>
               A4 sheet
             </button>

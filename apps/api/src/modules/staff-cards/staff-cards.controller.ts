@@ -367,7 +367,7 @@ export class StaffCardsController {
   ): Promise<StreamableFile> {
     const { stream, filename } = await this.render.render(
       [id],
-      'cards',
+      'both',
       resolveTenantFilter(user),
     );
     this.pdf(res, filename);

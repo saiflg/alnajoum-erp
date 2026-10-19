@@ -63,8 +63,8 @@ function Detail() {
         actions={
           <>
             <Link className={btnGhost} href="/admin/staff-cards">← All cards</Link>
-            {['ACTIVE', 'PENDING'].includes(eff) && <button className={btnGhost} onClick={() => act(() => apiOpenPdf(`/staff-cards/${id}/pdf`, { filename: `${c.cardNumber}.pdf` }))}>Open print-ready PDF</button>}
-            {['ACTIVE', 'PENDING'].includes(eff) && manage && <button className={btn} onClick={() => act(() => apiOpenPdf('/staff-cards/print', { method: 'POST', body: { cardIds: [id], layout: 'cards' }, filename: `${c.cardNumber}.pdf` }).then(bump), 'Print recorded in the history.')}>Print card</button>}
+            {['ACTIVE', 'PENDING'].includes(eff) && <button className={btnGhost} onClick={() => act(() => apiOpenPdf(`/staff-cards/${id}/pdf`, { filename: `${c.cardNumber}.pdf` }))}>Open front + back (one page)</button>}
+            {['ACTIVE', 'PENDING'].includes(eff) && manage && <button className={btn} title="Front and back as two card-sized pages, for a card printer" onClick={() => act(() => apiOpenPdf('/staff-cards/print', { method: 'POST', body: { cardIds: [id], layout: 'cards' }, filename: `${c.cardNumber}.pdf` }).then(bump), 'Print recorded in the history.')}>Print card</button>}
           </>
         }
       />
