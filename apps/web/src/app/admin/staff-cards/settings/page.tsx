@@ -1,10 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { AppShell } from '@/components/AppShell';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { CardBack, CardFront, CardPreviewData } from '@/components/staff-cards/CardFace';
+import { FilePickButton } from '@/components/staff-cards/FilePickButton';
 import { Field, Msg, PageTitle, Row, btn, btnGhost, card, input, useAction } from '@/components/comm/ui';
 import { apiRequest, apiUpload } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
@@ -33,8 +34,6 @@ function Settings() {
   const { data: s, error: loadError } = useApi<Row>('/staff-cards/settings', refresh);
   const { act, error, notice, busy } = useAction(() => setRefresh((n) => n + 1));
   const [edits, setEdits] = useState<Form>({});
-  const logo = useRef<HTMLInputElement>(null);
-  const signature = useRef<HTMLInputElement>(null);
 
   if (loadError) return <Msg error={loadError} />;
   if (!s) return <p className="text-sm text-slate-500">Loading…</p>;
@@ -100,13 +99,14 @@ function Settings() {
               {(['logo', 'signature'] as const).map((kind) => (
                 <div key={kind} className="mt-3 border-t border-slate-100 pt-3">
                   <p className="text-xs font-medium text-slate-600">{kind === 'logo' ? 'Company logo' : 'Authorised signature (optional)'} — {s[kind === 'logo' ? 'logoDataUrl' : 'signatureDataUrl'] ? 'uploaded' : 'none'}</p>
-                  <input ref={kind === 'logo' ? logo : signature} type="file" accept="image/png,image/jpeg" className="mt-1 block w-full text-xs" aria-label={`Choose ${kind}`} />
-                  <div className="mt-2 flex gap-2">
-                    <button className={btnGhost} disabled={busy} onClick={() => act(async () => {
-                      const f = (kind === 'logo' ? logo : signature).current?.files?.[0];
-                      if (!f) throw new Error('Choose a PNG or JPEG image first.');
-                      await apiUpload(`/staff-cards/settings/${kind}`, f);
-                    }, `${kind === 'logo' ? 'Logo' : 'Signature'} saved.`)}>Upload</button>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <FilePickButton
+                      className={btnGhost}
+                      accept="image/png,image/jpeg"
+                      disabled={busy}
+                      label={s[kind === 'logo' ? 'logoDataUrl' : 'signatureDataUrl'] ? 'Choose a new image…' : 'Choose image and upload…'}
+                      onFile={(f) => act(async () => { await apiUpload(`/staff-cards/settings/${kind}`, f); }, `${kind === 'logo' ? 'Logo' : 'Signature'} saved.`)}
+                    />
                     {s[kind === 'logo' ? 'logoDataUrl' : 'signatureDataUrl'] && <button className={btnGhost} disabled={busy} onClick={() => act(() => apiRequest(`/staff-cards/settings/${kind}`, { method: 'DELETE' }), `${kind === 'logo' ? 'Logo' : 'Signature'} removed.`)}>Remove</button>}
                   </div>
                 </div>

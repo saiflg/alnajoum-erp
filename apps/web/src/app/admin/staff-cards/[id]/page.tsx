@@ -2,12 +2,13 @@
 
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { AppShell } from '@/components/AppShell';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { CardBack, CardFront, CardPreviewData, CardStatus } from '@/components/staff-cards/CardFace';
 import { NfcChipPanel } from '@/components/staff-cards/NfcChipPanel';
 import { Empty, Field, Modal, Msg, PageTitle, Row, Table, btn, btnDanger, btnGhost, card, fmtDate, input, td, useAction, when } from '@/components/comm/ui';
+import { FilePickButton } from '@/components/staff-cards/FilePickButton';
 import { apiOpenPdf, apiRequest, apiUpload } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { navForRoles } from '@/lib/nav-for-roles';
@@ -36,7 +37,6 @@ function Detail() {
   const [renewMonths, setRenewMonths] = useState('');
   const [showRenew, setShowRenew] = useState(false);
   const [activateReplacement, setActivateReplacement] = useState(true);
-  const file = useRef<HTMLInputElement>(null);
 
   if (loadError) return <Msg error={loadError} />;
   if (!c) return <p className="text-sm text-slate-500">Loading…</p>;
@@ -146,13 +146,13 @@ function Detail() {
             <div className={card}>
               <h2 className="text-sm font-semibold">Photograph</h2>
               {c.staff.hasPhoto ? <p className="mt-1 text-xs text-emerald-700">A photograph is on file and appears on the card.</p> : <p className="mt-1 text-xs text-amber-700">No photograph yet. The card shows the person&apos;s initials until one is added.</p>}
-              <input ref={file} type="file" accept="image/jpeg,image/png" className="mt-3 block w-full text-xs" aria-label="Choose a photograph" />
-              <button className={`${btnGhost} mt-2`} disabled={busy} onClick={() => act(async () => {
-                const f = file.current?.files?.[0];
-                if (!f) throw new Error('Choose a JPEG or PNG photograph first.');
-                await apiUpload(`/staff-cards/staff/${c.staff.id}/photo`, f);
-                if (file.current) file.current.value = '';
-              }, 'Photograph saved (resized, and camera data removed).')}>Upload photograph</button>
+              <FilePickButton
+                className={`${btnGhost} mt-3`}
+                accept="image/jpeg,image/png"
+                disabled={busy}
+                label={c.staff.hasPhoto ? 'Choose a new photograph…' : 'Choose photograph and upload…'}
+                onFile={(f) => act(async () => { await apiUpload(`/staff-cards/staff/${c.staff.id}/photo`, f); }, 'Photograph saved (resized, and camera data removed).')}
+              />
               <p className="mt-2 text-[11px] text-slate-400">JPEG or PNG, up to 5 MB. It is resized to a portrait and any location or device data is removed.</p>
             </div>
           )}
