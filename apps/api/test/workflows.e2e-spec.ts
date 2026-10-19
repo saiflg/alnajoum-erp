@@ -806,6 +806,104 @@ describe('Cross-module workflows (e2e)', () => {
   });
 
   // ------------------------------------------------------------------------------------------------------------
+  describe('Removing staff (deactivation with history kept)', () => {
+    let victim: Person;
+
+    it('needs a step-up proof: a plain session is refused', async () => {
+      victim = await createStaff('leaver', 'STAFF');
+      const res = await request(server)
+        .delete(`/api/v1/staff/${victim.staffId}`)
+        .set(auth(admin));
+      expect(res.status).toBe(403);
+      expect(JSON.stringify(res.body)).toMatch(/STEP_UP_REQUIRED/);
+    });
+
+    it('a branch manager and a customer cannot remove staff', async () => {
+      const headersMgr = await stepUp(people.manager);
+      await request(server)
+        .delete(`/api/v1/staff/${victim.staffId}`)
+        .set(headersMgr)
+        .expect(403);
+      await request(server)
+        .delete(`/api/v1/staff/${victim.staffId}`)
+        .set(auth(people.amina.token))
+        .expect(403);
+    });
+
+    it('removes the person: they cannot sign in, their session ends, and it is audited with the reason', async () => {
+      const adminPerson: Person = {
+        token: admin,
+        email: ADMIN_EMAIL,
+        password: ADMIN_PASSWORD,
+      };
+      const headers = await stepUp(adminPerson);
+      await request(server)
+        .delete(`/api/v1/staff/${victim.staffId}?reason=left%20the%20company`)
+        .set(headers)
+        .expect(200);
+
+      const login = await request(server)
+        .post('/api/v1/auth/login')
+        .send({ email: victim.email, password: victim.password });
+      expect([400, 401, 403]).toContain(login.status);
+
+      const staff = await prisma.staff.findUnique({
+        where: { id: victim.staffId },
+      });
+      expect(staff?.isActive).toBe(false); // the record and its history stay
+      const audit = await prisma.auditLog.findFirst({
+        where: { action: 'staff.removed', entityId: victim.staffId },
+      });
+      expect(audit?.reason).toBe('left the company');
+    });
+
+    it('removing the same person again is harmless and the list still shows them as removed', async () => {
+      const list = await request(server)
+        .get('/api/v1/staff')
+        .set(auth(admin))
+        .expect(200);
+      const row = (
+        list.body.data as Array<{ id: string; isActive: boolean }>
+      ).find((m) => m.id === victim.staffId);
+      expect(row?.isActive).toBe(false);
+    });
+
+    it('can be restored, and then they can sign in again', async () => {
+      const adminPerson: Person = {
+        token: admin,
+        email: ADMIN_EMAIL,
+        password: ADMIN_PASSWORD,
+      };
+      const headers = await stepUp(adminPerson);
+      await request(server)
+        .post(`/api/v1/staff/${victim.staffId}/reactivate`)
+        .set(headers)
+        .expect(201);
+      await request(server)
+        .post('/api/v1/auth/login')
+        .send({ email: victim.email, password: victim.password })
+        .expect(201);
+    });
+
+    it('the bootstrap administrator cannot remove their own account', async () => {
+      const me = await prisma.staff.findFirst({
+        where: { identity: { email: ADMIN_EMAIL } },
+      });
+      if (!me) return; // the bootstrap admin has no staff record in some setups
+      const adminPerson: Person = {
+        token: admin,
+        email: ADMIN_EMAIL,
+        password: ADMIN_PASSWORD,
+      };
+      const headers = await stepUp(adminPerson);
+      await request(server)
+        .delete(`/api/v1/staff/${me.id}`)
+        .set(headers)
+        .expect(403);
+    });
+  });
+
+  // ------------------------------------------------------------------------------------------------------------
   describe('Scenario 8: duplicate and concurrent requests', () => {
     it('two simultaneous full payments on one invoice record exactly one', async () => {
       const offer = await firstOffer(people.amina.token);

@@ -11,6 +11,7 @@ import * as argon2 from 'argon2';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { assertRoleGrantable } from '../rbac/role-grant.policy';
+import { AuditService } from '../audit/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CreateStaffDto } from './dto/create-staff.dto';
 import { UpdateStaffDto } from './dto/update-staff.dto';
@@ -25,6 +26,7 @@ export class UsersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
+    private readonly auditService: AuditService,
     // Optional so staff management never depends on the card module being present.
     @Optional() private readonly events?: EventEmitter2,
   ) {}
@@ -221,8 +223,39 @@ export class UsersService {
     });
   }
 
-  async remove(id: string, tenantCompanyId?: string) {
+  /**
+   * "Deleting" a staff member removes their access and keeps their history: bookings, incentives, payouts, ledger
+   * entries and the audit trail all point at the staff record, and none of that may disappear. They can no longer
+   * sign in, every open session ends at once and their identification cards stop working. A mistake can be undone
+   * with `reactivate`.
+   */
+  async remove(
+    id: string,
+    tenantCompanyId?: string,
+    actingIdentityId?: string,
+    reason?: string,
+  ) {
     const staff = await this.findOne(id, tenantCompanyId);
+    if (actingIdentityId && staff.identityId === actingIdentityId) {
+      throw new ForbiddenException('You cannot remove your own account.');
+    }
+    const isSuperAdmin = staff.identity.roles.some(
+      (r) => r.role.name === 'SUPER_ADMIN',
+    );
+    if (isSuperAdmin) {
+      const others = await this.prisma.identity.count({
+        where: {
+          id: { not: staff.identityId },
+          status: 'ACTIVE',
+          roles: { some: { role: { name: 'SUPER_ADMIN' } } },
+        },
+      });
+      if (others === 0) {
+        throw new ConflictException(
+          'This is the only active Super Admin. Make someone else a Super Admin before removing this account.',
+        );
+      }
+    }
     await this.prisma.staff.update({
       where: { id },
       data: { isActive: false },
@@ -238,5 +271,41 @@ export class UsersService {
     });
     // Phase 26: the identification cards of someone who has left stop working at once (their history is kept).
     this.events?.emit('staff.deactivated', { staffId: staff.id });
+    await this.auditService.record({
+      identityId: actingIdentityId,
+      action: 'staff.removed',
+      entityType: 'Staff',
+      entityId: staff.id,
+      companyId: staff.companyId,
+      reason,
+      metadata: { employeeCode: staff.employeeCode },
+    });
+    return { removed: true };
+  }
+
+  /** Undoes `remove`: the person can sign in again. Their identification cards stay revoked and are issued anew. */
+  async reactivate(
+    id: string,
+    tenantCompanyId?: string,
+    actingIdentityId?: string,
+  ) {
+    const staff = await this.findOne(id, tenantCompanyId);
+    await this.prisma.staff.update({
+      where: { id },
+      data: { isActive: true },
+    });
+    await this.prisma.identity.update({
+      where: { id: staff.identityId },
+      data: { status: 'ACTIVE' },
+    });
+    await this.auditService.record({
+      identityId: actingIdentityId,
+      action: 'staff.reactivated',
+      entityType: 'Staff',
+      entityId: staff.id,
+      companyId: staff.companyId,
+      metadata: { employeeCode: staff.employeeCode },
+    });
+    return { reactivated: true };
   }
 }

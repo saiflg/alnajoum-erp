@@ -11,6 +11,7 @@ import {
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import type { AuthContext } from '../../common/interfaces/auth-context.interface';
+import { RequireStepUp } from '../../common/security/step-up';
 import { resolveTenantFilter } from '../../common/utils/tenant.util';
 import { IncentivesService } from '../incentives/incentives.service';
 import { PERMISSIONS } from '../rbac/constants/permissions.constant';
@@ -67,9 +68,31 @@ export class UsersController {
     return this.usersService.update(id, dto, resolveTenantFilter(user));
   }
 
+  /** "Deleting" staff removes their access and keeps their history; see UsersService.remove. */
+  @RequireStepUp()
   @Delete(':id')
   @RequirePermissions(PERMISSIONS.STAFF.DELETE)
-  remove(@CurrentUser() user: AuthContext, @Param('id') id: string) {
-    return this.usersService.remove(id, resolveTenantFilter(user));
+  remove(
+    @CurrentUser() user: AuthContext,
+    @Param('id') id: string,
+    @Query('reason') reason?: string,
+  ) {
+    return this.usersService.remove(
+      id,
+      resolveTenantFilter(user),
+      user.sub,
+      reason?.slice(0, 300),
+    );
+  }
+
+  @RequireStepUp()
+  @Post(':id/reactivate')
+  @RequirePermissions(PERMISSIONS.STAFF.DELETE)
+  reactivate(@CurrentUser() user: AuthContext, @Param('id') id: string) {
+    return this.usersService.reactivate(
+      id,
+      resolveTenantFilter(user),
+      user.sub,
+    );
   }
 }

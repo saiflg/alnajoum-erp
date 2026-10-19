@@ -6,16 +6,25 @@ import {
 import { Prisma } from '@prisma/client';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
+import { AuditService } from '../audit/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { UsersService } from './users.service';
 
 describe('UsersService', () => {
   let service: UsersService;
   let prisma: Record<string, Record<string, jest.Mock>>;
+  const audit = { record: jest.fn() };
 
   beforeEach(async () => {
+    audit.record.mockReset();
     prisma = {
-      identity: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn() },
+      identity: {
+        findUnique: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
+        count: jest.fn(),
+      },
+      refreshToken: { updateMany: jest.fn() },
       company: { findUnique: jest.fn() },
       role: { findUnique: jest.fn() },
       rolePermission: { findMany: jest.fn().mockResolvedValue([]) },
@@ -36,6 +45,7 @@ describe('UsersService', () => {
           provide: NotificationsService,
           useValue: { sendStaffTempPassword: jest.fn() },
         },
+        { provide: AuditService, useValue: audit },
       ],
     }).compile();
 
@@ -320,6 +330,101 @@ describe('UsersService', () => {
       });
 
       expect(prisma.identity.create).toHaveBeenCalled();
+    });
+  });
+
+  describe('remove / reactivate', () => {
+    const staffRow = {
+      id: 'staff-1',
+      identityId: 'identity-1',
+      companyId: 'company-a',
+      employeeCode: 'EMP1',
+    };
+    const asRoles = (...names: string[]) =>
+      prisma.staff.findUnique.mockResolvedValue({
+        ...staffRow,
+        identity: { roles: names.map((name) => ({ role: { name } })) },
+      });
+    beforeEach(() => {
+      asRoles('STAFF');
+    });
+
+    it('deactivates the person, ends their sessions and records who did it', async () => {
+      asRoles('STAFF');
+      await expect(
+        service.remove('staff-1', 'company-a', 'actor-1', 'left the company'),
+      ).resolves.toEqual({ removed: true });
+      expect(prisma.staff.update).toHaveBeenCalledWith({
+        where: { id: 'staff-1' },
+        data: { isActive: false },
+      });
+      expect(prisma.identity.update).toHaveBeenCalledWith({
+        where: { id: 'identity-1' },
+        data: { status: 'DEACTIVATED' },
+      });
+      expect(prisma.refreshToken.updateMany).toHaveBeenCalled();
+      expect(audit.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'staff.removed',
+          entityId: 'staff-1',
+          identityId: 'actor-1',
+          reason: 'left the company',
+        }),
+      );
+    });
+
+    it('refuses to let someone remove their own account', async () => {
+      asRoles('STAFF');
+      await expect(
+        service.remove('staff-1', 'company-a', 'identity-1'),
+      ).rejects.toThrow(ForbiddenException);
+      expect(prisma.staff.update).not.toHaveBeenCalled();
+    });
+
+    it('refuses to remove the only active Super Admin', async () => {
+      asRoles('SUPER_ADMIN');
+      prisma.identity.count.mockResolvedValue(0);
+      await expect(
+        service.remove('staff-1', undefined, 'actor-1'),
+      ).rejects.toThrow(ConflictException);
+      expect(prisma.staff.update).not.toHaveBeenCalled();
+    });
+
+    it('allows removing a Super Admin when another one is active', async () => {
+      asRoles('SUPER_ADMIN');
+      prisma.identity.count.mockResolvedValue(1);
+      await expect(
+        service.remove('staff-1', undefined, 'actor-1'),
+      ).resolves.toEqual({ removed: true });
+    });
+
+    it("answers not found for another company's staff member", async () => {
+      prisma.staff.findUnique.mockResolvedValue({
+        ...staffRow,
+        companyId: 'company-b',
+        identity: { roles: [] },
+      });
+      await expect(
+        service.remove('staff-1', 'company-a', 'actor-1'),
+      ).rejects.toThrow(NotFoundException);
+      expect(prisma.staff.update).not.toHaveBeenCalled();
+    });
+
+    it('reactivates the person and records it', async () => {
+      await expect(
+        service.reactivate('staff-1', 'company-a', 'actor-1'),
+      ).resolves.toEqual({ reactivated: true });
+      expect(prisma.staff.update).toHaveBeenCalledWith({
+        where: { id: 'staff-1' },
+        data: { isActive: true },
+      });
+      expect(prisma.identity.update).toHaveBeenCalledWith({
+        where: { id: 'identity-1' },
+        data: { status: 'ACTIVE' },
+      });
+      expect(audit.record).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'staff.reactivated' }),
+      );
     });
   });
 });
