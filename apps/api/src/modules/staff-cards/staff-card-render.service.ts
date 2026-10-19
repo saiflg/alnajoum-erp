@@ -9,6 +9,7 @@ import {
   CARD_ASSET_NAMESPACE,
   STAFF_PHOTO_NAMESPACE,
 } from './staff-card-images';
+import { positionFor } from './staff-card-position';
 import { StaffCardSettingsService } from './staff-card-settings.service';
 import { effectiveStatus } from './staff-card.policy';
 
@@ -321,14 +322,19 @@ export function drawFront(
     });
     y += 15;
   }
-  doc.font('Helvetica').fontSize(6.8);
-  for (const l of [c.department, c.branchName].filter(
-    (v): v is string => !!v,
-  )) {
+  for (const [label, value] of [
+    ['DEPT', c.department],
+    ['BRANCH', c.branchName],
+  ] as const) {
+    if (!value) continue;
     doc.circle(115, y + 3.4, 1.3).fill(s.primaryColor);
-    doc
-      .fillColor('#334155')
-      .text(clipText(doc, l, 64), 120, y, { lineBreak: false });
+    doc.font('Helvetica').fontSize(4.8).fillColor('#64748b');
+    const labelW = doc.widthOfString(label);
+    doc.text(label, 120, y + 1.6, { lineBreak: false });
+    doc.font('Helvetica').fontSize(6.8).fillColor('#334155');
+    doc.text(clipText(doc, value, 64 - labelW - 3), 120 + labelW + 3, y, {
+      lineBreak: false,
+    });
     y += 9.5;
   }
 
@@ -558,6 +564,11 @@ export class StaffCardRenderService {
             photoFilename: true,
             branch: { select: { name: true } },
             company: { select: { name: true, tradingName: true } },
+            identity: {
+              select: {
+                roles: { select: { role: { select: { name: true } } } },
+              },
+            },
           },
         },
       },
@@ -571,7 +582,10 @@ export class StaffCardRenderService {
       expiresAt: card.expiresAt,
       fullName: `${card.staff.firstName} ${card.staff.lastName}`,
       employeeCode: card.staff.employeeCode,
-      jobTitle: card.staff.jobTitle,
+      jobTitle: positionFor(
+        card.staff.jobTitle,
+        card.staff.identity.roles.map((r) => r.role.name),
+      ),
       department: card.staff.department,
       branchName: card.staff.branch?.name ?? null,
       companyName: card.staff.company.tradingName ?? card.staff.company.name,

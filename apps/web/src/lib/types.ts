@@ -59,6 +59,7 @@ export interface StaffMember {
   firstName: string;
   lastName: string;
   jobTitle: string | null;
+  department?: string | null;
   isActive: boolean;
   identity?: { email: string; status: string; roles?: { role: { id: string; name: string } }[] };
   branch?: { id: string; name: string } | null;

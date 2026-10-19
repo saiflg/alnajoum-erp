@@ -8,6 +8,7 @@ import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { ADMIN_NAV } from '@/lib/admin-nav';
 import { apiRequest } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
+import { STAFF_POSITIONS } from '@/lib/staff-positions';
 import { Branch, StaffMember } from '@/lib/types';
 
 const ROLE_LABEL: Record<string, string> = {
@@ -50,6 +51,8 @@ function ManageModal({ member, onClose, onChanged }: { member: StaffMember; onCl
   const [branchId, setBranchId] = useState(member.branchId ?? '');
   const [roleId, setRoleId] = useState('');
   const [reason, setReason] = useState('');
+  const [jobTitle, setJobTitle] = useState(member.jobTitle ?? '');
+  const [department, setDepartment] = useState(member.department ?? '');
   const [tempPassword, setTempPassword] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [refresh, setRefresh] = useState(0);
@@ -87,8 +90,31 @@ function ManageModal({ member, onClose, onChanged }: { member: StaffMember; onCl
         </p>
         <Msg error={error} notice={notice} />
 
-        {can('staff:transfer') && (
+        {can('staff:update') && (
           <section className="space-y-2">
+            <h3 className="text-sm font-semibold text-slate-900">Position and department</h3>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Field label="Position (printed on the ID card)">
+                <input className={input} list="staff-positions" value={jobTitle} maxLength={100} onChange={(e) => setJobTitle(e.target.value)} placeholder="Choose or type: CEO, Director …" />
+                <datalist id="staff-positions">{STAFF_POSITIONS.map((p) => <option key={p} value={p} />)}</datalist>
+              </Field>
+              <Field label="Department">
+                <input className={input} value={department} maxLength={100} onChange={(e) => setDepartment(e.target.value)} placeholder="Sales, Visa desk …" />
+              </Field>
+            </div>
+            <p className="text-[11px] text-slate-400">A title such as CEO or Director gives no access by itself (the role does). Empty position: the card shows the role instead. Cards already printed keep the old wording until they are printed again.</p>
+            <button
+              className={btnGhost}
+              disabled={busy || (jobTitle === (member.jobTitle ?? '') && department === (member.department ?? ''))}
+              onClick={() => act(() => apiRequest(`/staff/${member.id}`, { method: 'PATCH', body: { jobTitle: jobTitle.trim(), department: department.trim() } }), 'Saved.')}
+            >
+              Save position
+            </button>
+          </section>
+        )}
+
+        {can('staff:transfer') && (
+          <section className="space-y-2 border-t border-slate-100 pt-4">
             <h3 className="text-sm font-semibold text-slate-900">Move to another branch</h3>
             <select className={input} value={branchId} onChange={(e) => setBranchId(e.target.value)}>
               <option value="">— no branch —</option>
@@ -181,7 +207,7 @@ function StaffList() {
   const { act, error: actError, notice, busy } = useAction(() => setRefresh((n) => n + 1));
   const can = (p: string) => !!user?.permissions.includes(p);
   const canRemove = can('staff:delete');
-  const canManage = can('staff:transfer') || can('staff:change_role') || can('staff:reset_password');
+  const canManage = can('staff:update') || can('staff:transfer') || can('staff:change_role') || can('staff:reset_password');
 
   useEffect(() => {
     apiRequest<StaffMember[]>('/staff')

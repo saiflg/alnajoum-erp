@@ -150,10 +150,11 @@ export function CardFront({ c }: { c: CardPreviewData }) {
           <div style={{ marginTop: 3, alignSelf: 'flex-start', maxWidth: 120, height: 10, padding: '0 6px', borderRadius: 5, background: d.accentColor, color: onA, fontSize: 6.2, fontWeight: 700, lineHeight: '10px', ...line1 }}>{c.jobTitle}</div>
         )}
         <div style={{ marginTop: 5 }}>
-          {[c.department, c.branchName].filter(Boolean).map((l) => (
-            <div key={l} style={{ position: 'relative', height: 9.5, paddingLeft: 7, fontSize: 6.8, lineHeight: '9.5px', color: '#334155', maxWidth: 71, ...line1 }}>
+          {([['DEPT', c.department], ['BRANCH', c.branchName]] as const).filter(([, v]) => !!v).map(([label, value]) => (
+            <div key={label} style={{ position: 'relative', height: 9.5, paddingLeft: 7, lineHeight: '9.5px', maxWidth: 71, display: 'flex', gap: 3, alignItems: 'baseline', ...line1 }}>
               <span style={{ position: 'absolute', left: 0.4, top: 3.4, width: 2.6, height: 2.6, borderRadius: '50%', background: d.primaryColor }} />
-              {l}
+              <span style={{ fontSize: 4.8, color: '#64748b', flexShrink: 0 }}>{label}</span>
+              <span style={{ fontSize: 6.8, color: '#334155', ...line1 }}>{value}</span>
             </div>
           ))}
         </div>

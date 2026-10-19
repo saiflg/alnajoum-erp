@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { FormEvent, useEffect, useState } from 'react';
 import { AppShell } from '@/components/AppShell';
+import { STAFF_POSITIONS } from '@/lib/staff-positions';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { ADMIN_NAV } from '@/lib/admin-nav';
 import { apiRequest, ApiError } from '@/lib/api';
@@ -25,6 +26,8 @@ export default function NewStaffPage() {
   const [branchId, setBranchId] = useState('');
   const [employeeCode, setEmployeeCode] = useState('');
   const [roleId, setRoleId] = useState('');
+  const [jobTitle, setJobTitle] = useState('');
+  const [department, setDepartment] = useState('');
 
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -58,6 +61,8 @@ export default function NewStaffPage() {
           branchId: branchId || undefined,
           employeeCode,
           roleId,
+          jobTitle: jobTitle.trim() || undefined,
+          department: department.trim() || undefined,
         },
       });
       setResult(created);
@@ -195,6 +200,32 @@ export default function NewStaffPage() {
                 </option>
               ))}
             </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700">Position (printed on the ID card)</label>
+            <input
+              list="staff-positions"
+              value={jobTitle}
+              maxLength={100}
+              onChange={(e) => setJobTitle(e.target.value)}
+              placeholder="Choose from the list or type your own"
+              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
+            />
+            <datalist id="staff-positions">
+              {STAFF_POSITIONS.map((p) => <option key={p} value={p} />)}
+            </datalist>
+            <p className="mt-1 text-[11px] text-slate-400">A title such as CEO or Director. It is printed on the ID card and gives no access by itself: access comes from the Role above. If you leave this empty, the card shows the role instead.</p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700">Department (optional)</label>
+            <input
+              value={department}
+              maxLength={100}
+              onChange={(e) => setDepartment(e.target.value)}
+              placeholder="For example: Sales, Visa desk, Finance"
+              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
+            />
           </div>
 
           {error && <p className="text-sm text-red-600">{error}</p>}
