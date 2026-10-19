@@ -19,4 +19,7 @@ export interface AuthContext {
   // existed (falls out of existence in 15 minutes, at the access token's
   // normal expiry).
   sessionId: string | null;
+  // True while an administrator-issued temporary password has not been replaced yet: JwtAuthGuard then refuses
+  // everything except changing the password, reading one's own profile and signing out.
+  mustChangePassword?: boolean;
 }

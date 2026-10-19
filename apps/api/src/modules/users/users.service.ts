@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
@@ -176,7 +177,16 @@ export class UsersService {
       // Payout account numbers are never part of a staff list/detail (only the owner's own payout view and
       // Finance's verification screen show them).
       omit: { bankAccountNumber: true },
-      include: { identity: { select: { email: true, status: true } } },
+      include: {
+        identity: {
+          select: {
+            email: true,
+            status: true,
+            roles: { select: { role: { select: { id: true, name: true } } } },
+          },
+        },
+        branch: { select: { id: true, name: true } },
+      },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -210,7 +220,10 @@ export class UsersService {
   }
 
   async update(id: string, dto: UpdateStaffDto, tenantCompanyId?: string) {
-    await this.findOne(id, tenantCompanyId);
+    const current = await this.findOne(id, tenantCompanyId);
+    // A branch must belong to the staff member's own company (it used to be written unchecked).
+    if (dto.branchId)
+      await this.assertBranchInCompany(dto.branchId, current.companyId);
 
     const { isActive, ...rest } = dto;
 
@@ -307,5 +320,243 @@ export class UsersService {
       metadata: { employeeCode: staff.employeeCode },
     });
     return { reactivated: true };
+  }
+
+  /**
+   * Gives a staff member a new temporary password when they have forgotten theirs. A password is stored only as a
+   * one-way hash, so the old one can never be shown; this issues a fresh one instead. It is returned once to the
+   * administrator (to pass on in person) and is not sent by email or written to any log. The person must replace it
+   * before doing anything else, every open session ends, and a lock from too many wrong attempts is cleared.
+   *
+   * Guards: not your own account (use Change password), never someone holding a stronger role than yours (otherwise
+   * a branch manager could reset an administrator's password and take the account over), and only inside your company.
+   */
+  async resetPassword(
+    id: string,
+    tenantCompanyId: string | undefined,
+    actingUser: { sub: string; roles: string[] },
+  ) {
+    const staff = await this.findOne(id, tenantCompanyId);
+    if (staff.identityId === actingUser.sub) {
+      throw new ForbiddenException(
+        'Use Change password on your own account instead.',
+      );
+    }
+    for (const r of staff.identity.roles) {
+      await assertRoleGrantable(this.prisma, actingUser, r.role);
+    }
+    const temporaryPassword = generateTemporaryPassword();
+    await this.prisma.identity.update({
+      where: { id: staff.identityId },
+      data: {
+        passwordHash: await argon2.hash(temporaryPassword),
+        mustChangePassword: true,
+        failedLoginCount: 0,
+        lockedUntil: null,
+      },
+    });
+    await this.prisma.refreshToken.updateMany({
+      where: { identityId: staff.identityId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    await this.auditService.record({
+      identityId: actingUser.sub,
+      action: 'staff.password_reset',
+      entityType: 'Staff',
+      entityId: staff.id,
+      companyId: staff.companyId,
+      metadata: { employeeCode: staff.employeeCode },
+    });
+    return {
+      temporaryPassword,
+      email: staff.identity.email,
+      mustChangePassword: true,
+    };
+  }
+
+  private async assertBranchInCompany(branchId: string, companyId: string) {
+    const branch = await this.prisma.branch.findUnique({
+      where: { id: branchId },
+    });
+    if (!branch || branch.companyId !== companyId) {
+      throw new NotFoundException('Branch not found');
+    }
+    return branch;
+  }
+
+  /** The actor may change this person only if none of their roles is stronger than the actor's own. */
+  private async assertMayManage(
+    staff: {
+      identityId: string;
+      identity: { roles: { role: { id: string; name: string } }[] };
+    },
+    actingUser: { sub: string; roles: string[] },
+  ) {
+    if (staff.identityId === actingUser.sub) {
+      throw new ForbiddenException(
+        'You cannot change your own branch or role. Ask another administrator.',
+      );
+    }
+    for (const r of staff.identity.roles) {
+      await assertRoleGrantable(this.prisma, actingUser, r.role);
+    }
+  }
+
+  /**
+   * Moves a staff member to another branch of the same company (or to no branch). Anything the person did before stays
+   * on the branch it happened under; only what they do from now on belongs to the new one. The move is recorded with
+   * who made it and why. A printed ID card keeps the old branch name until it is printed again.
+   */
+  async transfer(
+    id: string,
+    dto: { branchId?: string | null; reason?: string },
+    tenantCompanyId: string | undefined,
+    actingUser: { sub: string; roles: string[] },
+  ) {
+    const staff = await this.findOne(id, tenantCompanyId);
+    await this.assertMayManage(staff, actingUser);
+    const toBranchId = dto.branchId ?? null;
+    if (toBranchId === (staff.branchId ?? null)) {
+      throw new BadRequestException(
+        toBranchId
+          ? 'This person is already in that branch.'
+          : 'This person is not in any branch.',
+      );
+    }
+    const target = toBranchId
+      ? await this.assertBranchInCompany(toBranchId, staff.companyId)
+      : null;
+    await this.prisma.$transaction([
+      this.prisma.staff.update({
+        where: { id },
+        data: { branchId: toBranchId },
+      }),
+      // A role that was limited to the old branch moves with the person.
+      this.prisma.identityRole.updateMany({
+        where: { identityId: staff.identityId, branchId: { not: null } },
+        data: { branchId: toBranchId },
+      }),
+    ]);
+    await this.auditService.record({
+      identityId: actingUser.sub,
+      action: 'staff.transferred',
+      entityType: 'Staff',
+      entityId: staff.id,
+      companyId: staff.companyId,
+      branchId: toBranchId ?? undefined,
+      reason: dto.reason,
+      metadata: {
+        employeeCode: staff.employeeCode,
+        fromBranchId: staff.branchId,
+        fromBranch: staff.branch?.name ?? null,
+        toBranchId,
+        toBranch: target?.name ?? null,
+      },
+    });
+    return { transferred: true, branchId: toBranchId };
+  }
+
+  /**
+   * Promotion or demotion: replaces the person's role with another. The same ceiling applies as when roles are first
+   * granted: nobody can give a role stronger than their own, and nobody can change someone who already holds a
+   * stronger one. Takes effect on the person's next request. The change is recorded with who made it and why.
+   */
+  async changeRole(
+    id: string,
+    dto: { roleId: string; reason?: string },
+    tenantCompanyId: string | undefined,
+    actingUser: { sub: string; roles: string[] },
+  ) {
+    const staff = await this.findOne(id, tenantCompanyId);
+    await this.assertMayManage(staff, actingUser);
+    const newRole = await this.prisma.role.findUnique({
+      where: { id: dto.roleId },
+    });
+    if (!newRole) throw new NotFoundException('Role not found');
+    if (newRole.name === 'CUSTOMER') {
+      throw new BadRequestException(
+        'A staff member cannot hold the Customer role.',
+      );
+    }
+    await assertRoleGrantable(this.prisma, actingUser, newRole);
+
+    const before = staff.identity.roles.map((r) => r.role.name);
+    if (before.length === 1 && before[0] === newRole.name) {
+      throw new BadRequestException('This person already has that role.');
+    }
+    if (before.includes('SUPER_ADMIN') && newRole.name !== 'SUPER_ADMIN') {
+      const others = await this.prisma.identity.count({
+        where: {
+          id: { not: staff.identityId },
+          status: 'ACTIVE',
+          roles: { some: { role: { name: 'SUPER_ADMIN' } } },
+        },
+      });
+      if (others === 0) {
+        throw new ConflictException(
+          'This is the only active Super Admin. Make someone else a Super Admin before changing this role.',
+        );
+      }
+    }
+    await this.prisma.$transaction([
+      this.prisma.identityRole.deleteMany({
+        where: { identityId: staff.identityId },
+      }),
+      this.prisma.identityRole.create({
+        data: { identityId: staff.identityId, roleId: newRole.id },
+      }),
+    ]);
+    await this.auditService.record({
+      identityId: actingUser.sub,
+      action: 'staff.role_changed',
+      entityType: 'Staff',
+      entityId: staff.id,
+      companyId: staff.companyId,
+      reason: dto.reason,
+      metadata: {
+        employeeCode: staff.employeeCode,
+        from: before,
+        to: newRole.name,
+      },
+    });
+    return { changed: true, role: newRole.name };
+  }
+
+  /** What has happened to this person's employment record: moves, role changes, removals, password resets. */
+  async history(id: string, tenantCompanyId?: string) {
+    await this.findOne(id, tenantCompanyId);
+    const rows = await this.prisma.auditLog.findMany({
+      where: {
+        entityType: 'Staff',
+        entityId: id,
+        action: {
+          in: [
+            'staff.transferred',
+            'staff.role_changed',
+            'staff.removed',
+            'staff.reactivated',
+            'staff.password_reset',
+          ],
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+      select: {
+        id: true,
+        action: true,
+        reason: true,
+        metadata: true,
+        createdAt: true,
+        identity: { select: { email: true } },
+      },
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      action: r.action,
+      reason: r.reason,
+      details: r.metadata,
+      at: r.createdAt,
+      by: r.identity?.email ?? null,
+    }));
   }
 }

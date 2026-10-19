@@ -585,7 +585,7 @@ export class AuthService {
     const passwordHash = await argon2.hash(dto.newPassword);
     await this.prisma.identity.update({
       where: { id: identityId },
-      data: { passwordHash },
+      data: { passwordHash, mustChangePassword: false },
     });
 
     await this.prisma.refreshToken.updateMany({
@@ -661,7 +661,7 @@ export class AuthService {
     await this.prisma.$transaction([
       this.prisma.identity.update({
         where: { id: stored.identityId },
-        data: { passwordHash },
+        data: { passwordHash, mustChangePassword: false },
       }),
       this.prisma.passwordResetToken.update({
         where: { id: stored.id },
@@ -705,6 +705,7 @@ export class AuthService {
       // Phase 11 spec #15 — the account page needs this to know whether to
       // offer "Enable 2FA" or "Disable 2FA" without a separate round trip.
       twoFactorEnabled: identity.twoFactorEnabled,
+      mustChangePassword: identity.mustChangePassword,
       roles,
       permissions,
       dashboardPath: this.resolveDashboardPath(roles),

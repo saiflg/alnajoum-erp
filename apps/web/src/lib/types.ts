@@ -8,6 +8,8 @@ export interface CurrentUser {
   status: string;
   roles: string[];
   permissions: string[];
+  /** True while a temporary password given by an administrator has not been replaced. */
+  mustChangePassword?: boolean;
   dashboardPath: string;
   profile: Record<string, unknown> | null;
   /** Real tenant context — null for customers, who aren't scoped to a company. */
@@ -58,7 +60,8 @@ export interface StaffMember {
   lastName: string;
   jobTitle: string | null;
   isActive: boolean;
-  identity?: { email: string; status: string };
+  identity?: { email: string; status: string; roles?: { role: { id: string; name: string } }[] };
+  branch?: { id: string; name: string } | null;
 }
 
 export type DocumentType =

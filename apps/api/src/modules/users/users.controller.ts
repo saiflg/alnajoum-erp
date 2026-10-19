@@ -16,6 +16,7 @@ import { resolveTenantFilter } from '../../common/utils/tenant.util';
 import { IncentivesService } from '../incentives/incentives.service';
 import { PERMISSIONS } from '../rbac/constants/permissions.constant';
 import { CreateStaffDto } from './dto/create-staff.dto';
+import { ChangeStaffRoleDto, TransferStaffDto } from './dto/staff-moves.dto';
 import { UpdateStaffDto } from './dto/update-staff.dto';
 import { UsersService } from './users.service';
 
@@ -83,6 +84,53 @@ export class UsersController {
       user.sub,
       reason?.slice(0, 300),
     );
+  }
+
+  /** Issues a new temporary password; shown once to the administrator. See UsersService.resetPassword. */
+  @RequireStepUp()
+  @Post(':id/reset-password')
+  @RequirePermissions(PERMISSIONS.STAFF.RESET_PASSWORD)
+  resetPassword(@CurrentUser() user: AuthContext, @Param('id') id: string) {
+    return this.usersService.resetPassword(id, resolveTenantFilter(user), {
+      sub: user.sub,
+      roles: user.roles,
+    });
+  }
+
+  /** Moves the person to another branch of their company. */
+  @RequireStepUp()
+  @Post(':id/transfer')
+  @RequirePermissions(PERMISSIONS.STAFF.TRANSFER)
+  transfer(
+    @CurrentUser() user: AuthContext,
+    @Param('id') id: string,
+    @Body() dto: TransferStaffDto,
+  ) {
+    return this.usersService.transfer(id, dto, resolveTenantFilter(user), {
+      sub: user.sub,
+      roles: user.roles,
+    });
+  }
+
+  /** Promotes or demotes: replaces the person's role. */
+  @RequireStepUp()
+  @Post(':id/role')
+  @RequirePermissions(PERMISSIONS.STAFF.CHANGE_ROLE)
+  changeRole(
+    @CurrentUser() user: AuthContext,
+    @Param('id') id: string,
+    @Body() dto: ChangeStaffRoleDto,
+  ) {
+    return this.usersService.changeRole(id, dto, resolveTenantFilter(user), {
+      sub: user.sub,
+      roles: user.roles,
+    });
+  }
+
+  @Get(':id/history')
+  @RequirePermissions(PERMISSIONS.STAFF.READ)
+  history(@CurrentUser() user: AuthContext, @Param('id') id: string) {
+    return this.usersService.history(id, resolveTenantFilter(user));
   }
 
   @RequireStepUp()

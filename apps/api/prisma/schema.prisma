@@ -37,6 +37,9 @@ model Identity {
   emailVerifiedAt DateTime?
   phoneVerifiedAt DateTime?
 
+  // Set when an administrator issues a temporary password: the person must choose their own before doing anything else.
+  mustChangePassword Boolean @default(false)
+
   twoFactorEnabled  Boolean @default(false)
   // Stored encrypted (FieldCipher) since Phase 22; legacy plaintext values are migrated at startup.
   twoFactorSecret   String?

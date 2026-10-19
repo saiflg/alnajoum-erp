@@ -98,7 +98,7 @@ export class JwtAccessStrategy extends PassportStrategy(Strategy, 'jwt') {
       this.resolveCompanyId(payload.sub, payload.type),
       this.prisma.identity.findUnique({
         where: { id: payload.sub },
-        select: { status: true },
+        select: { status: true, mustChangePassword: true },
       }),
     ]);
     // A deactivated or suspended account loses access on its very next request, not when its
@@ -121,6 +121,7 @@ export class JwtAccessStrategy extends PassportStrategy(Strategy, 'jwt') {
       permissions,
       companyId,
       sessionId: payload.sessionId ?? null,
+      mustChangePassword: identity.mustChangePassword,
     };
   }
 }

@@ -22,12 +22,17 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
       router.replace('/login');
       return;
     }
+    if (user.mustChangePassword) {
+      // Signed in with a temporary password: the only way forward is to choose a new one.
+      router.replace('/change-password');
+      return;
+    }
     if (!isAllowed) {
       router.replace(user.dashboardPath);
     }
   }, [loading, user, isAllowed, router]);
 
-  if (loading || !user || !isAllowed) {
+  if (loading || !user || !isAllowed || user.mustChangePassword) {
     return (
       <div className="flex min-h-screen items-center justify-center text-sm text-slate-500">
         Loading…

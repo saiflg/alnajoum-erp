@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   NotFoundException,
@@ -425,6 +426,252 @@ describe('UsersService', () => {
       expect(audit.record).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'staff.reactivated' }),
       );
+    });
+  });
+
+  describe('password reset, transfer and role change', () => {
+    const base = {
+      id: 'staff-1',
+      identityId: 'identity-1',
+      companyId: 'company-a',
+      branchId: 'branch-1',
+      employeeCode: 'EMP1',
+      branch: { name: 'Kano' },
+    };
+    const withRoles = (...names: string[]) =>
+      prisma.staff.findUnique.mockResolvedValue({
+        ...base,
+        identity: {
+          email: 'p@example.com',
+          roles: names.map((name) => ({ role: { id: `r-${name}`, name } })),
+        },
+      });
+    const admin = { sub: 'actor-1', roles: ['COMPANY_ADMIN'] };
+    const superAdmin = { sub: 'actor-1', roles: ['SUPER_ADMIN'] };
+
+    beforeEach(() => {
+      (prisma as Record<string, unknown>).$transaction = jest
+        .fn()
+        .mockImplementation((ops: Promise<unknown>[]) => Promise.all(ops));
+      prisma.identityRole = {
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+        deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
+        create: jest.fn().mockResolvedValue({}),
+      };
+      prisma.refreshToken = { updateMany: jest.fn() };
+      withRoles('STAFF');
+    });
+
+    describe('resetPassword', () => {
+      it('issues a new temporary password, forces a change, clears any lock and ends sessions', async () => {
+        const out = await service.resetPassword('staff-1', 'company-a', admin);
+        expect(out.temporaryPassword).toMatch(/^Tmp[0-9a-f]{12}!$/);
+        const data = prisma.identity.update.mock.calls[0][0].data;
+        expect(data).toMatchObject({
+          mustChangePassword: true,
+          failedLoginCount: 0,
+          lockedUntil: null,
+        });
+        expect(data.passwordHash).not.toContain(out.temporaryPassword);
+        expect(prisma.refreshToken.updateMany).toHaveBeenCalled();
+        // the new password is returned once and never written to the audit trail
+        expect(JSON.stringify(audit.record.mock.calls)).not.toContain(
+          out.temporaryPassword,
+        );
+        expect(audit.record).toHaveBeenCalledWith(
+          expect.objectContaining({ action: 'staff.password_reset' }),
+        );
+      });
+
+      it('refuses to reset your own password here', async () => {
+        await expect(
+          service.resetPassword('staff-1', 'company-a', {
+            sub: 'identity-1',
+            roles: ['COMPANY_ADMIN'],
+          }),
+        ).rejects.toThrow(ForbiddenException);
+        expect(prisma.identity.update).not.toHaveBeenCalled();
+      });
+
+      it('refuses to reset a Super Admin when you are not one', async () => {
+        withRoles('SUPER_ADMIN');
+        await expect(
+          service.resetPassword('staff-1', 'company-a', admin),
+        ).rejects.toThrow(ForbiddenException);
+        expect(prisma.identity.update).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('transfer', () => {
+      it('moves the person to a branch of their own company and records it', async () => {
+        prisma.branch.findUnique.mockResolvedValue({
+          id: 'branch-2',
+          companyId: 'company-a',
+          name: 'Lagos',
+        });
+        await expect(
+          service.transfer(
+            'staff-1',
+            { branchId: 'branch-2', reason: 'opening Lagos' },
+            'company-a',
+            admin,
+          ),
+        ).resolves.toMatchObject({ transferred: true, branchId: 'branch-2' });
+        expect(prisma.staff.update).toHaveBeenCalledWith({
+          where: { id: 'staff-1' },
+          data: { branchId: 'branch-2' },
+        });
+        expect(audit.record).toHaveBeenCalledWith(
+          expect.objectContaining({
+            action: 'staff.transferred',
+            reason: 'opening Lagos',
+            metadata: expect.objectContaining({
+              fromBranch: 'Kano',
+              toBranch: 'Lagos',
+            }),
+          }),
+        );
+      });
+
+      it('refuses a branch that belongs to another company', async () => {
+        prisma.branch.findUnique.mockResolvedValue({
+          id: 'branch-x',
+          companyId: 'company-b',
+          name: 'Elsewhere',
+        });
+        await expect(
+          service.transfer(
+            'staff-1',
+            { branchId: 'branch-x' },
+            'company-a',
+            admin,
+          ),
+        ).rejects.toThrow(NotFoundException);
+        expect(prisma.staff.update).not.toHaveBeenCalled();
+      });
+
+      it('refuses a move to the branch they are already in, and a self-transfer', async () => {
+        await expect(
+          service.transfer(
+            'staff-1',
+            { branchId: 'branch-1' },
+            'company-a',
+            admin,
+          ),
+        ).rejects.toThrow(BadRequestException);
+        await expect(
+          service.transfer('staff-1', { branchId: null }, 'company-a', {
+            sub: 'identity-1',
+            roles: ['COMPANY_ADMIN'],
+          }),
+        ).rejects.toThrow(ForbiddenException);
+      });
+    });
+
+    describe('changeRole', () => {
+      it('promotes: replaces the role, in one step, and records from and to', async () => {
+        prisma.role.findUnique.mockResolvedValue({
+          id: 'r-BM',
+          name: 'BRANCH_MANAGER',
+        });
+        await expect(
+          service.changeRole(
+            'staff-1',
+            { roleId: 'r-BM', reason: 'promoted' },
+            'company-a',
+            admin,
+          ),
+        ).resolves.toEqual({ changed: true, role: 'BRANCH_MANAGER' });
+        expect(prisma.identityRole.deleteMany).toHaveBeenCalledWith({
+          where: { identityId: 'identity-1' },
+        });
+        expect(prisma.identityRole.create).toHaveBeenCalledWith({
+          data: { identityId: 'identity-1', roleId: 'r-BM' },
+        });
+        expect(audit.record).toHaveBeenCalledWith(
+          expect.objectContaining({
+            action: 'staff.role_changed',
+            reason: 'promoted',
+            metadata: expect.objectContaining({
+              from: ['STAFF'],
+              to: 'BRANCH_MANAGER',
+            }),
+          }),
+        );
+      });
+
+      it('will not hand out Super Admin unless you are one', async () => {
+        prisma.role.findUnique.mockResolvedValue({
+          id: 'r-SA',
+          name: 'SUPER_ADMIN',
+        });
+        await expect(
+          service.changeRole('staff-1', { roleId: 'r-SA' }, 'company-a', admin),
+        ).rejects.toThrow(ForbiddenException);
+        expect(prisma.identityRole.deleteMany).not.toHaveBeenCalled();
+      });
+
+      it('will not let you change someone who already holds a stronger role', async () => {
+        withRoles('SUPER_ADMIN');
+        prisma.role.findUnique.mockResolvedValue({
+          id: 'r-STAFF',
+          name: 'STAFF',
+        });
+        await expect(
+          service.changeRole(
+            'staff-1',
+            { roleId: 'r-STAFF' },
+            'company-a',
+            admin,
+          ),
+        ).rejects.toThrow(ForbiddenException);
+      });
+
+      it('will not demote the only active Super Admin', async () => {
+        withRoles('SUPER_ADMIN');
+        prisma.role.findUnique.mockResolvedValue({
+          id: 'r-STAFF',
+          name: 'STAFF',
+        });
+        prisma.identity.count.mockResolvedValue(0);
+        await expect(
+          service.changeRole(
+            'staff-1',
+            { roleId: 'r-STAFF' },
+            undefined,
+            superAdmin,
+          ),
+        ).rejects.toThrow(ConflictException);
+        expect(prisma.identityRole.deleteMany).not.toHaveBeenCalled();
+      });
+
+      it('refuses the Customer role, a no-op, and changing your own role', async () => {
+        prisma.role.findUnique.mockResolvedValue({
+          id: 'r-C',
+          name: 'CUSTOMER',
+        });
+        await expect(
+          service.changeRole('staff-1', { roleId: 'r-C' }, 'company-a', admin),
+        ).rejects.toThrow(BadRequestException);
+        prisma.role.findUnique.mockResolvedValue({
+          id: 'r-STAFF',
+          name: 'STAFF',
+        });
+        await expect(
+          service.changeRole(
+            'staff-1',
+            { roleId: 'r-STAFF' },
+            'company-a',
+            admin,
+          ),
+        ).rejects.toThrow(BadRequestException);
+        await expect(
+          service.changeRole('staff-1', { roleId: 'r-STAFF' }, 'company-a', {
+            sub: 'identity-1',
+            roles: ['COMPANY_ADMIN'],
+          }),
+        ).rejects.toThrow(ForbiddenException);
+      });
     });
   });
 });

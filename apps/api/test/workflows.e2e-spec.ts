@@ -904,6 +904,265 @@ describe('Cross-module workflows (e2e)', () => {
   });
 
   // ------------------------------------------------------------------------------------------------------------
+  describe('Forgotten password, branch transfer, promotion and demotion', () => {
+    let forgetful: Person;
+    let mover: Person;
+    let coAdmin: Person;
+    let branchA: string;
+    let branchB: string;
+    const adminPerson = (): Person => ({
+      token: admin,
+      email: ADMIN_EMAIL,
+      password: ADMIN_PASSWORD,
+    });
+    const asAdmin = async () => stepUp(adminPerson());
+
+    beforeAll(async () => {
+      forgetful = await createStaff('forgetful', 'STAFF');
+      mover = await createStaff('mover', 'STAFF');
+      coAdmin = await createStaff('coadmin', 'COMPANY_ADMIN');
+      for (const [key, code] of [
+        ['A', 'BA'],
+        ['B', 'BB'],
+      ] as const) {
+        const res = await request(server)
+          .post('/api/v1/branches')
+          .set(auth(admin))
+          .send({
+            name: `${RUN} Branch ${key}`,
+            code: `${code}-${RUN}`.toUpperCase().slice(0, 20),
+            companyId,
+          });
+        expect([200, 201]).toContain(res.status);
+        if (key === 'A') branchA = res.body.data.id as string;
+        else branchB = res.body.data.id as string;
+      }
+    }, 60_000);
+
+    describe('administrator issues a new temporary password', () => {
+      let temp: string;
+
+      it('needs step-up and the right permission', async () => {
+        await request(server)
+          .post(`/api/v1/staff/${forgetful.staffId}/reset-password`)
+          .set(auth(admin))
+          .expect(403);
+        const mgr = await stepUp(people.manager);
+        await request(server)
+          .post(`/api/v1/staff/${forgetful.staffId}/reset-password`)
+          .set(mgr)
+          .expect(403);
+      });
+
+      it('returns the new password once, and the old one stops working', async () => {
+        const res = await request(server)
+          .post(`/api/v1/staff/${forgetful.staffId}/reset-password`)
+          .set(await asAdmin())
+          .expect(201);
+        temp = res.body.data.temporaryPassword as string;
+        expect(temp).toMatch(/^Tmp/);
+        await request(server)
+          .post('/api/v1/auth/login')
+          .send({ email: forgetful.email, password: forgetful.password })
+          .expect(401);
+        const audit = await prisma.auditLog.findFirst({
+          where: {
+            action: 'staff.password_reset',
+            entityId: forgetful.staffId,
+          },
+        });
+        expect(audit).toBeTruthy();
+        expect(JSON.stringify(audit?.metadata)).not.toContain(temp);
+      });
+
+      it('with the temporary password the person can only choose a new one', async () => {
+        const token = await login(forgetful.email, temp);
+        const blocked = await request(server)
+          .get('/api/v1/staff')
+          .set(auth(token));
+        expect(blocked.status).toBe(403);
+        expect(JSON.stringify(blocked.body)).toMatch(
+          /PASSWORD_CHANGE_REQUIRED/,
+        );
+        const me = await request(server)
+          .get('/api/v1/auth/me')
+          .set(auth(token))
+          .expect(200);
+        expect(me.body.data.mustChangePassword).toBe(true);
+
+        await request(server)
+          .patch('/api/v1/auth/change-password')
+          .set(auth(token))
+          .send({ currentPassword: temp, newPassword: 'Brand-New-Pass9' })
+          .expect(200);
+      });
+
+      it('after choosing their own, they sign in normally and nothing is blocked', async () => {
+        const token = await login(forgetful.email, 'Brand-New-Pass9');
+        const me = await request(server)
+          .get('/api/v1/auth/me')
+          .set(auth(token))
+          .expect(200);
+        expect(me.body.data.mustChangePassword).toBe(false);
+        await request(server)
+          .get('/api/v1/auth/me')
+          .set(auth(token))
+          .expect(200);
+      });
+
+      it('a company administrator cannot reset a Super Admin or their own password this way', async () => {
+        const coHeaders = await stepUp(coAdmin);
+        const superAdminStaff = await prisma.staff.findFirst({
+          where: { identity: { email: ADMIN_EMAIL } },
+        });
+        if (superAdminStaff) {
+          await request(server)
+            .post(`/api/v1/staff/${superAdminStaff.id}/reset-password`)
+            .set(coHeaders)
+            .expect(403);
+        }
+        await request(server)
+          .post(`/api/v1/staff/${coAdmin.staffId}/reset-password`)
+          .set(coHeaders)
+          .expect(403);
+      });
+    });
+
+    describe('transfer between branches', () => {
+      it('moves the person to a branch of their company and records it', async () => {
+        await request(server)
+          .post(`/api/v1/staff/${mover.staffId}/transfer`)
+          .set(await asAdmin())
+          .send({ branchId: branchA, reason: 'new posting' })
+          .expect(201);
+        let row = await prisma.staff.findUnique({
+          where: { id: mover.staffId },
+        });
+        expect(row?.branchId).toBe(branchA);
+
+        await request(server)
+          .post(`/api/v1/staff/${mover.staffId}/transfer`)
+          .set(await asAdmin())
+          .send({ branchId: branchB })
+          .expect(201);
+        row = await prisma.staff.findUnique({ where: { id: mover.staffId } });
+        expect(row?.branchId).toBe(branchB);
+
+        const history = await request(server)
+          .get(`/api/v1/staff/${mover.staffId}/history`)
+          .set(auth(admin))
+          .expect(200);
+        const moves = (history.body.data as Array<{ action: string }>).filter(
+          (h) => h.action === 'staff.transferred',
+        );
+        expect(moves).toHaveLength(2);
+      });
+
+      it('refuses the branch they are already in, an unknown branch, and a plain branch manager', async () => {
+        await request(server)
+          .post(`/api/v1/staff/${mover.staffId}/transfer`)
+          .set(await asAdmin())
+          .send({ branchId: branchB })
+          .expect(400);
+        await request(server)
+          .post(`/api/v1/staff/${mover.staffId}/transfer`)
+          .set(await asAdmin())
+          .send({ branchId: 'does-not-exist' })
+          .expect(404);
+        await request(server)
+          .post(`/api/v1/staff/${mover.staffId}/transfer`)
+          .set(await stepUp(people.manager))
+          .send({ branchId: branchA })
+          .expect(403);
+      });
+
+      it('can take a person out of every branch', async () => {
+        await request(server)
+          .post(`/api/v1/staff/${mover.staffId}/transfer`)
+          .set(await asAdmin())
+          .send({})
+          .expect(201);
+        const row = await prisma.staff.findUnique({
+          where: { id: mover.staffId },
+        });
+        expect(row?.branchId).toBeNull();
+      });
+    });
+
+    describe('promotion and demotion', () => {
+      it('promotes staff to branch manager, then back again, with the effective role following', async () => {
+        await request(server)
+          .post(`/api/v1/staff/${mover.staffId}/role`)
+          .set(await asAdmin())
+          .send({ roleId: roleIds['BRANCH_MANAGER'], reason: 'promoted' })
+          .expect(201);
+        let token = await login(mover.email, mover.password);
+        let me = await request(server)
+          .get('/api/v1/auth/me')
+          .set(auth(token))
+          .expect(200);
+        expect(me.body.data.roles).toEqual(['BRANCH_MANAGER']);
+
+        await request(server)
+          .post(`/api/v1/staff/${mover.staffId}/role`)
+          .set(await asAdmin())
+          .send({ roleId: roleIds['STAFF'], reason: 'moved back' })
+          .expect(201);
+        token = await login(mover.email, mover.password);
+        me = await request(server)
+          .get('/api/v1/auth/me')
+          .set(auth(token))
+          .expect(200);
+        expect(me.body.data.roles).toEqual(['STAFF']);
+
+        const history = await request(server)
+          .get(`/api/v1/staff/${mover.staffId}/history`)
+          .set(auth(admin))
+          .expect(200);
+        expect(
+          (history.body.data as Array<{ action: string }>).filter(
+            (h) => h.action === 'staff.role_changed',
+          ),
+        ).toHaveLength(2);
+      });
+
+      it('a company administrator cannot grant Super Admin, and cannot change a Super Admin', async () => {
+        const coHeaders = await stepUp(coAdmin);
+        await request(server)
+          .post(`/api/v1/staff/${mover.staffId}/role`)
+          .set(coHeaders)
+          .send({ roleId: roleIds['SUPER_ADMIN'] })
+          .expect(403);
+        const superAdminStaff = await prisma.staff.findFirst({
+          where: { identity: { email: ADMIN_EMAIL } },
+        });
+        if (superAdminStaff) {
+          await request(server)
+            .post(`/api/v1/staff/${superAdminStaff.id}/role`)
+            .set(coHeaders)
+            .send({ roleId: roleIds['STAFF'] })
+            .expect(403);
+        }
+      });
+
+      it('nobody can change their own role, and the Customer role is refused', async () => {
+        await request(server)
+          .post(`/api/v1/staff/${coAdmin.staffId}/role`)
+          .set(await stepUp(coAdmin))
+          .send({ roleId: roleIds['STAFF'] })
+          .expect(403);
+        if (roleIds['CUSTOMER']) {
+          await request(server)
+            .post(`/api/v1/staff/${mover.staffId}/role`)
+            .set(await asAdmin())
+            .send({ roleId: roleIds['CUSTOMER'] })
+            .expect(400);
+        }
+      });
+    });
+  });
+
+  // ------------------------------------------------------------------------------------------------------------
   describe('Scenario 8: duplicate and concurrent requests', () => {
     it('two simultaneous full payments on one invoice record exactly one', async () => {
       const offer = await firstOffer(people.amina.token);
