@@ -16,7 +16,7 @@ import { effectiveStatus } from './staff-card.policy';
 export const CARD_W = 242.65;
 export const CARD_H = 153;
 
-interface CardData {
+export interface CardData {
   cardNumber: string;
   verifyUrl: string;
   issuedAt: Date | null;
@@ -31,7 +31,7 @@ interface CardData {
   photo: Buffer | null;
 }
 
-interface Assets {
+export interface Assets {
   settings: StaffCardSettings;
   logo: Buffer | null;
   signature: Buffer | null;
@@ -55,72 +55,193 @@ const initials = (name: string): string =>
     .map((p) => p[0]?.toUpperCase() ?? '')
     .join('');
 
+/** Cuts `text` with an ellipsis so it fits `maxW` at the current font, so a long value never wraps into its neighbours. */
+function clipText(doc: PDFKit.PDFDocument, text: string, maxW: number): string {
+  if (doc.widthOfString(text) <= maxW) return text;
+  let t = text;
+  while (t.length > 1 && doc.widthOfString(`${t}…`) > maxW) t = t.slice(0, -1);
+  return `${t.trimEnd()}…`;
+}
+
+/** Colour helpers: the card's look follows the two colours the company chose, so shades are derived, never fixed. */
+const rgb = (hex: string): [number, number, number] => {
+  const h = hex.replace('#', '');
+  const full =
+    h.length === 3
+      ? h
+          .split('')
+          .map((x) => x + x)
+          .join('')
+      : h;
+  return [0, 2, 4].map((i) => parseInt(full.slice(i, i + 2), 16) || 0) as [
+    number,
+    number,
+    number,
+  ];
+};
+const toHex = (c: number[]): string =>
+  '#' +
+  c
+    .map((v) =>
+      Math.max(0, Math.min(255, Math.round(v)))
+        .toString(16)
+        .padStart(2, '0'),
+    )
+    .join('');
+const mix = (a: string, b: string, t: number): string => {
+  const x = rgb(a);
+  const y = rgb(b);
+  return toHex(x.map((v, i) => v + (y[i] - v) * t));
+};
+const luminance = (hex: string): number => {
+  const [r, g, b] = rgb(hex).map((v) => {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+};
+/** The company colour as ink on white: darkened when it is too pale to read. */
+const inkOnWhite = (hex: string): string =>
+  luminance(hex) > 0.35 ? mix(hex, '#000000', 0.6) : hex;
+/** Readable text colour on top of a background colour. */
+const onColor = (bg: string): string =>
+  luminance(bg) > 0.4 ? '#0f172a' : '#ffffff';
+
+/**
+ * A faint copy of the company logo behind everything else. Drawn at a low strength so the text, photograph and QR
+ * code on top stay easy to read and to scan. A logo that cannot be drawn is simply left out.
+ */
+function drawWatermark(
+  doc: PDFKit.PDFDocument,
+  a: Assets,
+  cx: number,
+  cy: number,
+  size: number,
+  opacity = 0.07,
+): void {
+  if (!a.logo) return;
+  doc.save();
+  try {
+    doc.opacity(opacity);
+    doc.image(a.logo, cx - size / 2, cy - size / 2, {
+      fit: [size, size],
+      align: 'center',
+      valign: 'center',
+    });
+  } catch {
+    /* a logo that cannot be drawn is left out */
+  }
+  doc.restore();
+}
+
+/** A soft drop shadow under a rounded rectangle. */
+function shadow(
+  doc: PDFKit.PDFDocument,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+): void {
+  doc.save();
+  doc.fillOpacity(0.22);
+  doc.roundedRect(x + 0.8, y + 1.6, w, h, r).fill('#000000');
+  doc.restore();
+}
+
+/** The company logo on a small white disc ringed in the accent colour, for use on a coloured band. */
+function logoDisc(
+  doc: PDFKit.PDFDocument,
+  a: Assets,
+  cx: number,
+  cy: number,
+  r: number,
+): boolean {
+  if (!a.logo) return false;
+  doc.save();
+  try {
+    doc.circle(cx, cy, r + 1.4).fill(a.settings.accentColor);
+    doc.circle(cx, cy, r).fill('#ffffff');
+    doc.circle(cx, cy, r - 0.5).clip();
+    doc.image(a.logo, cx - (r - 2), cy - (r - 2), {
+      fit: [(r - 2) * 2, (r - 2) * 2],
+      align: 'center',
+      valign: 'center',
+    });
+    doc.restore();
+    return true;
+  } catch {
+    doc.restore();
+    return false;
+  }
+}
+
 /**
  * Draws one side of a card in a local coordinate system (0,0 is the card's top-left corner), so the same code
  * serves a single-card PDF page and a cell on an A4 sheet.
+ *
+ * Front: a gradient side panel with the photograph and staff number, a slanted accent stripe, the company name, the
+ * holder's name with the job title as a pill, department and branch, dates, and the QR code on a white tile. The
+ * company logo also sits faintly behind the details.
  */
-function drawFront(doc: PDFKit.PDFDocument, c: CardData, a: Assets): void {
+export function drawFront(
+  doc: PDFKit.PDFDocument,
+  c: CardData,
+  a: Assets,
+): void {
   const { settings: s } = a;
+  const dark = mix(s.primaryColor, '#000000', 0.45);
+  const onP = onColor(s.primaryColor);
+  const onA = onColor(s.accentColor);
   doc.save();
   doc.rect(0, 0, CARD_W, CARD_H).clip();
   doc.rect(0, 0, CARD_W, CARD_H).fill('#ffffff');
 
-  // Header band: logo and company name
-  doc.rect(0, 0, CARD_W, 36).fill(s.primaryColor);
-  doc.rect(0, 36, CARD_W, 2.5).fill(s.accentColor);
-  let textX = 12;
-  if (a.logo) {
-    try {
-      doc.image(a.logo, 9, 6, {
-        fit: [26, 24],
-        align: 'center',
-        valign: 'center',
-      });
-      textX = 42;
-    } catch {
-      /* a logo that cannot be drawn is left out rather than breaking the card */
-    }
-  }
-  doc
-    .fillColor('#ffffff')
-    .font('Helvetica-Bold')
-    .fontSize(9.5)
-    .text(s.displayName.toUpperCase(), textX, s.tagline ? 9 : 13, {
-      width: CARD_W - textX - 8,
-      lineBreak: false,
-      ellipsis: true,
-    });
-  if (s.tagline)
-    doc
-      .font('Helvetica')
-      .fontSize(5.6)
-      .fillColor(s.accentColor)
-      .text(s.tagline, textX, 22, {
-        width: CARD_W - textX - 8,
-        lineBreak: false,
-        ellipsis: true,
-      });
+  // soft decoration on the white side
+  doc.save();
+  doc.fillOpacity(0.07);
+  doc.circle(238, -4, 56).fill(s.primaryColor);
+  doc.circle(206, 156, 44).fill(s.accentColor);
+  doc.restore();
+  drawWatermark(doc, a, 170, 88, 96, 0.07);
 
-  // Photograph
-  const px = 11;
-  const py = 47;
-  const pw = 58;
-  const ph = 72;
+  // side panel with a slanted edge, and the accent stripe beside it
+  const g = doc.linearGradient(0, 0, 60, CARD_H);
+  g.stop(0, s.primaryColor).stop(1, dark);
+  doc.polygon([0, 0], [98, 0], [78, CARD_H], [0, CARD_H]).fill(g);
+  doc
+    .polygon([98, 0], [104, 0], [84, CARD_H], [78, CARD_H])
+    .fill(s.accentColor);
+  doc.save();
+  doc.fillOpacity(0.09);
+  doc.circle(8, 150, 48).fill('#ffffff');
+  doc.circle(64, -6, 30).fill('#ffffff');
+  doc.restore();
+
+  // photograph in a white frame with a shadow
+  const px = 14;
+  const py = 18;
+  const pw = 52;
+  const ph = 66;
+  shadow(doc, px - 2, py - 2, pw + 4, ph + 4, 7);
+  doc.roundedRect(px - 2, py - 2, pw + 4, ph + 4, 7).fill('#ffffff');
+  doc.save();
+  doc.roundedRect(px, py, pw, ph, 5.5).clip();
   doc.rect(px, py, pw, ph).fill('#e2e8f0');
+  let drewPhoto = false;
   if (c.photo) {
     try {
-      doc.save();
-      doc.rect(px, py, pw, ph).clip();
       doc.image(c.photo, px, py, {
         cover: [pw, ph],
         align: 'center',
         valign: 'center',
       });
-      doc.restore();
+      drewPhoto = true;
     } catch {
       /* fall through to the initials placeholder */
     }
-  } else {
+  }
+  if (!drewPhoto) {
     doc
       .fillColor('#64748b')
       .font('Helvetica-Bold')
@@ -130,90 +251,178 @@ function drawFront(doc: PDFKit.PDFDocument, c: CardData, a: Assets): void {
         align: 'center',
       });
   }
-  doc.rect(px, py, pw, ph).lineWidth(0.8).stroke(s.accentColor);
+  doc.restore();
 
-  // Identity
-  const tx = 78;
+  // staff number and card number on the panel
+  doc.save();
+  doc.opacity(0.75);
+  doc.font('Helvetica').fontSize(5).fillColor(onP);
+  doc.text('STAFF ID', 14, 94, { lineBreak: false });
+  doc.text('CARD NO.', 14, 120, { lineBreak: false });
+  doc.restore();
   doc
-    .fillColor('#0f172a')
     .font('Helvetica-Bold')
-    .fontSize(11)
-    .text(c.fullName, tx, 47, { width: 92, height: 28, ellipsis: true });
-  const lines = [c.jobTitle, c.department, c.branchName].filter(
+    .fontSize(9.5)
+    .fillColor(onP)
+    .text(clipText(doc, c.employeeCode, 66), 14, 101, { lineBreak: false });
+  doc
+    .font('Helvetica-Bold')
+    .fontSize(6.2)
+    .fillColor(onP)
+    .text(clipText(doc, c.cardNumber, 64), 14, 127, { lineBreak: false });
+
+  // company header
+  let hx = 113;
+  if (logoDisc(doc, a, 125, 21, 11)) hx = 141;
+  // The company name shrinks (down to a floor) to fit on one line before it is clipped.
+  const title = s.displayName.toUpperCase();
+  let titleSize = 8.2;
+  doc.font('Helvetica-Bold');
+  while (
+    titleSize > 5.8 &&
+    doc.fontSize(titleSize).widthOfString(title) > 233 - hx
+  )
+    titleSize -= 0.3;
+  doc
+    .font('Helvetica-Bold')
+    .fontSize(titleSize)
+    .fillColor(inkOnWhite(s.primaryColor))
+    .text(clipText(doc, title, 233 - hx), hx, s.tagline ? 12 : 17, {
+      lineBreak: false,
+    });
+  if (s.tagline)
+    doc
+      .font('Helvetica')
+      .fontSize(5.4)
+      .fillColor('#64748b')
+      .text(clipText(doc, s.tagline, 233 - hx), hx, 23, { lineBreak: false });
+  doc
+    .moveTo(113, 38)
+    .lineTo(233, 38)
+    .lineWidth(0.5)
+    .stroke(mix(s.accentColor, '#ffffff', 0.35));
+  doc
+    .moveTo(113, 38)
+    .lineTo(137, 38)
+    .lineWidth(1.8)
+    .stroke(inkOnWhite(s.primaryColor));
+
+  // identity
+  doc.font('Helvetica-Bold').fontSize(12.5).fillColor('#0f172a');
+  const nameH = Math.min(doc.heightOfString(c.fullName, { width: 120 }), 30);
+  doc.text(c.fullName, 113, 44, { width: 120, height: 30, ellipsis: true });
+  let y = 44 + nameH + 3;
+  if (c.jobTitle) {
+    doc.font('Helvetica-Bold').fontSize(6.2);
+    const w = Math.min(doc.widthOfString(c.jobTitle) + 14, 120);
+    doc.roundedRect(113, y, w, 10, 5).fill(s.accentColor);
+    doc.fillColor(onA).text(clipText(doc, c.jobTitle, w - 12), 119, y + 2.7, {
+      lineBreak: false,
+    });
+    y += 15;
+  }
+  doc.font('Helvetica').fontSize(6.8);
+  for (const l of [c.department, c.branchName].filter(
     (v): v is string => !!v,
-  );
-  let y = 47 + Math.min(doc.heightOfString(c.fullName, { width: 92 }), 28) + 3;
-  doc.font('Helvetica').fontSize(7.2).fillColor('#334155');
-  for (const l of lines.slice(0, 3)) {
-    doc.text(l, tx, y, { width: 92, lineBreak: false, ellipsis: true });
+  )) {
+    doc.circle(115, y + 3.4, 1.3).fill(s.primaryColor);
+    doc
+      .fillColor('#334155')
+      .text(clipText(doc, l, 64), 120, y, { lineBreak: false });
     y += 9.5;
   }
+
+  // dates
+  doc.font('Helvetica').fontSize(5).fillColor('#64748b');
+  doc.text('ISSUED', 113, 136, { lineBreak: false });
+  doc.text('EXPIRES', 154, 136, { lineBreak: false });
+  doc.font('Helvetica-Bold').fontSize(6.4).fillColor('#0f172a');
+  doc.text(fmtDate(c.issuedAt), 113, 142.5, { lineBreak: false });
+  doc.text(fmtDate(c.expiresAt), 154, 142.5, { lineBreak: false });
+
+  // QR code on a white tile
+  shadow(doc, 186, 88, 48, 48, 5);
+  doc
+    .roundedRect(186, 88, 48, 48, 5)
+    .lineWidth(0.8)
+    .fillAndStroke('#ffffff', s.accentColor);
+  doc.image(c.qr, 189, 91, { width: 42, height: 42 });
   doc
     .font('Helvetica')
-    .fontSize(5.4)
+    .fontSize(4.8)
     .fillColor('#64748b')
-    .text('STAFF ID', tx, 98, { width: 92 });
-  doc
-    .font('Helvetica-Bold')
-    .fontSize(10.5)
-    .fillColor(s.primaryColor)
-    .text(c.employeeCode, tx, 105, {
-      width: 92,
-      lineBreak: false,
-      ellipsis: true,
-    });
+    .text('Scan to verify', 186, 138.5, { width: 48, align: 'center' });
 
-  // QR code
-  doc.image(c.qr, 176, 47, { width: 58, height: 58 });
-  doc
-    .font('Helvetica')
-    .fontSize(5)
-    .fillColor('#64748b')
-    .text('Scan to verify', 176, 107, { width: 58, align: 'center' });
-
-  // Footer strip
-  doc.rect(0, 131, CARD_W, 22).fill(s.primaryColor);
-  doc.font('Helvetica').fontSize(5.6).fillColor('#cbd5e1');
-  doc.text(`CARD NO.`, 11, 136, { lineBreak: false });
-  doc.text(`ISSUED`, 98, 136, { lineBreak: false });
-  doc.text(`EXPIRES`, 160, 136, { lineBreak: false });
-  doc.font('Helvetica-Bold').fontSize(7).fillColor('#ffffff');
-  doc.text(c.cardNumber, 11, 143, { lineBreak: false });
-  doc.text(fmtDate(c.issuedAt), 98, 143, { lineBreak: false });
-  doc.text(fmtDate(c.expiresAt), 160, 143, { lineBreak: false });
+  // base bar
+  const bar = doc.linearGradient(0, 0, CARD_W, 0);
+  bar.stop(0, dark).stop(0.5, s.primaryColor).stop(1, s.accentColor);
+  doc.rect(0, CARD_H - 3.5, CARD_W, 3.5).fill(bar);
   doc.restore();
 }
 
-function drawBack(doc: PDFKit.PDFDocument, c: CardData, a: Assets): void {
+/**
+ * Back: a gradient band with a slanted edge carrying the company name, the terms and contact lines, the QR code on a
+ * white tile, the authorised signature, and the faint logo behind it all.
+ */
+export function drawBack(
+  doc: PDFKit.PDFDocument,
+  c: CardData,
+  a: Assets,
+): void {
   const { settings: s } = a;
+  const dark = mix(s.primaryColor, '#000000', 0.45);
+  const onP = onColor(s.primaryColor);
   doc.save();
   doc.rect(0, 0, CARD_W, CARD_H).clip();
   doc.rect(0, 0, CARD_W, CARD_H).fill('#ffffff');
-  doc.rect(0, 0, CARD_W, 16).fill(s.primaryColor);
-  doc.rect(0, 16, CARD_W, 2).fill(s.accentColor);
-  doc
-    .fillColor('#ffffff')
-    .font('Helvetica-Bold')
-    .fontSize(7.2)
-    .text(s.displayName.toUpperCase(), 10, 5, {
-      width: CARD_W - 20,
-      lineBreak: false,
-      ellipsis: true,
-    });
+  doc.save();
+  doc.fillOpacity(0.07);
+  doc.circle(-6, 150, 46).fill(s.accentColor);
+  doc.circle(240, 130, 40).fill(s.primaryColor);
+  doc.restore();
+  drawWatermark(doc, a, 121, 92, 104, 0.07);
 
-  const left = 10;
-  const width = 148;
-  let y = 25;
+  // header band, cut on the slant
+  const g = doc.linearGradient(0, 0, CARD_W, 0);
+  g.stop(0, s.primaryColor).stop(1, dark);
+  doc.polygon([0, 0], [CARD_W, 0], [CARD_W, 18], [0, 31]).fill(g);
+  doc
+    .polygon([0, 31], [CARD_W, 18], [CARD_W, 21.5], [0, 34.5])
+    .fill(s.accentColor);
+  let hx = 12;
+  if (logoDisc(doc, a, 21, 13, 8)) hx = 36;
+  doc
+    .font('Helvetica-Bold')
+    .fontSize(7.4)
+    .fillColor(onP)
+    .text(
+      clipText(doc, s.displayName.toUpperCase(), CARD_W - hx - 12),
+      hx,
+      9.5,
+      { lineBreak: false },
+    );
+
+  const left = 12;
+  const width = 146;
+  let y = 41;
   const para = (
     text: string,
-    opts: { bold?: boolean; size?: number; color?: string; gap?: number } = {},
+    opts: {
+      bold?: boolean;
+      size?: number;
+      color?: string;
+      gap?: number;
+      bullet?: boolean;
+    } = {},
   ) => {
+    const x = opts.bullet ? left + 6 : left;
+    const w = opts.bullet ? width - 6 : width;
     doc
       .font(opts.bold ? 'Helvetica-Bold' : 'Helvetica')
-      .fontSize(opts.size ?? 5.8)
-      .fillColor(opts.color ?? '#334155');
-    doc.text(text, left, y, { width });
-    y += doc.heightOfString(text, { width }) + (opts.gap ?? 3);
+      .fontSize(opts.size ?? 5.7);
+    if (opts.bullet) doc.circle(left + 2, y + 2.6, 1.2).fill(s.accentColor);
+    doc.fillColor(opts.color ?? '#334155').text(text, x, y, { width: w });
+    y += doc.heightOfString(text, { width: w }) + (opts.gap ?? 2.6);
   };
 
   para(
@@ -226,15 +435,18 @@ function drawBack(doc: PDFKit.PDFDocument, c: CardData, a: Assets): void {
     s.website,
     s.contactAddress,
   ].filter((v): v is string => !!v);
-  if (contact.length) para(contact.join('   ·   '), { gap: 3 });
+  const lines: string[] = [];
+  if (contact.length >= 1) lines.push(contact.slice(0, 2).join('   ·   '));
+  if (contact.length >= 3) lines.push(contact.slice(2).join('   ·   '));
+  for (const l of lines) para(l, { bullet: true, gap: 2 });
   if (s.emergencyContact)
-    para(`Emergency: ${s.emergencyContact}`, { bold: true });
+    para(`Emergency: ${s.emergencyContact}`, { bold: true, bullet: true });
   if (s.officialRegistrationLine)
     para(s.officialRegistrationLine, { color: '#64748b' });
 
   // Signature of the person who authorises cards, only if the company has configured one
   if (s.signatoryName || a.signature) {
-    const sy = 116;
+    const sy = 132;
     if (a.signature) {
       try {
         doc.image(a.signature, left, sy - 22, {
@@ -255,39 +467,43 @@ function drawBack(doc: PDFKit.PDFDocument, c: CardData, a: Assets): void {
         .font('Helvetica-Bold')
         .fontSize(5.6)
         .fillColor('#0f172a')
-        .text(s.signatoryName, left, sy + 3, {
-          width: 100,
+        .text(clipText(doc, s.signatoryName, 100), left, sy + 2.6, {
           lineBreak: false,
-          ellipsis: true,
         });
     if (s.signatoryTitle)
       doc
         .font('Helvetica')
         .fontSize(5.2)
         .fillColor('#64748b')
-        .text(s.signatoryTitle, left, sy + 10, {
-          width: 100,
+        .text(clipText(doc, s.signatoryTitle, 100), left, sy + 9.4, {
           lineBreak: false,
-          ellipsis: true,
         });
   }
 
   // Verification block
-  doc.image(c.qr, 176, 28, { width: 56, height: 56 });
+  shadow(doc, 174, 44, 58, 58, 5);
+  doc
+    .roundedRect(174, 44, 58, 58, 5)
+    .lineWidth(0.8)
+    .fillAndStroke('#ffffff', s.accentColor);
+  doc.image(c.qr, 178, 48, { width: 50, height: 50 });
   doc
     .font('Helvetica')
     .fontSize(5)
     .fillColor('#64748b')
-    .text('Scan to confirm this card is genuine and still valid.', 168, 88, {
-      width: 72,
+    .text('Scan to confirm this card is genuine and still valid.', 168, 106, {
+      width: 70,
       align: 'center',
     });
   doc
     .font('Helvetica-Bold')
-    .fontSize(6)
-    .fillColor(s.primaryColor)
-    .text(c.cardNumber, 168, 109, { width: 72, align: 'center' });
-  doc.rect(0, 149, CARD_W, 4).fill(s.accentColor);
+    .fontSize(6.2)
+    .fillColor(inkOnWhite(s.primaryColor))
+    .text(c.cardNumber, 168, 123, { width: 70, align: 'center' });
+
+  const bar = doc.linearGradient(0, 0, CARD_W, 0);
+  bar.stop(0, s.accentColor).stop(0.5, s.primaryColor).stop(1, dark);
+  doc.rect(0, CARD_H - 3.5, CARD_W, 3.5).fill(bar);
   doc.restore();
 }
 
