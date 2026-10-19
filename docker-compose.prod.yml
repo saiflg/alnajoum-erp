@@ -133,6 +133,9 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
+      # Next's standalone server listens on $HOSTNAME, which Docker sets to the container id, so the 127.0.0.1
+      # health check above could never connect and the container showed "unhealthy" although the site worked.
+      HOSTNAME: 0.0.0.0
     networks: [internal]
 
   caddy:

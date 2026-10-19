@@ -866,6 +866,22 @@ describe('Cross-module workflows (e2e)', () => {
       ).toBe(0);
     });
 
+    it('creating staff with an employee code already in use answers 409, not a server error', async () => {
+      const res = await request(server)
+        .post('/api/v1/staff')
+        .set(auth(admin))
+        .send({
+          email: `${RUN}.dupcode@testtravel.example`,
+          firstName: 'Dup',
+          lastName: 'Code',
+          companyId,
+          employeeCode: `agent-${RUN}`.toUpperCase(),
+          roleId: roleIds['STAFF'],
+        });
+      expect(res.status).toBe(409);
+      expect(JSON.stringify(res.body)).toMatch(/employee code/i);
+    });
+
     it('cancelling twice is refused the second time and does not touch an already-voided invoice', async () => {
       const offer = await firstOffer(people.amina.token);
       const booking = await request(server)

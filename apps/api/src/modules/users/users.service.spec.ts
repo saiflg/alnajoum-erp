@@ -1,4 +1,9 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -142,6 +147,56 @@ describe('UsersService', () => {
       );
 
       expect(prisma.identity.create).toHaveBeenCalled();
+    });
+
+    it('answers 409 (not a server error) when the employee code is already taken', async () => {
+      prisma.identity.findUnique.mockResolvedValue(null);
+      prisma.company.findUnique.mockResolvedValue({ id: 'company-a' });
+      prisma.role.findUnique.mockResolvedValue({ id: 'role-1' });
+      prisma.identity.create.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+          code: 'P2002',
+          clientVersion: 'test',
+          meta: { target: ['employeeCode'] },
+        }),
+      );
+
+      const attempt = service.createStaff(
+        {
+          email: 'new@example.com',
+          firstName: 'A',
+          lastName: 'B',
+          companyId: 'company-a',
+          employeeCode: 'EMP1',
+          roleId: 'role-1',
+        },
+        'company-a',
+        { sub: 'actor-1', roles: ['COMPANY_ADMIN'] },
+      );
+      await expect(attempt).rejects.toThrow(ConflictException);
+      await expect(attempt).rejects.toThrow(/employee code/);
+    });
+
+    it('lets an unexpected database error through unchanged', async () => {
+      prisma.identity.findUnique.mockResolvedValue(null);
+      prisma.company.findUnique.mockResolvedValue({ id: 'company-a' });
+      prisma.role.findUnique.mockResolvedValue({ id: 'role-1' });
+      prisma.identity.create.mockRejectedValue(new Error('connection lost'));
+
+      await expect(
+        service.createStaff(
+          {
+            email: 'new@example.com',
+            firstName: 'A',
+            lastName: 'B',
+            companyId: 'company-a',
+            employeeCode: 'EMP2',
+            roleId: 'role-1',
+          },
+          'company-a',
+          { sub: 'actor-1', roles: ['COMPANY_ADMIN'] },
+        ),
+      ).rejects.toThrow('connection lost');
     });
 
     it('refuses to let a company admin create an account holding SUPER_ADMIN', async () => {

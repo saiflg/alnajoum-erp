@@ -6,7 +6,7 @@ import {
   Optional,
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { IdentityType } from '@prisma/client';
+import { IdentityType, Prisma } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
@@ -87,28 +87,50 @@ export class UsersService {
     const temporaryPassword = generateTemporaryPassword();
     const passwordHash = await argon2.hash(temporaryPassword);
 
-    const identity = await this.prisma.identity.create({
-      data: {
-        email: dto.email,
-        phone: dto.phone,
-        passwordHash,
-        type: IdentityType.STAFF,
-        status: 'ACTIVE',
-        staff: {
-          create: {
-            companyId: dto.companyId,
-            branchId: dto.branchId,
-            employeeCode: dto.employeeCode,
-            firstName: dto.firstName,
-            lastName: dto.lastName,
-            jobTitle: dto.jobTitle,
-            department: dto.department,
+    let identity: Prisma.IdentityGetPayload<{ include: { staff: true } }>;
+    try {
+      identity = await this.prisma.identity.create({
+        data: {
+          email: dto.email,
+          phone: dto.phone,
+          passwordHash,
+          type: IdentityType.STAFF,
+          status: 'ACTIVE',
+          staff: {
+            create: {
+              companyId: dto.companyId,
+              branchId: dto.branchId,
+              employeeCode: dto.employeeCode,
+              firstName: dto.firstName,
+              lastName: dto.lastName,
+              jobTitle: dto.jobTitle,
+              department: dto.department,
+            },
           },
+          roles: { create: [{ roleId: dto.roleId }] },
         },
-        roles: { create: [{ roleId: dto.roleId }] },
-      },
-      include: { staff: true },
-    });
+        include: { staff: true },
+      });
+    } catch (error) {
+      // A duplicate employee code (or a phone/email that lost a race) is the caller's mistake, not a server fault.
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        const meta = error.meta as { target?: string[] | string } | undefined;
+        const target = Array.isArray(meta?.target)
+          ? meta.target.join(',')
+          : (meta?.target ?? '');
+        throw new ConflictException(
+          target.includes('employeeCode')
+            ? 'A staff member with this employee code already exists'
+            : target.includes('phone')
+              ? 'An account with this phone number already exists'
+              : 'An account with these details already exists',
+        );
+      }
+      throw error;
+    }
 
     await this.notificationsService.sendStaffTempPassword(
       identity.email,
